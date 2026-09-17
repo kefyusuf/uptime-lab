@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement the canonical C4-first architecture documentation baseline for `uptime-lab` without introducing application runtime, Docker, API-contract, database, or product-feature implementation.
+**Goal:** Implement the canonical C4-first architecture documentation baseline for `uptime-lab` without introducing runtime, Docker, API-contract, database, or product-feature implementation.
 
-**Architecture:** The implementation proceeds from stable system-level truths toward cross-runtime flows and material ADRs. Documentation remains the source of architectural truth at system boundaries; runtime-specific implementation documentation is deferred until Go, Rust, and React foundations exist. A small dependency-free Bash validation layer verifies required files, canonical ownership statements, ADR structure, navigation links, forbidden placeholders, and documentation-only scope.
+**Architecture:** The work proceeds from stable system-level truths to runtime relationships, ownership rules, cross-area flows, and three material ADRs. A dependency-free Bash fitness check validates the canonical documentation surface and is integrated into the existing `CI / repository` job so the externally required check remains the stable `CI / gate`.
 
 **Tech Stack:** Markdown, Mermaid, Bash, Git, GitHub Actions.
 
@@ -12,298 +12,99 @@
 
 ## Global Constraints
 
-- Documentation is English-only for project-facing material.
-- The baseline uses a C4-first canonical architecture core.
-- System-level documentation owns cross-runtime architectural truth.
-- Runtime-specific `frontend/**`, `backend/**`, and `checker/**` architecture documents remain deferred until corresponding runtime foundations exist.
+- Project-facing documentation is English.
+- The documentation model is C4-first and system-level documentation owns cross-runtime truth.
 - Architecture documents distinguish `Committed`, `Implemented`, and `Deferred` state.
 - Mermaid embedded in Markdown is the baseline diagram source format.
-- The Go runtime is the control plane and exclusive owner of durable product state in PostgreSQL.
-- The Rust runtime is the execution/checker plane and must never access PostgreSQL directly.
-- The React/TypeScript browser client must never access PostgreSQL directly.
-- Cross-runtime communication is contract-driven; concrete endpoint schemas remain deferred.
-- The initial Go business capability is Monitoring; hypothetical future modules must not be scaffolded.
-- Message brokers, distributed worker coordination, Kubernetes, service mesh, authentication architecture, and production hosting remain outside this phase.
-- No empty documentation directories or speculative component/module documents are created.
-- No application source, Docker scaffold, OpenAPI contract, database migration, Go module, Cargo workspace, or frontend package is created.
-- Issue #4 remains the separate repository-administration blocker. Architecture documentation work may be implemented and opened as a PR while Issue #4 is open, but the implementation PR MUST NOT merge into `main` until `main-protection` is active, the approved merge policy is independently verified, and Issue #4 is closed.
-- The implementation must remain PR-first; the unprotected state of `main` is never permission for a direct push.
+- Go is the Control Plane and exclusively owns durable product state in PostgreSQL.
+- Rust is the Execution Plane and never accesses PostgreSQL directly.
+- React/TypeScript is the Web Client and never accesses PostgreSQL directly.
+- Cross-runtime communication is contract-driven; endpoint schemas remain deferred.
+- Monitoring is the initial Go business capability; hypothetical future modules are not scaffolded.
+- No `component-view.md`, `api-contracts.md`, `event-model.md`, runtime-specific documentation tree, docs site generator, or Mermaid CLI is introduced in this phase.
+- No application source, Docker scaffold, OpenAPI contract, migration, Go module, Cargo workspace, or frontend package is created.
+- Issue #4 remains a hard merge blocker until repository merge policy and `main-protection` are independently verified.
+- All work remains PR-first. The current lack of protection on `main` is never permission for a direct push.
+
+## Stacked Branch and Landing Model
+
+The spec and plan are intentionally reviewed independently while Issue #4 remains open.
+
+```text
+main
+  └── docs/architecture-documentation-baseline-design
+        └── docs/architecture-documentation-baseline-plan
+              └── docs/architecture-documentation-baseline
+```
+
+Canonical branches:
+
+```text
+spec branch:           docs/architecture-documentation-baseline-design
+plan branch:           docs/architecture-documentation-baseline-plan
+implementation branch: docs/architecture-documentation-baseline
+```
+
+While Issue #4 is open:
+
+- PR #5 remains the spec review PR and must not merge to `main`;
+- the plan PR targets `docs/architecture-documentation-baseline-design`;
+- the implementation PR targets `docs/architecture-documentation-baseline-plan`;
+- none of these PRs may merge into `main`.
+
+After Issue #4 is closed and governance is independently verified, land the stack in this order:
+
+1. merge PR #5 to `main` using squash;
+2. retarget the plan PR to `main`, verify CI, and squash-merge it;
+3. retarget the implementation PR to `main`, verify CI, and squash-merge it.
+
+This sequence preserves clean review scopes without bypassing governance.
 
 ---
 
 ## Target File Map
 
 ```text
-uptime-lab/
-├── .github/
-│   └── workflows/
-│       └── ci.yml                                  # Add documentation validation step only.
-├── docs/
-│   ├── README.md                                   # Add architecture entry point.
-│   ├── glossary.md                                 # Shared architecture vocabulary.
-│   ├── architecture/
-│   │   ├── README.md                               # Canonical reading order/index.
-│   │   ├── system-context.md                       # C4 Level 1.
-│   │   ├── container-view.md                       # C4 Level 2 / runtime ownership.
-│   │   ├── module-boundaries.md                    # Go/Rust/frontend conceptual boundaries.
-│   │   ├── dependency-rules.md                     # Allowed/forbidden dependency directions.
-│   │   ├── data-ownership.md                       # Durable state and module ownership.
-│   │   ├── runtime-flows.md                        # Cross-runtime sequence flows.
-│   │   └── change-flow.md                          # Cross-area feature impact model.
-│   └── adr/
-│       ├── README.md                               # ADR policy/index.
-│       ├── 0001-multi-runtime-monorepo.md
-│       ├── 0002-control-plane-and-execution-plane.md
-│       └── 0003-contract-and-data-ownership.md
-└── scripts/
-    └── ci/
-        ├── check-architecture-docs.sh              # Repository documentation fitness check.
-        └── test-architecture-docs.sh               # Dependency-free regression harness.
-```
+.github/workflows/ci.yml
 
-No `component-view.md`, `api-contracts.md`, `event-model.md`, `docs/frontend/**`, `docs/backend/**`, `docs/checker/**`, `docs/testing/**`, `docs/security/**`, or `docs/operations/**` is created in this plan.
+docs/README.md
+docs/glossary.md
+
+docs/architecture/README.md
+docs/architecture/system-context.md
+docs/architecture/container-view.md
+docs/architecture/module-boundaries.md
+docs/architecture/dependency-rules.md
+docs/architecture/data-ownership.md
+docs/architecture/runtime-flows.md
+docs/architecture/change-flow.md
+
+docs/adr/README.md
+docs/adr/0001-multi-runtime-monorepo.md
+docs/adr/0002-control-plane-and-execution-plane.md
+docs/adr/0003-contract-and-data-ownership.md
+
+scripts/ci/check-architecture-docs.sh
+scripts/ci/test-architecture-docs.sh
+```
 
 ---
 
-### Task 1: Build architecture-documentation fitness checks with TDD
+### Task 1: Add architecture-documentation fitness checks with TDD
 
 **Files:**
 - Create: `scripts/ci/check-architecture-docs.sh`
 - Create: `scripts/ci/test-architecture-docs.sh`
 
 **Interfaces:**
-- Consumes: the file/content contract from the approved design spec.
-- Produces:
-  - `check-architecture-docs.sh [root]` — validates a complete Architecture Documentation Baseline tree.
-  - `test-architecture-docs.sh` — proves success and representative failure cases without touching the repository tree.
+- Consumes: the approved documentation file/content contract.
+- Produces: `check-architecture-docs.sh [root]` and a dependency-free regression harness.
 
-- [ ] **Step 1: Write the failing test harness first**
+- [ ] **Step 1: Write the failing harness before the checker exists**
 
-Create `scripts/ci/test-architecture-docs.sh` with a temporary documentation fixture. The fixture must contain all baseline paths and the minimum required headings/content so a completed checker can pass it.
+Create `scripts/ci/test-architecture-docs.sh`. It must create a temporary complete fixture containing all 14 canonical documentation files, then invoke the missing checker and verify RED.
 
-Use this structure in the test:
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-CHECKER="$SCRIPT_DIR/check-architecture-docs.sh"
-TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
-
-PASS=0
-FAIL=0
-
-pass() { printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1)); }
-fail() { printf 'FAIL: %s\n' "$1" >&2; FAIL=$((FAIL + 1)); }
-expect_success() { local n="$1"; shift; if "$@" >/dev/null 2>&1; then pass "$n"; else fail "$n"; fi; }
-expect_failure() { local n="$1"; shift; if "$@" >/dev/null 2>&1; then fail "$n"; else pass "$n"; fi; }
-
-make_fixture() {
-  rm -rf "$TMP/repo"
-  mkdir -p "$TMP/repo/docs/architecture" "$TMP/repo/docs/adr"
-
-  cat > "$TMP/repo/docs/README.md" <<'EOF'
-# Documentation
-
-See [Architecture](architecture/README.md).
-EOF
-
-  cat > "$TMP/repo/docs/glossary.md" <<'EOF'
-# Architecture Glossary
-
-## Control Plane
-Go runtime owning product/domain coordination and durable product state.
-
-## Execution Plane
-Rust runtime owning bounded probe execution.
-
-## Canonical Documentation
-Repository-owned authoritative architecture documentation.
-EOF
-
-  cat > "$TMP/repo/docs/architecture/README.md" <<'EOF'
-# Architecture
-
-## Reading Order
-- [System Context](system-context.md)
-- [Container View](container-view.md)
-- [Module Boundaries](module-boundaries.md)
-- [Dependency Rules](dependency-rules.md)
-- [Data Ownership](data-ownership.md)
-- [Runtime Flows](runtime-flows.md)
-- [Change Flow](change-flow.md)
-- [Architecture Decision Records](../adr/README.md)
-EOF
-
-  cat > "$TMP/repo/docs/architecture/system-context.md" <<'EOF'
-# System Context
-
-**Architecture state:** Committed
-
-```mermaid
-flowchart LR
-  User --> System[uptime-lab]
-  System --> Target[External HTTP/HTTPS Target]
-```
-EOF
-
-  cat > "$TMP/repo/docs/architecture/container-view.md" <<'EOF'
-# Container View
-
-**Architecture state:** Committed
-
-Go is the **Control Plane**. Rust is the **Execution Plane**. React/TypeScript is the Web Client. Go exclusively owns durable product state in PostgreSQL. Rust never accesses PostgreSQL directly. The browser never accesses PostgreSQL directly.
-
-```mermaid
-flowchart LR
-  Web -->|Public product API| Go
-  Rust -->|Internal control API| Go
-  Go -->|Owned persistence| DB[(PostgreSQL)]
-  Rust -->|Bounded probe execution| Target
-```
-EOF
-
-  cat > "$TMP/repo/docs/architecture/module-boundaries.md" <<'EOF'
-# Module Boundaries
-
-**Architecture state:** Committed
-
-Monitoring is the initial Go business capability. The checker uses Ports and Adapters. Frontend dependency direction is app -> pages -> widgets -> features -> entities -> shared.
-EOF
-
-  cat > "$TMP/repo/docs/architecture/dependency-rules.md" <<'EOF'
-# Dependency Rules
-
-Browser -> PostgreSQL is forbidden.
-Rust Checker -> PostgreSQL is forbidden.
-Cross-runtime implementation-code sharing is forbidden.
-EOF
-
-  cat > "$TMP/repo/docs/architecture/data-ownership.md" <<'EOF'
-# Data Ownership
-
-Go exclusively owns durable product state in PostgreSQL. Cross-module SQL reads are forbidden. Service extraction is not a current goal.
-EOF
-
-  cat > "$TMP/repo/docs/architecture/runtime-flows.md" <<'EOF'
-# Runtime Flows
-
-## Create Monitor
-```mermaid
-sequenceDiagram
-  User->>Web: Configure monitor
-  Web->>Go: Public contract
-  Go->>DB: Persist through owned adapter
-```
-
-## Execute Due Check
-```mermaid
-sequenceDiagram
-  Rust->>Go: Request due work
-  Rust->>Target: Bounded probe
-  Rust->>Go: Submit normalized result
-```
-
-## Read Current State
-```mermaid
-sequenceDiagram
-  User->>Web: View status
-  Web->>Go: Read state
-  Go->>DB: Read owned state
-```
-
-## Failure Boundary
-```mermaid
-sequenceDiagram
-  Target-->>Rust: Transport failure
-  Rust->>Go: Normalized probe failure
-  Go-->>Web: Stable product error/state
-```
-EOF
-
-  cat > "$TMP/repo/docs/architecture/change-flow.md" <<'EOF'
-# Change Flow
-
-## Canonical Example: Configure HTTP Request Timeout
-Product intent -> Go domain/application -> persistence -> public/internal contracts -> frontend -> Rust execution policy -> tests -> security -> observability -> CI/documentation.
-EOF
-
-  cat > "$TMP/repo/docs/adr/README.md" <<'EOF'
-# Architecture Decision Records
-
-- [ADR-0001](0001-multi-runtime-monorepo.md)
-- [ADR-0002](0002-control-plane-and-execution-plane.md)
-- [ADR-0003](0003-contract-and-data-ownership.md)
-EOF
-
-  for adr in \
-    0001-multi-runtime-monorepo.md \
-    0002-control-plane-and-execution-plane.md \
-    0003-contract-and-data-ownership.md; do
-    cat > "$TMP/repo/docs/adr/$adr" <<'EOF'
-# Decision
-
-## Status
-Accepted
-
-## Context
-Context.
-
-## Decision
-Decision.
-
-## Alternatives Considered
-Alternatives.
-
-## Consequences
-Consequences.
-
-## Related Documentation
-Related docs.
-EOF
-  done
-}
-
-make_fixture
-expect_failure "checker does not exist before implementation" "$CHECKER" "$TMP/repo"
-
-printf '\nArchitecture documentation tests: %d passed, %d failed\n' "$PASS" "$FAIL"
-test "$FAIL" -eq 0
-```
-
-Make the harness executable.
-
-- [ ] **Step 2: Verify RED**
-
-Run:
-
-```bash
-chmod +x scripts/ci/test-architecture-docs.sh
-./scripts/ci/test-architecture-docs.sh
-```
-
-Expected: non-zero exit because `check-architecture-docs.sh` does not exist.
-
-- [ ] **Step 3: Implement `check-architecture-docs.sh`**
-
-The checker must:
-
-1. require the exact 13 baseline documentation files;
-2. reject forbidden placeholder tokens in canonical docs;
-3. require the architecture index to link every baseline architecture document and ADR index;
-4. require `docs/README.md` to link `architecture/README.md`;
-5. require every ADR to contain `Status`, `Context`, `Decision`, `Alternatives Considered`, `Consequences`, and `Related Documentation` headings;
-6. require all three baseline ADRs to contain `Accepted` status;
-7. require canonical ownership phrases in container/data/dependency documents;
-8. require four `sequenceDiagram` blocks in `runtime-flows.md`;
-9. require the timeout example in `change-flow.md`;
-10. reject forbidden speculative documentation paths if they exist during this phase.
-
-Implement with Bash only; do not add a Markdown site generator or new package ecosystem.
-
-The required path array is:
+The canonical file list used by both test and checker is:
 
 ```bash
 REQUIRED_FILES=(
@@ -324,28 +125,71 @@ REQUIRED_FILES=(
 )
 ```
 
-Note: this list contains 14 files because `docs/README.md` is modified rather than newly created. The checker validates the complete canonical surface, not only newly created files.
+The fixture must contain:
 
-Use fixed-string `grep -Fq` checks for canonical phrases and navigation links so shell quoting remains deterministic.
+- an architecture link in `docs/README.md`;
+- all eight canonical architecture-index links;
+- `Committed` state in system/container/boundary docs;
+- the canonical Go/Rust/React/PostgreSQL ownership phrases;
+- exactly four `sequenceDiagram` blocks in `runtime-flows.md`;
+- the `Configure HTTP Request Timeout` example in `change-flow.md`;
+- all six ADR headings and `Accepted` status in ADR-0001 through ADR-0003.
 
-- [ ] **Step 4: Extend the test harness to prove representative failures**
+Run:
 
-After the checker exists, replace the single RED assertion with these cases:
-
-```text
-1. complete fixture passes;
-2. missing runtime-flows.md fails;
-3. placeholder token injected into a canonical architecture file fails;
-4. missing ADR Consequences heading fails;
-5. missing architecture navigation link fails;
-6. direct Rust-to-PostgreSQL ownership wording removed from dependency rules fails;
-7. only three sequenceDiagram blocks in runtime-flows.md fails;
-8. speculative docs/backend directory fails.
+```bash
+chmod +x scripts/ci/test-architecture-docs.sh
+./scripts/ci/test-architecture-docs.sh
 ```
 
-Every case must recreate the fixture before mutation so tests are isolated.
+Expected: non-zero because `scripts/ci/check-architecture-docs.sh` does not exist.
 
-- [ ] **Step 5: Verify GREEN**
+- [ ] **Step 2: Implement the checker**
+
+Create `scripts/ci/check-architecture-docs.sh` with `set -euo pipefail` and an optional root argument.
+
+It must fail when any of these invariants is violated:
+
+```text
+one of the 14 canonical files is missing
+forbidden placeholder token exists in canonical docs
+architecture index misses a required link
+docs/README.md misses architecture/README.md
+an ADR misses Status/Context/Decision/Alternatives Considered/Consequences/Related Documentation
+one of ADR-0001..0003 is not Accepted
+container/data/dependency canonical ownership phrases are missing
+runtime-flows.md does not contain exactly four sequenceDiagram blocks
+change-flow.md misses Configure HTTP Request Timeout
+speculative docs/backend, docs/frontend, docs/checker, component-view.md, api-contracts.md, or event-model.md exists
+```
+
+Use Bash built-ins plus fixed-string `grep -Fq`; do not add another language/toolchain.
+
+Required exact ownership phrases:
+
+```text
+Go exclusively owns durable product state in PostgreSQL.
+Rust never accesses PostgreSQL directly.
+The browser never accesses PostgreSQL directly.
+Cross-runtime communication is contract-driven.
+Rust Checker -> PostgreSQL is forbidden.
+Cross-runtime implementation-code sharing is forbidden.
+```
+
+- [ ] **Step 3: Expand the test harness to prove GREEN and negative cases**
+
+Each test recreates the fixture before mutation. Required cases:
+
+```text
+1. complete fixture passes
+2. missing runtime-flows.md fails
+3. forbidden placeholder injected into a canonical doc fails
+4. ADR missing Consequences fails
+5. architecture index missing runtime-flows link fails
+6. Rust-to-PostgreSQL forbidden phrase removed fails
+7. only three sequenceDiagram blocks fails
+8. speculative docs/backend directory fails
+```
 
 Run:
 
@@ -355,13 +199,13 @@ chmod +x scripts/ci/check-architecture-docs.sh scripts/ci/test-architecture-docs
 bash -n scripts/ci/check-architecture-docs.sh scripts/ci/test-architecture-docs.sh
 ```
 
-Expected final line:
+Expected:
 
 ```text
 Architecture documentation tests: 8 passed, 0 failed
 ```
 
-- [ ] **Step 6: Commit Task 1**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add scripts/ci/check-architecture-docs.sh scripts/ci/test-architecture-docs.sh
@@ -370,23 +214,22 @@ git commit -m "test(docs): add architecture documentation fitness checks"
 
 ---
 
-### Task 2: Document system context and runtime/container ownership
+### Task 2: Create C4 Level 1 and Level 2 documentation
 
 **Files:**
 - Create: `docs/architecture/system-context.md`
 - Create: `docs/architecture/container-view.md`
 
 **Interfaces:**
-- Consumes: ADB-001 through ADB-006 plus foundation runtime ownership.
-- Produces: canonical C4 Level 1 and Level 2 views used by every later architecture document.
+- Consumes: foundation runtime ownership and ADB-001 through ADB-006.
+- Produces: canonical system and runtime/container views.
 
 - [ ] **Step 1: Create `system-context.md`**
 
-Use this section structure:
+Required headings:
 
 ```markdown
 # System Context
-
 **Architecture state:** Committed
 **Implementation state:** Foundation only; product runtimes are not implemented yet.
 
@@ -401,7 +244,7 @@ Use this section structure:
 ## Related Decisions
 ```
 
-The Mermaid diagram must stay technology-light:
+Required diagram:
 
 ```mermaid
 flowchart LR
@@ -413,22 +256,20 @@ flowchart LR
     System -->|Bounded outbound monitoring request| Target
 ```
 
-Required prose:
+Required semantics:
 
 - `uptime-lab` is one product/system boundary;
-- the user/operator configures monitors and observes status/history;
-- monitored targets are external and untrusted;
-- outbound target execution creates an SSRF/egress trust boundary;
-- arbitrary public internet exposure is not considered safe until later checker security controls are implemented;
-- Go/Rust/React/PostgreSQL details are intentionally absent from Level 1.
+- monitored targets are external/untrusted;
+- outbound execution creates an SSRF/egress trust boundary;
+- arbitrary public exposure is not considered safe until later checker controls exist;
+- Level 1 intentionally omits Go/Rust/React/PostgreSQL internals.
 
 - [ ] **Step 2: Create `container-view.md`**
 
-Use this section structure:
+Required headings:
 
 ```markdown
 # Container View
-
 **Architecture state:** Committed
 **Implementation state:** Planned runtime topology; runtime foundations are not implemented yet.
 
@@ -442,7 +283,7 @@ Use this section structure:
 ## Related Decisions
 ```
 
-The Mermaid diagram must contain exactly these semantic relationships:
+Required Mermaid relationships:
 
 ```mermaid
 flowchart LR
@@ -460,23 +301,9 @@ flowchart LR
     Rust -->|Bounded probe execution| Target
 ```
 
-Required ownership statements, using the same wording later checked mechanically:
+Include the exact ownership phrases enforced by Task 1. Docker Compose is described only as the committed future local orchestration topology, not implemented reality.
 
-```text
-Go is the Control Plane.
-Rust is the Execution Plane.
-React/TypeScript is the Web Client.
-Go exclusively owns durable product state in PostgreSQL.
-Rust never accesses PostgreSQL directly.
-The browser never accesses PostgreSQL directly.
-Cross-runtime communication is contract-driven.
-```
-
-Docker Compose may be described only as the committed future local orchestration topology. Do not present it as implemented.
-
-- [ ] **Step 3: Verify Task 2**
-
-Run:
+- [ ] **Step 3: Verify and commit**
 
 ```bash
 grep -Fq '**Architecture state:** Committed' docs/architecture/system-context.md
@@ -485,20 +312,13 @@ grep -Fq 'Go exclusively owns durable product state in PostgreSQL.' docs/archite
 grep -Fq 'Rust never accesses PostgreSQL directly.' docs/architecture/container-view.md
 grep -Fq 'Cross-runtime communication is contract-driven.' docs/architecture/container-view.md
 git diff --check
-```
-
-Expected: all commands exit `0`.
-
-- [ ] **Step 4: Commit Task 2**
-
-```bash
 git add docs/architecture/system-context.md docs/architecture/container-view.md
 git commit -m "docs(architecture): define system and container views"
 ```
 
 ---
 
-### Task 3: Document module boundaries, dependency direction, and data ownership
+### Task 3: Define module, dependency, and durable-data ownership
 
 **Files:**
 - Create: `docs/architecture/module-boundaries.md`
@@ -507,42 +327,37 @@ git commit -m "docs(architecture): define system and container views"
 
 **Interfaces:**
 - Consumes: Task 2 runtime ownership.
-- Produces: normative module/dependency/data rules later translated into runtime architecture fitness functions.
+- Produces: normative rules later translated into Go/frontend/Rust fitness functions.
 
 - [ ] **Step 1: Create `module-boundaries.md`**
 
 Required sections:
 
-```markdown
-# Module Boundaries
-
-**Architecture state:** Committed
-
-## Purpose
-## Go Control Plane
-### Monitoring
-### Future Business Modules
-## Rust Checker
-## Frontend
-## Cross-Boundary Rules
-## Extension Without Premature Distribution
-## Related Decisions
+```text
+Purpose
+Go Control Plane
+Monitoring
+Future Business Modules
+Rust Checker
+Frontend
+Cross-Boundary Rules
+Extension Without Premature Distribution
+Related Decisions
 ```
 
-Required content:
+Document:
 
-- Monitoring is the initial Go business capability;
-- future examples such as Incidents or Notifications are examples only, not folders to create;
-- each Go business module owns domain model, application use cases, ports, persistence boundary, domain events, and exposed application boundary;
-- direct cross-module persistence reads are forbidden;
-- no global shared business model or generic cross-domain repository;
-- Rust uses checker core, protocol probe adapters, control-plane client adapter, and composition root conceptually;
-- frontend dependency direction is `app -> pages -> widgets -> features -> entities -> shared`;
-- service extraction is possible later only when measurable requirements justify it, not a current goal.
+- Monitoring as the initial Go business capability;
+- future Incidents/Notifications only as examples, not directories;
+- Go module ownership of domain, application use cases, ports, persistence boundary, domain events, and exposed application boundary;
+- no direct cross-module persistence reads, global shared business model, generic cross-domain repository, or circular business dependencies;
+- Rust checker core/probe adapters/control-plane client/composition root conceptually;
+- frontend direction `app -> pages -> widgets -> features -> entities -> shared`;
+- service extraction only after measurable need.
 
 - [ ] **Step 2: Create `dependency-rules.md`**
 
-Include the allow/deny matrix from the design spec and a dedicated **Forbidden Edges** section containing these exact lines:
+Include the spec allow/deny matrix and this exact forbidden-edge block:
 
 ```text
 Browser -> PostgreSQL is forbidden.
@@ -553,43 +368,32 @@ Go module A -> Go module B persistence adapter is forbidden.
 Cross-runtime implementation-code sharing is forbidden.
 ```
 
-Add a **Future Enforcement** section explaining that Go import rules, frontend lint boundaries, and Rust crate dependency checks will be implemented only when those runtimes exist.
+Add `Future Enforcement` describing later Go import checks, frontend lint boundaries, and Rust crate graph checks without selecting tools now.
 
 - [ ] **Step 3: Create `data-ownership.md`**
 
 Required sections:
 
-```markdown
-# Data Ownership
-
-**Architecture state:** Committed
-
-## Primary Ownership Rule
-## Runtime Access
-## Go Module Ownership
-## Cross-Module Integration
-## Initial Monitoring Namespace
-## Extraction Consequence
-## Non-goals
-## Related Decisions
+```text
+Primary Ownership Rule
+Runtime Access
+Go Module Ownership
+Cross-Module Integration
+Initial Monitoring Namespace
+Extraction Consequence
+Non-goals
+Related Decisions
 ```
 
-Required exact statement:
+State exactly:
 
 ```text
 Go exclusively owns durable product state in PostgreSQL.
 ```
 
-Also state:
+Also state that browser changes use the public contract, Rust results use the internal contract, initial namespace is `monitoring.*`, table schemas are deferred, cross-module SQL reads are forbidden, and service extraction is not a current goal.
 
-- browser state changes happen only through the public contract;
-- Rust results enter through the internal contract;
-- initial intended PostgreSQL namespace is `monitoring.*` but tables/columns are deferred;
-- cross-module SQL reads are forbidden;
-- module interaction uses application interfaces or domain/integration events when justified;
-- service extraction is not a current goal.
-
-- [ ] **Step 4: Verify Task 3**
+- [ ] **Step 4: Verify and commit**
 
 ```bash
 grep -Fq 'Monitoring is the initial Go business capability' docs/architecture/module-boundaries.md
@@ -598,52 +402,34 @@ grep -Fq 'Cross-runtime implementation-code sharing is forbidden.' docs/architec
 grep -Fq 'Go exclusively owns durable product state in PostgreSQL.' docs/architecture/data-ownership.md
 grep -Fq 'service extraction is not a current goal' docs/architecture/data-ownership.md
 git diff --check
-```
-
-Expected: all commands exit `0`.
-
-- [ ] **Step 5: Commit Task 3**
-
-```bash
 git add docs/architecture/module-boundaries.md docs/architecture/dependency-rules.md docs/architecture/data-ownership.md
 git commit -m "docs(architecture): define boundaries and data ownership"
 ```
 
 ---
 
-### Task 4: Document runtime flows and cross-area change flow
+### Task 4: Document cross-runtime behavior and cross-area change impact
 
 **Files:**
 - Create: `docs/architecture/runtime-flows.md`
 - Create: `docs/architecture/change-flow.md`
 
 **Interfaces:**
-- Consumes: Tasks 2–3 ownership and dependency rules.
-- Produces: canonical cross-runtime behavior and the reusable architecture-impact model for future changes.
+- Consumes: Tasks 2–3.
+- Produces: canonical runtime collaboration and reusable feature-impact reasoning.
 
-- [ ] **Step 1: Create `runtime-flows.md` with four sequence diagrams**
+- [ ] **Step 1: Create `runtime-flows.md` with exactly four Mermaid sequence diagrams**
 
-Use sections:
+Required flows:
 
-```markdown
-# Runtime Flows
-
-**Architecture state:** Committed
-**Implementation state:** Conceptual flows; endpoint names and transport details remain deferred.
-
-## Purpose
-## Create Monitor
-## Execute Due Check
-## Read Current State
-## Failure Boundary
-## Correlation Context
-## What These Flows Do Not Define
-## Related Decisions
+```text
+Create Monitor
+Execute Due Check
+Read Current State
+Failure Boundary
 ```
 
-The four Mermaid diagrams must express:
-
-**Create Monitor**
+`Create Monitor` sequence:
 
 ```mermaid
 sequenceDiagram
@@ -662,7 +448,7 @@ sequenceDiagram
     Web-->>User: Show configured monitor
 ```
 
-**Execute Due Check**
+`Execute Due Check` sequence:
 
 ```mermaid
 sequenceDiagram
@@ -680,53 +466,34 @@ sequenceDiagram
     Monitoring->>DB: Persist result/state
 ```
 
-**Read Current State** and **Failure Boundary** must follow the same responsibilities from the design spec. Failure Boundary must explicitly show raw transport failure terminating in Rust and only a normalized probe failure crossing into Go.
+`Read Current State` must flow User -> Web -> Go -> Monitoring -> PostgreSQL and back.
+
+`Failure Boundary` must show raw transport/probe failure ending in Rust and only a normalized probe failure crossing into Go. Browser-facing output remains a stable product state/error, not a raw transport error.
+
+Add a `Correlation Context` section stating correlation propagation is committed design intent but tracing infrastructure is not implemented.
 
 - [ ] **Step 2: Create `change-flow.md`**
 
-Use the canonical example `Configure HTTP Request Timeout` and these sections:
-
-```markdown
-# Change Flow
-
-## Purpose
-## Canonical Example: Configure HTTP Request Timeout
-### 1. Product Intent
-### 2. Domain/Application Impact
-### 3. Persistence Impact
-### 4. Contract Impact
-### 5. Frontend Impact
-### 6. Checker Impact
-### 7. Testing Impact
-### 8. Security Impact
-### 9. Observability Impact
-### 10. CI and Documentation Impact
-## Reusable Change-Impact Checklist
-## Anti-patterns
-## Related Decisions
-```
-
-The example must stay conceptual and state explicitly that request-timeout configuration is not implemented by this documentation phase.
-
-The reusable checklist must ask whether a change affects:
+Use `Configure HTTP Request Timeout` as the only canonical example. Cover, in this order:
 
 ```text
-product behavior
-Go domain/application policy
-persistence semantics
-public contract
-internal contract
-frontend presentation/input
-Rust execution policy
-security budgets/trust boundaries
-test evidence
-observability signals
-CI paths
-canonical architecture documentation
-ADR requirements
+Product Intent
+Domain/Application Impact
+Persistence Impact
+Contract Impact
+Frontend Impact
+Checker Impact
+Testing Impact
+Security Impact
+Observability Impact
+CI and Documentation Impact
 ```
 
-- [ ] **Step 3: Verify Task 4**
+Add a reusable checklist covering product, Go, persistence, public/internal contracts, frontend, Rust, security budgets, test evidence, observability, CI, canonical docs, and ADR trigger.
+
+State explicitly that timeout configuration is not implemented by this documentation phase.
+
+- [ ] **Step 3: Verify and commit**
 
 ```bash
 test "$(grep -c '^sequenceDiagram$' docs/architecture/runtime-flows.md)" -eq 4
@@ -734,20 +501,13 @@ grep -Fq 'normalized probe failure' docs/architecture/runtime-flows.md
 grep -Fq 'Configure HTTP Request Timeout' docs/architecture/change-flow.md
 grep -Fq 'not implemented by this documentation phase' docs/architecture/change-flow.md
 git diff --check
-```
-
-Expected: all commands exit `0`.
-
-- [ ] **Step 4: Commit Task 4**
-
-```bash
 git add docs/architecture/runtime-flows.md docs/architecture/change-flow.md
 git commit -m "docs(architecture): document runtime and change flows"
 ```
 
 ---
 
-### Task 5: Establish shared vocabulary and the minimal ADR baseline
+### Task 5: Establish glossary and three material ADRs
 
 **Files:**
 - Create: `docs/glossary.md`
@@ -757,12 +517,12 @@ git commit -m "docs(architecture): document runtime and change flows"
 - Create: `docs/adr/0003-contract-and-data-ownership.md`
 
 **Interfaces:**
-- Consumes: Tasks 2–4 architecture truths.
-- Produces: canonical terminology and rationale for the three expensive-to-reverse cross-boundary decisions.
+- Consumes: Tasks 2–4.
+- Produces: canonical vocabulary and rationale for expensive-to-reverse cross-boundary decisions.
 
-- [ ] **Step 1: Create `docs/glossary.md`**
+- [ ] **Step 1: Create the glossary**
 
-Define exactly the architecture terms required by the spec:
+Define:
 
 ```text
 Control Plane
@@ -782,26 +542,11 @@ Architecture Fitness Function
 Canonical Documentation
 ```
 
-Definitions must align with the system docs. Do not add deferred vendor/tool definitions.
+Definitions must match the system docs and avoid deferred vendors/tools.
 
-- [ ] **Step 2: Create `docs/adr/README.md`**
+- [ ] **Step 2: Create the ADR index**
 
-Required ADR lifecycle:
-
-```text
-Proposed
-Accepted
-Superseded
-Rejected
-```
-
-Required filename pattern:
-
-```text
-NNNN-kebab-case-title.md
-```
-
-Required sections for every ADR:
+Document statuses `Proposed`, `Accepted`, `Superseded`, `Rejected`, filename pattern `NNNN-kebab-case-title.md`, and required headings:
 
 ```text
 Status
@@ -812,50 +557,36 @@ Consequences
 Related Documentation
 ```
 
-The index must link ADR-0001, ADR-0002, and ADR-0003.
+Link ADR-0001..ADR-0003.
 
-- [ ] **Step 3: Create ADR-0001 — Multi-runtime monorepo**
+- [ ] **Step 3: Create ADR-0001**
 
-Record:
+Decision: one monorepo containing React/TypeScript Web Client, Go Control Plane, Rust Checker, and one initial product/release boundary.
 
-- Status: Accepted;
-- one repository;
-- React/TypeScript web client;
-- Go control plane;
-- Rust checker;
-- one product/release boundary initially;
-- alternatives: separate repos, one-language system, premature microservice split;
-- consequences: atomic cross-runtime review/contract changes versus heterogeneous toolchain complexity.
+Alternatives: separate repositories, one-language implementation, premature microservice repository split.
 
-- [ ] **Step 4: Create ADR-0002 — Control plane and execution plane**
+Consequences: atomic cross-runtime review and contract changes versus heterogeneous toolchain complexity.
 
-Record:
+- [ ] **Step 4: Create ADR-0002**
 
-- Status: Accepted;
-- Go owns product/domain coordination;
-- Rust owns bounded network execution;
-- Go does not embed low-level checker implementation;
-- Rust does not own primary durable product persistence;
-- alternatives: Go probes everything, Rust owns persistence too, checker embedded in Go;
-- consequence: process-boundary contract cost in exchange for clearer ownership and execution isolation.
+Decision: Go owns product/domain coordination; Rust owns bounded network execution; Go does not embed low-level checker implementation; Rust does not own primary durable product persistence.
 
-- [ ] **Step 5: Create ADR-0003 — Contract and data ownership**
+Alternatives: Go performs probes, Rust owns persistence too, checker embedded as a Go-linked library/process detail.
 
-Record:
+Consequence: process-boundary contract cost in exchange for ownership clarity and execution isolation.
 
-- Status: Accepted;
-- runtime communication is contract-driven;
-- public and internal contracts are separate concepts;
-- Go exclusively owns PostgreSQL durable product state;
-- Rust returns normalized results through the internal boundary;
-- browser communicates only through the public boundary;
-- alternatives: shared DB integration, cross-language shared implementation models, frontend-to-storage coupling;
-- consequence: explicit mapping/contract work in exchange for reduced hidden coupling and a cleaner future extraction path.
+- [ ] **Step 5: Create ADR-0003**
 
-- [ ] **Step 6: Verify Task 5**
+Decision: cross-runtime communication is contract-driven; public and internal contracts are separate concepts; Go exclusively owns PostgreSQL durable product state; Rust submits normalized results through the internal boundary; browser uses the public boundary only.
+
+Alternatives: shared database integration, cross-language shared implementation models, frontend-to-storage coupling.
+
+Consequence: explicit mapping/contract work in exchange for reduced hidden coupling and a cleaner future extraction path.
+
+- [ ] **Step 6: Verify and commit**
 
 ```bash
-for adr in docs/adr/000{1,2,3}-*.md; do
+for adr in docs/adr/0001-multi-runtime-monorepo.md docs/adr/0002-control-plane-and-execution-plane.md docs/adr/0003-contract-and-data-ownership.md; do
   grep -Fq '## Status' "$adr"
   grep -Fq 'Accepted' "$adr"
   grep -Fq '## Context' "$adr"
@@ -867,48 +598,39 @@ done
 grep -Fq '## Control Plane' docs/glossary.md
 grep -Fq '## Execution Plane' docs/glossary.md
 git diff --check
-```
-
-Expected: all commands exit `0`.
-
-- [ ] **Step 7: Commit Task 5**
-
-```bash
 git add docs/glossary.md docs/adr
 git commit -m "docs(architecture): establish glossary and ADR baseline"
 ```
 
 ---
 
-### Task 6: Add canonical navigation and run the complete documentation fitness check
+### Task 6: Add canonical navigation and validate the complete architecture tree
 
 **Files:**
 - Create: `docs/architecture/README.md`
 - Modify: `docs/README.md`
 
 **Interfaces:**
-- Consumes: Tasks 2–5 completed documentation tree and Task 1 checker.
-- Produces: one canonical reading path from repository documentation index through architecture and ADRs.
+- Consumes: Tasks 1–5.
+- Produces: canonical reading order and a fully valid documentation tree.
 
 - [ ] **Step 1: Create `docs/architecture/README.md`**
 
-Use this order:
+Required headings:
 
-```markdown
-# Architecture
-
-## Purpose
-## Architecture State Semantics
-## Canonical Reading Order
-## System Views
-## Boundaries and Ownership
-## Runtime and Change Flows
-## Architecture Decision Records
-## Documentation Ownership
-## Architecture Change Policy
+```text
+Purpose
+Architecture State Semantics
+Canonical Reading Order
+System Views
+Boundaries and Ownership
+Runtime and Change Flows
+Architecture Decision Records
+Documentation Ownership
+Architecture Change Policy
 ```
 
-The canonical reading order must link:
+Canonical reading order links, in order:
 
 ```text
 system-context.md
@@ -921,25 +643,27 @@ change-flow.md
 ../adr/README.md
 ```
 
-State semantics must define:
+Define:
 
-- Committed — approved normative architecture;
-- Implemented — corresponding repository/runtime behavior exists with evidence;
-- Deferred — intentionally delayed until a named requirement becomes real.
+```text
+Committed — approved normative architecture.
+Implemented — corresponding repository/runtime behavior exists with evidence.
+Deferred — intentionally delayed until a named requirement becomes real.
+```
 
-- [ ] **Step 2: Modify `docs/README.md`**
+- [ ] **Step 2: Update `docs/README.md`**
 
-Add an explicit architecture entry:
+Add:
 
 ```markdown
 ## Architecture
 
-Start with the [Architecture index](architecture/README.md) for the canonical system context, runtime boundaries, dependency rules, data ownership, flows, and ADRs.
+Start with the [Architecture index](architecture/README.md) for the canonical system context, runtime boundaries, dependency rules, data ownership, runtime/change flows, and ADRs.
 ```
 
-Preserve the existing area-ownership explanation and the rule that empty documentation trees are not pre-created.
+Keep the existing area-ownership explanation and no-empty-directory rule.
 
-- [ ] **Step 3: Run the full checker against the real repository**
+- [ ] **Step 3: Run the complete architecture-doc checker**
 
 ```bash
 ./scripts/ci/test-architecture-docs.sh
@@ -953,17 +677,15 @@ Expected:
 Architecture documentation tests: 8 passed, 0 failed
 ```
 
-and `check-architecture-docs.sh .` exits `0`.
+- [ ] **Step 4: Prove documentation-only scope**
 
-- [ ] **Step 4: Verify the scope remains documentation-only**
-
-From the implementation branch relative to its base:
+The implementation branch is created from `docs/architecture-documentation-baseline-plan`, so run:
 
 ```bash
-git diff --name-only <implementation-base>...HEAD
+git diff --name-only docs/architecture-documentation-baseline-plan...HEAD
 ```
 
-Every changed path must be under one of:
+Every changed path must be under:
 
 ```text
 docs/
@@ -984,7 +706,7 @@ go.mod
 Cargo.toml
 ```
 
-- [ ] **Step 5: Commit Task 6**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add docs/README.md docs/architecture/README.md
@@ -993,18 +715,16 @@ git commit -m "docs(architecture): add canonical architecture navigation"
 
 ---
 
-### Task 7: Integrate architecture documentation verification into CI
+### Task 7: Integrate documentation fitness into the existing CI gate
 
 **Files:**
 - Modify: `.github/workflows/ci.yml`
 
 **Interfaces:**
-- Consumes: Task 1 validation scripts and complete documentation tree.
-- Produces: architecture-documentation regression protection inside the existing stable `CI / repository` job; the required aggregate check remains `CI / gate`.
+- Consumes: Task 1 checker and complete documentation tree.
+- Produces: regression protection inside `CI / repository`; the externally required aggregate remains `CI / gate`.
 
-- [ ] **Step 1: Add one repository-job step after governance bootstrap tests**
-
-Add:
+- [ ] **Step 1: Add one step after GitHub-governance bootstrap tests**
 
 ```yaml
       - name: Run architecture documentation tests
@@ -1013,22 +733,19 @@ Add:
           ./scripts/ci/check-architecture-docs.sh .
 ```
 
-Do not create another required top-level job. The stable branch-protection surface remains `CI / gate`.
+Do not create a new required top-level job.
 
-- [ ] **Step 2: Keep CI security invariants unchanged**
-
-Verify:
+- [ ] **Step 2: Preserve security invariants**
 
 ```bash
-grep -Fq 'permissions:' .github/workflows/ci.yml
 grep -Fq 'contents: read' .github/workflows/ci.yml
 grep -Fq 'persist-credentials: false' .github/workflows/ci.yml
 grep -Fq 'Run architecture documentation tests' .github/workflows/ci.yml
 ```
 
-Do not add write permission, secrets, `pull_request_target`, or a documentation package manager.
+Do not add workflow write permission, secrets, `pull_request_target`, or a documentation package manager.
 
-- [ ] **Step 3: Run all local repository governance checks**
+- [ ] **Step 3: Run all local policy checks**
 
 ```bash
 ./scripts/ci/test-governance.sh
@@ -1041,7 +758,7 @@ git diff --check
 
 Expected: all exit `0`.
 
-- [ ] **Step 4: Commit Task 7**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add .github/workflows/ci.yml
@@ -1050,17 +767,25 @@ git commit -m "ci(docs): enforce architecture documentation baseline"
 
 ---
 
-### Task 8: Open the implementation PR and hold the merge gate on Issue #4
+### Task 8: Open the implementation PR and enforce the governance hold
 
 **Files:**
-- No new source files.
-- Review all files from Tasks 1–7.
+- No new files.
 
 **Interfaces:**
-- Consumes: complete Architecture Documentation Baseline implementation branch.
-- Produces: one reviewable documentation PR with CI evidence; merge remains blocked until repository administration is fixed.
+- Consumes: Tasks 1–7.
+- Produces: a reviewable stacked implementation PR that cannot land until Issue #4 is closed.
 
-- [ ] **Step 1: Run final branch verification**
+- [ ] **Step 1: Create the implementation branch from the approved plan branch**
+
+```bash
+git switch docs/architecture-documentation-baseline-plan
+git switch -c docs/architecture-documentation-baseline
+```
+
+All Tasks 1–7 execute on this implementation branch.
+
+- [ ] **Step 2: Run final verification**
 
 ```bash
 ./scripts/ci/test-governance.sh
@@ -1069,26 +794,31 @@ git commit -m "ci(docs): enforce architecture documentation baseline"
 ./scripts/ci/check-repository-shape.sh .
 ./scripts/ci/check-architecture-docs.sh .
 ./scripts/ci/check-pr-title.sh "docs(architecture): establish architecture documentation baseline"
-git diff --check <implementation-base>...HEAD
-git log --format='%s' <implementation-base>..HEAD
+git diff --check docs/architecture-documentation-baseline-plan...HEAD
+git log --format='%s' docs/architecture-documentation-baseline-plan..HEAD
 ```
 
 Expected:
 
-- governance tests pass;
-- GitHub governance bootstrap tests pass;
-- architecture documentation tests report `8 passed, 0 failed`;
-- repository-shape and architecture-doc checks pass;
-- PR title passes;
-- every branch commit subject follows Conventional Commits.
+- architecture tests: `8 passed, 0 failed`;
+- all policy/check scripts exit `0`;
+- every implementation commit follows Conventional Commits.
 
-- [ ] **Step 2: Open a PR with this title**
+- [ ] **Step 3: Open the stacked implementation PR**
+
+Base branch:
+
+```text
+docs/architecture-documentation-baseline-plan
+```
+
+Title:
 
 ```text
 docs(architecture): establish architecture documentation baseline
 ```
 
-The PR body must explicitly state:
+PR body impact statements:
 
 ```text
 Architecture impact: Establishes canonical system-level architecture documentation only.
@@ -1098,12 +828,10 @@ Security impact: Documents the outbound SSRF/egress trust boundary and ownership
 Testing evidence: Documentation fitness harness, repository governance checks, and CI / gate.
 Documentation: Adds C4-first architecture core, glossary, runtime/change flows, and ADR baseline.
 Breaking changes: None; documentation only.
-Governance blocker: Issue #4 remains open; this PR must not merge until main-protection and merge policy are verified and Issue #4 is closed.
+Governance blocker: Issue #4 remains open; this PR must not merge to main until repository governance is independently verified and Issue #4 is closed.
 ```
 
-- [ ] **Step 3: Require GitHub Actions evidence**
-
-Required jobs:
+- [ ] **Step 4: Require CI evidence on the stacked PR**
 
 ```text
 CI / policy      success
@@ -1111,11 +839,11 @@ CI / repository  success
 CI / gate        success
 ```
 
-`CI / repository` must visibly include the `Run architecture documentation tests` step.
+`CI / repository` must include `Run architecture documentation tests`.
 
-- [ ] **Step 4: Verify Issue #4 before any merge attempt**
+- [ ] **Step 5: Hold all main-branch merges while Issue #4 is open**
 
-Use the GitHub API or repository tooling to confirm all of the following before marking the implementation PR mergeable by policy:
+No spec, plan, or implementation PR from this stack may merge into `main` until all are true:
 
 ```text
 allow_squash_merge       true
@@ -1131,53 +859,60 @@ branch deletion          blocked
 Issue #4                 closed
 ```
 
-If any item is false or missing, leave the implementation PR open/draft and stop. Do not bypass the gate.
+If any item is false or missing, leave the stack open/draft.
 
-- [ ] **Step 5: When governance is verified, squash-merge only**
+- [ ] **Step 6: Land the stack after governance verification**
 
-Squash commit subject:
+After Issue #4 closes:
+
+```text
+A. Squash-merge PR #5 (spec) into main.
+B. Retarget the plan PR from the spec branch to main; require fresh CI; squash-merge.
+C. Retarget the implementation PR from the plan branch to main; require fresh CI; squash-merge.
+D. Verify the merged main revision has CI / gate = success.
+```
+
+The implementation squash subject is:
 
 ```text
 docs(architecture): establish architecture documentation baseline
 ```
 
-After merge, rerun/observe `main` CI and verify `CI / gate` success before declaring the documentation baseline complete.
-
 ---
 
 ## Implementer Self-Review
 
-Before completion, verify:
+Before completion verify:
 
-- [ ] Only the approved canonical documentation files, narrow Bash validation scripts, and the existing CI workflow changed.
-- [ ] `component-view.md`, `api-contracts.md`, `event-model.md`, and runtime-specific documentation trees were not created.
-- [ ] All project-facing documentation is English.
-- [ ] System-level documents distinguish Committed / Implemented / Deferred state.
-- [ ] Go is consistently described as the Control Plane.
-- [ ] Rust is consistently described as the Execution Plane.
-- [ ] React/TypeScript is consistently described as the Web Client.
+- [ ] Only approved docs, narrow Bash fitness scripts, and the existing CI workflow changed.
+- [ ] Exactly 14 canonical documentation files are validated.
+- [ ] No component/API/event-model or runtime-specific documentation tree was created.
+- [ ] All project-facing docs are English.
+- [ ] Committed/Implemented/Deferred semantics are explicit.
+- [ ] Go is consistently Control Plane; Rust Execution Plane; React/TypeScript Web Client.
 - [ ] Go exclusively owns durable product state in PostgreSQL.
-- [ ] Direct Rust-to-PostgreSQL and browser-to-PostgreSQL access are explicitly forbidden.
+- [ ] Rust-to-PostgreSQL and browser-to-PostgreSQL edges are explicitly forbidden.
 - [ ] Cross-runtime communication is contract-driven without endpoint schemas being invented.
-- [ ] Monitoring is identified as the initial Go business capability without speculative module scaffolding.
-- [ ] Exactly four canonical runtime sequence diagrams exist.
-- [ ] The HTTP request-timeout change example crosses product, Go, persistence, contracts, frontend, Rust, tests, security, observability, CI, and documentation.
-- [ ] ADR-0001, ADR-0002, and ADR-0003 are Accepted and include alternatives plus consequences.
+- [ ] Monitoring is the initial Go business capability without speculative module scaffolding.
+- [ ] Exactly four runtime sequence diagrams exist.
+- [ ] The timeout example crosses product, Go, persistence, contracts, frontend, Rust, tests, security, observability, CI, and documentation.
+- [ ] ADR-0001..0003 are Accepted and record alternatives plus consequences.
 - [ ] Architecture navigation reaches every canonical document and ADR index.
 - [ ] No forbidden placeholder token remains in canonical architecture docs.
-- [ ] No docs site generator, package ecosystem, or Mermaid CLI was introduced for the baseline.
-- [ ] Issue #4 is treated as a hard merge gate, not silently ignored.
+- [ ] No docs site generator/package ecosystem/Mermaid CLI was introduced.
+- [ ] Issue #4 remains a hard main-merge gate until independently closed.
 
 ## Exit Criteria
 
 This plan is complete only when:
 
-1. all baseline architecture documents and three ADRs exist with the approved content boundaries;
-2. architecture documentation tests pass with `8 passed, 0 failed`;
-3. the complete repository passes architecture-doc, governance, repository-shape, and whitespace checks;
-4. CI executes architecture documentation validation inside `CI / repository` and aggregate `CI / gate` succeeds;
-5. the implementation PR contains no runtime, Docker, API-contract, database, or product-feature implementation;
-6. repository governance is independently verified and Issue #4 is closed before merge;
-7. the architecture documentation PR is squash-merged and the merged `main` revision has a successful `CI / gate`.
+1. the canonical architecture documentation tree and three ADRs exist;
+2. architecture documentation tests report `8 passed, 0 failed`;
+3. governance, repository-shape, architecture-doc, and whitespace checks all pass;
+4. CI runs architecture validation inside `CI / repository` and aggregate `CI / gate` succeeds;
+5. the implementation PR contains no runtime/Docker/API/database/product implementation;
+6. repository governance is independently verified and Issue #4 is closed before any stack PR merges to `main`;
+7. the stack lands in spec -> plan -> implementation order using squash merges and fresh CI at each retarget;
+8. merged `main` ends with `CI / gate = success`.
 
-The next project gate after this plan is implemented and merged is **Docker-first Local Development Environment design/planning**. It must not begin automatically as part of this documentation implementation.
+The next project gate is **Docker-first Local Development Environment design/planning**. It does not start automatically from this plan.
