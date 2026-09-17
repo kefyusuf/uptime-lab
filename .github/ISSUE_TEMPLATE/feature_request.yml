@@ -1,0 +1,33 @@
+name: Feature request
+description: Propose a capability or engineering improvement
+title: "feat: "
+labels: []
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What concrete problem should this change solve?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe observable behavior rather than a preferred implementation when possible.
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Affected boundaries
+      description: Note expected impact on web, API, checker, contracts, persistence, security, or operations.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe simpler alternatives or why existing behavior is insufficient.
+    validations:
+      required: false
