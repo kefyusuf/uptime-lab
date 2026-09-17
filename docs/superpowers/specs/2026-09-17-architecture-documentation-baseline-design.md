@@ -772,15 +772,16 @@ The implementation plan may add small documentation-policy scripts if tests just
 
 The repository currently contains tested automation for the desired GitHub governance settings, tracked by Issue #4.
 
-The Architecture Documentation Baseline may be designed and prepared on a branch while Issue #4 remains open.
+The Architecture Documentation Baseline may be designed, planned, implemented on a short-lived branch, and opened as a pull request while Issue #4 remains open.
 
-However, until `main-protection` is active and the approved merge policy is verified:
+However, until `main-protection` is active, the approved merge policy is verified, and Issue #4 is closed:
 
+- the Architecture Documentation Baseline pull request **MUST NOT be merged into `main`**;
 - the architecture documentation implementation must not be treated as proof that repository governance is complete;
 - Issue #4 remains an explicit operational blocker;
 - the implementation plan must preserve the PR-first workflow and must not use the unprotected state as permission for direct-to-`main` changes.
 
-Once the governance bootstrap is run and verified, Issue #4 can be closed independently of this documentation design.
+Once the governance bootstrap is run, independently verified through the GitHub API, and Issue #4 is closed, the documentation PR may proceed through its normal CI/review/merge gate.
 
 ---
 
@@ -849,7 +850,7 @@ Once this written specification is approved, the following documentation decisio
 - **ADB-009:** No component-level documentation is created before real implementation boundaries exist.
 - **ADB-010:** No empty documentation directories or speculative module documents are created.
 - **ADB-011:** Go remains the canonical owner of durable product state; this rule must be reflected consistently across all architecture documentation.
-- **ADB-012:** Architecture documentation implementation remains PR-first even while the separate GitHub administration blocker is unresolved.
+- **ADB-012:** Architecture documentation implementation remains PR-first even while the separate GitHub administration blocker is unresolved, and its PR cannot merge until Issue #4 is closed.
 
 ---
 
@@ -878,4 +879,5 @@ After this specification is reviewed and explicitly approved:
 2. create a detailed Architecture Documentation Baseline implementation plan;
 3. keep Issue #4 visible as the separate repository-administration blocker;
 4. implement the documentation baseline through a short-lived branch and PR only after the implementation plan is approved;
-5. do not begin Docker, Go, Rust, React, OpenAPI, persistence, or product-feature implementation as part of this documentation phase.
+5. do not merge that documentation PR until Issue #4 is closed and repository governance is independently verified;
+6. do not begin Docker, Go, Rust, React, OpenAPI, persistence, or product-feature implementation as part of this documentation phase.
