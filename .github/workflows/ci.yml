@@ -51,6 +51,9 @@ jobs:
       - name: Run governance tests
         run: ./scripts/ci/test-governance.sh
 
+      - name: Run GitHub governance bootstrap tests
+        run: ./scripts/github/test-configure-governance.sh
+
       - name: Validate repository invariants
         run: ./scripts/ci/check-repository-shape.sh .
 
