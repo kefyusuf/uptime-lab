@@ -1,6 +1,7 @@
 # Dependency Rules
 
-**Architecture state:** Committed  
+**Architecture state:** Committed
+
 **Implementation state:** Normative rules; automated runtime-specific fitness functions are deferred until the corresponding code exists.
 
 ## Purpose

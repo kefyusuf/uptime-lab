@@ -1,6 +1,7 @@
 # Runtime Flows
 
-**Architecture state:** Committed  
+**Architecture state:** Committed
+
 **Implementation state:** Conceptual cross-runtime flows; product runtimes are not implemented yet.
 
 ## Purpose

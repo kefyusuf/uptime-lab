@@ -1,6 +1,7 @@
 # Container View
 
-**Architecture state:** Committed  
+**Architecture state:** Committed
+
 **Implementation state:** Planned runtime topology; runtime foundations are not implemented yet.
 
 ## Purpose

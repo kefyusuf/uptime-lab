@@ -1,6 +1,7 @@
 # Data Ownership
 
-**Architecture state:** Committed  
+**Architecture state:** Committed
+
 **Implementation state:** Ownership is committed; concrete schemas, tables, and migrations are deferred to the persistence foundation.
 
 ## Primary Ownership Rule

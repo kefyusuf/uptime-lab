@@ -1,6 +1,7 @@
 # Module Boundaries
 
-**Architecture state:** Committed  
+**Architecture state:** Committed
+
 **Implementation state:** Conceptual boundaries only; runtime source trees are not implemented yet.
 
 ## Purpose

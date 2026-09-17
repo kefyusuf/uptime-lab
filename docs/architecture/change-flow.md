@@ -1,6 +1,7 @@
 # Change Flow
 
-**Architecture state:** Committed  
+**Architecture state:** Committed
+
 **Implementation state:** Engineering impact model only; the canonical example is not implemented by this documentation phase.
 
 ## Purpose

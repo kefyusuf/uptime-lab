@@ -1,6 +1,7 @@
 # System Context
 
-**Architecture state:** Committed  
+**Architecture state:** Committed
+
 **Implementation state:** Foundation only; product runtimes are not implemented yet.
 
 ## Purpose
