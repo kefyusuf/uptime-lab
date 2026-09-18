@@ -1,10 +1,10 @@
 # Architecture Documentation Baseline Design
 
-**Status:** Review candidate  
-**Date:** 2026-09-17  
-**Repository:** `kefyusuf/uptime-lab`  
-**Parent specification:** `docs/superpowers/specs/2026-09-17-uptime-lab-foundation-design.md`  
-**Scope:** Canonical system-level architecture documentation structure, reading order, content contracts, ADR baseline, diagram conventions, terminology, and documentation quality gates.  
+**Status:** Review candidate
+**Date:** 2026-09-17
+**Repository:** `kefyusuf/uptime-lab`
+**Parent specification:** `docs/superpowers/specs/2026-09-17-uptime-lab-foundation-design.md`
+**Scope:** Canonical system-level architecture documentation structure, reading order, content contracts, ADR baseline, diagram conventions, terminology, and documentation quality gates.
 **Decision state:** The C4-first documentation direction was approved in discussion. This written specification requires explicit review before an implementation plan is created.
 
 ---
