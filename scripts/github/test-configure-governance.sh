@@ -112,6 +112,9 @@ run_case() {
   grep -F -- '"strict_required_status_checks_policy": true' "$TMP_DIR/gh.log" >/dev/null
 }
 
+WORKFLOW_FILE="$SCRIPT_DIR/../../.github/workflows/ci.yml"
+grep -A1 '^  gate:$' "$WORKFLOW_FILE" | grep -Fxq '    name: CI / gate'
+
 run_case 0 POST
 run_case 1 PUT
-printf 'GitHub governance bootstrap tests: 2 passed, 0 failed\n'
+printf 'GitHub governance bootstrap tests: 3 passed, 0 failed\n'
