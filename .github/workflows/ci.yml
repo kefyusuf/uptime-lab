@@ -64,7 +64,7 @@ jobs:
         run: git diff --check "$BASE_SHA" "$HEAD_SHA"
 
   gate:
-    name: gate
+    name: CI / gate
     if: ${{ always() }}
     needs:
       - policy
