@@ -9,6 +9,8 @@ Project documentation is organized by responsibility and by cross-runtime archit
 
 ## Architecture
 
+Start with the [Architecture index](architecture/README.md) for the canonical system context, runtime boundaries, dependency rules, data ownership, runtime/change flows, and ADRs.
+
 Architecture documentation describes end-to-end relationships across web, API, checker, persistence, security, and operations. Area-specific documentation must link back to those cross-area flows instead of becoming isolated silos.
 
 ## Area Ownership
