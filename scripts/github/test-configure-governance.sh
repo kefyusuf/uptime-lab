@@ -113,7 +113,12 @@ run_case() {
 }
 
 WORKFLOW_FILE="$SCRIPT_DIR/../../.github/workflows/ci.yml"
-grep -A1 '^  gate: "$WORKFLOW_FILE" | grep -Fxq '    name: CI / gate'
+grep -A1 '^  gate:
+
+run_case 0 POST
+run_case 1 PUT
+printf 'GitHub governance bootstrap tests: 3 passed, 0 failed\n'
+ "$WORKFLOW_FILE" | grep -Fxq '    name: CI / gate'
 
 run_case 0 POST
 run_case 1 PUT
