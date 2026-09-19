@@ -1,9 +1,9 @@
 # Docker-first Local Development Environment Design
 
-**Status:** Review candidate  
-**Date:** 2026-09-19  
-**Repository:** `kefyusuf/uptime-lab`  
-**Scope:** Canonical Docker-first local development substrate, placeholder lifecycle, PostgreSQL local persistence, developer operations, local-dev validation, and CI smoke verification.  
+**Status:** Review candidate
+**Date:** 2026-09-19
+**Repository:** `kefyusuf/uptime-lab`
+**Scope:** Canonical Docker-first local development substrate, placeholder lifecycle, PostgreSQL local persistence, developer operations, local-dev validation, and CI smoke verification.
 **Decision state:** Discussion design approved; this written specification requires explicit user review before implementation planning begins.
 
 ---
