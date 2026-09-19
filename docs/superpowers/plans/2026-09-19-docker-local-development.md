@@ -104,6 +104,59 @@ Create `scripts/ci/test-detect-local-dev-changes.sh` with a temporary Git reposi
 6. unavailable base SHA -> true
 ```
 
+Use these exact per-case mutations after the fixture base commit:
+
+```bash
+# Case 1: compose.yaml modification
+printf 'services: {}\n' > "$TMP/compose.yaml"
+git -C "$TMP" add compose.yaml
+git -C "$TMP" commit -q -m "build(devops): add compose fixture"
+HEAD="$(git -C "$TMP" rev-parse HEAD)"
+expect_value "compose modification triggers local-dev" "true" \
+  bash -c "cd '$TMP' && '$DETECT' '$BASE' '$HEAD'"
+git -C "$TMP" reset --hard -q "$BASE"
+git -C "$TMP" clean -fdq
+
+# Case 2: relevant deletion
+printf 'FROM scratch\n' > "$TMP/deploy/docker/placeholder/Dockerfile"
+git -C "$TMP" add deploy/docker/placeholder/Dockerfile
+git -C "$TMP" commit -q -m "build(devops): add placeholder fixture"
+DELETE_BASE="$(git -C "$TMP" rev-parse HEAD)"
+rm "$TMP/deploy/docker/placeholder/Dockerfile"
+git -C "$TMP" add -u
+git -C "$TMP" commit -q -m "build(devops): remove placeholder fixture"
+DELETE_HEAD="$(git -C "$TMP" rev-parse HEAD)"
+expect_value "relevant deletion triggers local-dev" "true" \
+  bash -c "cd '$TMP' && '$DETECT' '$DELETE_BASE' '$DELETE_HEAD'"
+git -C "$TMP" reset --hard -q "$BASE"
+git -C "$TMP" clean -fdq
+
+# Case 3: workflow modification
+printf 'name: CI\n' > "$TMP/.github/workflows/ci.yml"
+git -C "$TMP" add .github/workflows/ci.yml
+git -C "$TMP" commit -q -m "ci: change workflow fixture"
+HEAD="$(git -C "$TMP" rev-parse HEAD)"
+expect_value "workflow change triggers local-dev" "true" \
+  bash -c "cd '$TMP' && '$DETECT' '$BASE' '$HEAD'"
+git -C "$TMP" reset --hard -q "$BASE"
+git -C "$TMP" clean -fdq
+
+# Case 4: unrelated architecture documentation
+printf '# Unrelated\n' > "$TMP/docs/architecture/unrelated.md"
+git -C "$TMP" add docs/architecture/unrelated.md
+git -C "$TMP" commit -q -m "docs: add unrelated fixture"
+HEAD="$(git -C "$TMP" rev-parse HEAD)"
+expect_value "unrelated docs skip local-dev" "false" \
+  bash -c "cd '$TMP' && '$DETECT' '$BASE' '$HEAD'"
+
+# Cases 5-6 reuse the unrelated HEAD because only base-resolution behavior changes.
+ZERO_SHA="0000000000000000000000000000000000000000"
+expect_value "zero base is conservative" "true" \
+  bash -c "cd '$TMP' && '$DETECT' '$ZERO_SHA' '$HEAD'"
+expect_value "unavailable base is conservative" "true" \
+  bash -c "cd '$TMP' && '$DETECT' '1111111111111111111111111111111111111111' '$HEAD'"
+```
+
 Core harness mechanics:
 
 ```bash
@@ -329,7 +382,71 @@ volumes:
 16. forbidden runtime scaffold path fails
 ```
 
-Every case recreates the fixture and changes exactly one concern. The runtime-scope case creates `apps/api/go.mod`.
+Add these portable fixture-mutation helpers to the test script:
+
+```bash
+replace_literal_once() {
+  local file="$1"
+  local old="$2"
+  local new="$3"
+  local content
+  content="$(cat "$file")"
+  [[ "$content" == *"$old"* ]] || {
+    printf 'fixture text not found in %s: %s\n' "$file" "$old" >&2
+    return 1
+  }
+  content="${content/"$old"/"$new"}"
+  printf '%s' "$content" > "$file"
+}
+
+insert_after_line() {
+  local file="$1"
+  local exact="$2"
+  local insertion="$3"
+  local tmp="$file.tmp"
+  local found=0
+  : > "$tmp"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    printf '%s\n' "$line" >> "$tmp"
+    if [[ "$found" -eq 0 && "$line" == "$exact" ]]; then
+      printf '%s\n' "$insertion" >> "$tmp"
+      found=1
+    fi
+  done < "$file"
+  [[ "$found" -eq 1 ]] || {
+    rm -f "$tmp"
+    printf 'fixture line not found in %s: %s\n' "$file" "$exact" >&2
+    return 1
+  }
+  mv "$tmp" "$file"
+}
+```
+
+Use the following exact single-concern mutations:
+
+```text
+2  remove the checker block from "  checker:" through the line before "volumes:"
+3  insert under "  web:": "    ports:" + "      - \"3000:3000\""
+4  insert under "  web:": "    container_name: uptime-lab-web"
+5  prepend "name: uptime-lab"
+6  insert under "  postgres-data:": "    name: uptime-lab-postgres-data"
+7  insert under "  web:": "    network_mode: host"
+8  replace "postgres-data:/var/lib/postgresql" with "postgres-data:/var/lib/postgresql/data"
+9  inside the api block replace its "condition: service_healthy" with "condition: service_started"
+10 inside the checker block replace its "condition: service_healthy" with "condition: service_started"
+11 insert under "  web:": "    depends_on:" + "      api:" + "        condition: service_healthy"
+12 replace "image: postgres:18.6-alpine3.24" with "image: postgres:latest"
+13 remove "    read_only: true" from the web block
+14 insert under "  web:": "    restart: unless-stopped"
+15 insert under "  web:": "    profiles: [dev]"
+16 create "apps/api/go.mod"
+```
+
+For mutations that must target one service block (cases 9, 10, and 13), implement a `mutate_service_block <service> <old-line> <new-line-or-empty>` helper that only edits between the exact `  <service>:` header and the next two-space service header/top-level section. Assert that it changed exactly one line. This prevents a test from passing because it accidentally mutated another service.
+
+Every case calls `make_fixture` first and then exactly one mutation. Case 1 uses the untouched fixture.
+
+The runtime-scope case creates `apps/api/go.mod`.
 
 - [ ] **Step 3: Verify RED**
 
@@ -643,6 +760,42 @@ Required cases:
 3. FAIL_ON_PATTERN=build fails but log still contains down -v --remove-orphans
 ```
 
+Use these exact assertions:
+
+```bash
+# Case 1: success path
+: > "$DOCKER_LOG"
+expect_success "smoke success path" env \
+  DOCKER_LOG="$DOCKER_LOG" \
+  DOCKER_BIN="$FAKE_DOCKER" \
+  ./scripts/ci/smoke-local-dev.sh
+grep -Fq 'version --short' "$DOCKER_LOG"
+grep -Fq 'config --quiet' "$DOCKER_LOG"
+grep -Fq 'build' "$DOCKER_LOG"
+grep -Fq 'up -d --wait --wait-timeout 60' "$DOCKER_LOG"
+grep -Fq 'ps' "$DOCKER_LOG"
+grep -Fq 'down -v --remove-orphans' "$DOCKER_LOG"
+
+# Case 2: unsupported Compose
+: > "$DOCKER_LOG"
+expect_failure "reject Compose 2.21" env \
+  DOCKER_LOG="$DOCKER_LOG" \
+  DOCKER_BIN="$FAKE_DOCKER" \
+  FAKE_COMPOSE_VERSION=2.21.0 \
+  ./scripts/ci/smoke-local-dev.sh
+
+# Case 3: failure still cleans up
+: > "$DOCKER_LOG"
+expect_failure "build failure triggers cleanup" env \
+  DOCKER_LOG="$DOCKER_LOG" \
+  DOCKER_BIN="$FAKE_DOCKER" \
+  FAIL_ON_PATTERN=build \
+  ./scripts/ci/smoke-local-dev.sh
+grep -Fq 'down -v --remove-orphans' "$DOCKER_LOG"
+```
+
+Each `grep` failure counts as a harness failure rather than aborting before the final summary; wrap assertions in the same PASS/FAIL helper pattern as the other repository tests.
+
 Expected GREEN: `Local-dev smoke tests: 3 passed, 0 failed`.
 
 - [ ] **Step 2: Verify RED**
@@ -921,6 +1074,8 @@ git commit -m "docs(devops): document local development workflow"
 The job-level project name makes workflow cleanup and smoke cleanup target the same isolated namespace.
 
 - [ ] **Step 3: Extend `CI / gate`**
+
+Preserve the existing `if: ${{ always() }}` on the aggregate gate. This is required so the gate still executes when `local-dev` is legitimately skipped.
 
 Add `changes` and `local-dev` to `needs`.
 
