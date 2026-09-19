@@ -62,26 +62,1087 @@ main
 ```text
 compose.yaml
 .env.example
-
-deploy/docker/
-└── placeholder/
-    ├── Dockerfile
-    └── entrypoint.sh
-
-scripts/ci/
-├── detect-local-dev-changes.sh
-├── test-detect-local-dev-changes.sh
-├── check-local-dev.sh
-├── test-check-local-dev.sh
-├── smoke-local-dev.sh
-└── test-smoke-local-dev.sh
-
-docs/devops/
-└── local-development.md
-
+deploy/docker/placeholder/Dockerfile
+deploy/docker/placeholder/entrypoint.sh
+scripts/ci/detect-local-dev-changes.sh
+scripts/ci/test-detect-local-dev-changes.sh
+scripts/ci/check-local-dev.sh
+scripts/ci/test-check-local-dev.sh
+scripts/ci/smoke-local-dev.sh
+scripts/ci/test-smoke-local-dev.sh
+docs/devops/local-development.md
 .github/workflows/ci.yml
 README.md
 docs/README.md
 ```
 
-No file under `apps
+No file under `apps/**`, `contracts/**`, or `migrations/**` is created or modified.
+
+---
+
+### Task 1: Add repository-owned local-dev change detection with TDD
+
+**Files:**
+- Create: `scripts/ci/detect-local-dev-changes.sh`
+- Create: `scripts/ci/test-detect-local-dev-changes.sh`
+
+**Interfaces:**
+- Consumes: `<base-sha> <head-sha>`.
+- Produces: exactly `true` or `false` on stdout.
+- CI consumes the output as `changes.outputs.local_dev`.
+
+- [ ] **Step 1: Write the failing test harness**
+
+Create `scripts/ci/test-detect-local-dev-changes.sh` with a temporary Git repository and the repository's PASS/FAIL helper style. Pin exactly these cases:
+
+```text
+1. compose.yaml modification -> true
+2. deploy/docker file deletion -> true
+3. .github/workflows/ci.yml modification -> true
+4. unrelated architecture documentation -> false
+5. all-zero base SHA -> true
+6. unavailable base SHA -> true
+```
+
+Core harness mechanics:
+
+```bash
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+git -C "$TMP" init -q
+git -C "$TMP" config user.name "uptime-lab test"
+git -C "$TMP" config user.email "test@example.invalid"
+
+mkdir -p "$TMP/docs/architecture" "$TMP/deploy/docker/placeholder" "$TMP/.github/workflows"
+printf 'base\n' > "$TMP/README.md"
+git -C "$TMP" add .
+git -C "$TMP" commit -q -m "chore: establish fixture"
+BASE="$(git -C "$TMP" rev-parse HEAD)"
+
+expect_value() {
+  local name="$1"
+  local expected="$2"
+  shift 2
+  local actual
+  if actual="$("$@" 2>/dev/null)" && [[ "$actual" == "$expected" ]]; then
+    pass "$name"
+  else
+    fail "$name"
+  fi
+}
+```
+
+For the deletion case, first commit `deploy/docker/placeholder/Dockerfile`, capture `DELETE_BASE`, delete it in a second commit, then assert `true` over `DELETE_BASE..DELETE_HEAD`.
+
+Expected GREEN summary:
+
+```text
+Local-dev change detection tests: 6 passed, 0 failed
+```
+
+- [ ] **Step 2: Verify RED**
+
+```bash
+chmod +x scripts/ci/test-detect-local-dev-changes.sh
+./scripts/ci/test-detect-local-dev-changes.sh
+```
+
+Expected: non-zero because the detector does not exist.
+
+- [ ] **Step 3: Implement the detector**
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "$#" -ne 2 ]]; then
+  printf 'Usage: %s <base-sha> <head-sha>\n' "$0" >&2
+  exit 2
+fi
+
+BASE_SHA="$1"
+HEAD_SHA="$2"
+ZERO_SHA="0000000000000000000000000000000000000000"
+
+if [[ "$BASE_SHA" == "$ZERO_SHA" ]]; then
+  printf 'true\n'
+  exit 0
+fi
+
+if ! git cat-file -e "$HEAD_SHA^{commit}" 2>/dev/null; then
+  printf 'Head commit is unavailable: %s\n' "$HEAD_SHA" >&2
+  exit 1
+fi
+
+if ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+  printf 'true\n'
+  exit 0
+fi
+
+LOCAL_DEV=false
+while IFS= read -r path; do
+  case "$path" in
+    compose.yaml|.env.example|deploy/docker/*|\
+    scripts/ci/detect-local-dev-changes.sh|scripts/ci/test-detect-local-dev-changes.sh|\
+    scripts/ci/check-local-dev.sh|scripts/ci/test-check-local-dev.sh|\
+    scripts/ci/smoke-local-dev.sh|scripts/ci/test-smoke-local-dev.sh|\
+    docs/devops/local-development.md|.github/workflows/ci.yml)
+      LOCAL_DEV=true
+      break
+      ;;
+  esac
+done < <(git diff --name-only "$BASE_SHA" "$HEAD_SHA" --)
+
+printf '%s\n' "$LOCAL_DEV"
+```
+
+- [ ] **Step 4: Verify GREEN**
+
+```bash
+chmod +x scripts/ci/detect-local-dev-changes.sh
+./scripts/ci/test-detect-local-dev-changes.sh
+bash -n scripts/ci/detect-local-dev-changes.sh scripts/ci/test-detect-local-dev-changes.sh
+```
+
+Expected: `Local-dev change detection tests: 6 passed, 0 failed`.
+
+- [ ] **Step 5: Self-review Task 1**
+
+Check deletion handling, conservative unknown-base behavior, no third-party path filter, no runtime path guesses, and fresh test evidence.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add scripts/ci/detect-local-dev-changes.sh scripts/ci/test-detect-local-dev-changes.sh
+git commit -m "test(devops): add local-dev change detection"
+```
+
+---
+
+### Task 2: Add static Docker-foundation fitness checks with TDD
+
+**Files:**
+- Create: `scripts/ci/check-local-dev.sh`
+- Create: `scripts/ci/test-check-local-dev.sh`
+
+**Interfaces:**
+- Consumes: repository root, default `.`.
+- Produces: exit `0` only while the repository obeys the current Docker-foundation phase contract.
+- Later runtime foundations deliberately update this checker when placeholders, Watch rules, or host-port policy evolve.
+
+- [ ] **Step 1: Create a canonical fixture**
+
+The fixture contains `compose.yaml`, `.env.example`, `deploy/docker/placeholder/Dockerfile`, and `entrypoint.sh`.
+
+Canonical Compose fixture:
+
+```yaml
+services:
+  web:
+    build: ./deploy/docker/placeholder
+    environment:
+      SERVICE_NAME: web
+    init: true
+    read_only: true
+    tmpfs:
+      - /run/uptime-lab:uid=10001,gid=10001,mode=0700
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /run/uptime-lab/ready"]
+      interval: 2s
+      timeout: 1s
+      retries: 10
+      start_period: 2s
+
+  db:
+    image: postgres:18.6-alpine3.24
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-uptime_lab}
+      POSTGRES_USER: ${POSTGRES_USER:-uptime_lab}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-uptime_lab_local}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 3s
+
+  api:
+    build: ./deploy/docker/placeholder
+    environment:
+      SERVICE_NAME: api
+    init: true
+    read_only: true
+    tmpfs:
+      - /run/uptime-lab:uid=10001,gid=10001,mode=0700
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /run/uptime-lab/ready"]
+      interval: 2s
+      timeout: 1s
+      retries: 10
+      start_period: 2s
+    depends_on:
+      db:
+        condition: service_healthy
+
+  checker:
+    build: ./deploy/docker/placeholder
+    environment:
+      SERVICE_NAME: checker
+    init: true
+    read_only: true
+    tmpfs:
+      - /run/uptime-lab:uid=10001,gid=10001,mode=0700
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /run/uptime-lab/ready"]
+      interval: 2s
+      timeout: 1s
+      retries: 10
+      start_period: 2s
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+```
+
+- [ ] **Step 2: Pin exactly 16 cases**
+
+```text
+1. canonical fixture passes
+2. missing checker service fails
+3. host ports mapping fails
+4. container_name fails
+5. fixed root project name fails
+6. globally named volume fails
+7. host network mode fails
+8. PostgreSQL old /var/lib/postgresql/data mount fails
+9. API missing db service_healthy fails
+10. Checker missing api service_healthy fails
+11. Web hard dependency fails
+12. floating latest image fails
+13. placeholder missing init/read_only/tmpfs fails
+14. placeholder restart policy fails
+15. Compose profiles fail
+16. forbidden runtime scaffold path fails
+```
+
+Every case recreates the fixture and changes exactly one concern. The runtime-scope case creates `apps/api/go.mod`.
+
+- [ ] **Step 3: Verify RED**
+
+```bash
+chmod +x scripts/ci/test-check-local-dev.sh
+./scripts/ci/test-check-local-dev.sh
+```
+
+Expected: non-zero because the checker is absent.
+
+- [ ] **Step 4: Implement `check-local-dev.sh`**
+
+Use dependency-free Bash/Awk against the intentionally simple canonical file. Do not add a YAML package ecosystem.
+
+Required structure:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="${1:-.}"
+COMPOSE_FILE="$ROOT/compose.yaml"
+
+fail() {
+  printf 'Local-dev invariant failed: %s\n' "$1" >&2
+  exit 1
+}
+
+[[ -f "$COMPOSE_FILE" ]] || fail "compose.yaml is missing"
+
+extract_service_block() {
+  local service="$1"
+  awk -v service="$service" '
+    $0 == "services:" { in_services=1; next }
+    in_services && /^[^ ]/ { exit }
+    in_services && $0 == "  " service ":" { in_target=1; next }
+    in_target && /^  [A-Za-z0-9_.-]+:[[:space:]]*$/ { exit }
+    in_target { print }
+  ' "$COMPOSE_FILE"
+}
+```
+
+Collect service keys under `services:` and require sorted set `api checker db web`.
+
+Reject globally:
+
+```text
+root name:
+container_name:
+ports:
+restart:
+profiles:
+network_mode: host
+external: true
+image ending :latest
+globally named Compose resource
+```
+
+For Web/API/Checker require:
+
+```text
+build: ./deploy/docker/placeholder
+SERVICE_NAME matching service
+init: true
+read_only: true
+tmpfs /run/uptime-lab:uid=10001,gid=10001,mode=0700
+healthcheck marker /run/uptime-lab/ready
+```
+
+For DB require:
+
+```text
+postgres image with explicit non-latest tag
+postgres-data:/var/lib/postgresql
+pg_isready
+```
+
+Require API -> DB `service_healthy`, Checker -> API `service_healthy`, and no Web `depends_on`.
+
+Reject phase-forbidden paths if present:
+
+```text
+apps
+contracts
+migrations
+package.json
+go.mod
+Cargo.toml
+```
+
+Require placeholder Dockerfile + entrypoint; Dockerfile must use an explicit non-latest base tag and `USER 10001:10001`.
+
+- [ ] **Step 5: Verify GREEN**
+
+```bash
+chmod +x scripts/ci/check-local-dev.sh scripts/ci/test-check-local-dev.sh
+./scripts/ci/test-check-local-dev.sh
+bash -n scripts/ci/check-local-dev.sh scripts/ci/test-check-local-dev.sh
+```
+
+Expected: `Local development tests: 16 passed, 0 failed`.
+
+- [ ] **Step 6: Self-review Task 2**
+
+Check phase specificity, PostgreSQL 18+ path, absence of fake ports/contracts, deterministic fixture isolation, no parser/toolchain creep, and fresh evidence.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add scripts/ci/check-local-dev.sh scripts/ci/test-check-local-dev.sh
+git commit -m "test(devops): add local-dev topology checks"
+```
+
+---
+
+### Task 3: Implement the generic placeholder image and canonical Compose topology
+
+**Files:**
+- Create: `deploy/docker/placeholder/Dockerfile`
+- Create: `deploy/docker/placeholder/entrypoint.sh`
+- Create: `compose.yaml`
+- Create: `.env.example`
+
+**Interfaces:**
+- Consumes: Task 2 static contract.
+- Produces: a four-service topology without real application source.
+
+- [ ] **Step 1: Verify repository RED**
+
+```bash
+./scripts/ci/check-local-dev.sh .
+```
+
+Expected: FAIL because `compose.yaml` is absent.
+
+- [ ] **Step 2: Create placeholder Dockerfile**
+
+```dockerfile
+FROM alpine:3.24.2
+
+RUN addgroup -S -g 10001 uptime \
+    && adduser -S -D -H -u 10001 -G uptime uptime \
+    && mkdir -p /run/uptime-lab \
+    && chown 10001:10001 /run/uptime-lab
+
+COPY --chown=10001:10001 entrypoint.sh /usr/local/bin/placeholder-entrypoint
+RUN chmod 0555 /usr/local/bin/placeholder-entrypoint
+
+USER 10001:10001
+ENTRYPOINT ["/usr/local/bin/placeholder-entrypoint"]
+```
+
+- [ ] **Step 3: Create placeholder entrypoint**
+
+```sh
+#!/bin/sh
+set -eu
+
+case "${SERVICE_NAME:-}" in
+  web|api|checker) ;;
+  *)
+    printf 'Invalid SERVICE_NAME: %s\n' "${SERVICE_NAME:-<unset>}" >&2
+    exit 64
+    ;;
+esac
+
+READY_FILE="/run/uptime-lab/ready"
+child_pid=""
+stopping=0
+
+log() { printf 'service=%s event=%s\n' "$SERVICE_NAME" "$1"; }
+
+shutdown() {
+  if [ "$stopping" -eq 1 ]; then return; fi
+  stopping=1
+  rm -f "$READY_FILE"
+  log stopping
+  if [ -n "$child_pid" ]; then kill "$child_pid" 2>/dev/null || true; fi
+}
+
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap shutdown EXIT
+
+log starting
+: > "$READY_FILE"
+log ready
+
+tail -f /dev/null &
+child_pid=$!
+if wait "$child_pid"; then status=0; else status=$?; fi
+exit "$status"
+```
+
+- [ ] **Step 4: Test invalid identity**
+
+```bash
+chmod +x deploy/docker/placeholder/entrypoint.sh
+set +e
+SERVICE_NAME=invalid sh deploy/docker/placeholder/entrypoint.sh
+status=$?
+set -e
+test "$status" -eq 64
+```
+
+- [ ] **Step 5: Create `compose.yaml`**
+
+Use the exact valid Compose fixture from Task 2 as the repository file. PostgreSQL must use:
+
+```yaml
+image: postgres:18.6-alpine3.24
+volumes:
+  - postgres-data:/var/lib/postgresql
+```
+
+No ports, profiles, restart policies, fixed names, external networks, or Watch rules.
+
+- [ ] **Step 6: Create `.env.example`**
+
+```dotenv
+# Optional local overrides.
+# Canonical startup works without copying this file.
+
+POSTGRES_DB=uptime_lab
+POSTGRES_USER=uptime_lab
+POSTGRES_PASSWORD=uptime_lab_local
+```
+
+Do not create/track `.env`.
+
+- [ ] **Step 7: Verify static GREEN**
+
+```bash
+./scripts/ci/test-check-local-dev.sh
+./scripts/ci/check-local-dev.sh .
+bash -n deploy/docker/placeholder/entrypoint.sh
+git diff --check
+```
+
+- [ ] **Step 8: Validate Compose when available**
+
+```bash
+docker compose version
+docker compose config --quiet
+docker compose config --services
+docker compose config --volumes
+```
+
+Expected service set: `web`, `db`, `api`, `checker`; volume `postgres-data`.
+
+If the execution host has no Docker/Compose access, record local runtime evidence as unavailable and require Task 6/7 GitHub Actions for authoritative Docker proof. Do not add another parser.
+
+- [ ] **Step 9: Self-review Task 3**
+
+Check no listener, runtime source, ports, fixed names, or Watch mapping; correct PG18 path; explicit tags; fresh static evidence.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add compose.yaml .env.example deploy/docker/placeholder
+git commit -m "build(devops): add Docker local topology"
+```
+
+---
+
+### Task 4: Add isolated real Compose smoke verification
+
+**Files:**
+- Create: `scripts/ci/smoke-local-dev.sh`
+- Create: `scripts/ci/test-smoke-local-dev.sh`
+
+**Interfaces:**
+- Consumes: Task 3 topology.
+- Produces: isolated evidence for Compose version, config, build, health startup, persistence, reset, and cleanup.
+- Test seam: `DOCKER_BIN`; default `docker`.
+
+- [ ] **Step 1: Write failing fake-Docker harness**
+
+The harness creates a fake `docker` executable:
+
+```bash
+cat > "$FAKE_DOCKER" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "$DOCKER_LOG"
+
+joined="$*"
+if [[ -n "${FAIL_ON_PATTERN:-}" && "$joined" == *"$FAIL_ON_PATTERN"* ]]; then
+  exit 42
+fi
+
+if [[ "$joined" == *"version --short"* ]]; then
+  printf '%s\n' "${FAKE_COMPOSE_VERSION:-2.22.0}"
+  exit 0
+fi
+
+if [[ "$joined" == *"psql"* && "$joined" == *"-Atc"* ]]; then
+  printf 't\n'
+  exit 0
+fi
+
+exit 0
+EOF
+```
+
+Required cases:
+
+```text
+1. success path logs config/build/up/ps/persistence/reset/cleanup
+2. Compose 2.21.0 fails
+3. FAIL_ON_PATTERN=build fails but log still contains down -v --remove-orphans
+```
+
+Expected GREEN: `Local-dev smoke tests: 3 passed, 0 failed`.
+
+- [ ] **Step 2: Verify RED**
+
+```bash
+chmod +x scripts/ci/test-smoke-local-dev.sh
+./scripts/ci/test-smoke-local-dev.sh
+```
+
+Expected non-zero because smoke script is absent.
+
+- [ ] **Step 3: Implement `smoke-local-dev.sh`**
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+DOCKER_BIN="${DOCKER_BIN:-docker}"
+COMPOSE_FILE="${COMPOSE_FILE:-$ROOT/compose.yaml}"
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-uptime-lab-smoke-$$}"
+
+compose() { "$DOCKER_BIN" compose -f "$COMPOSE_FILE" "$@"; }
+cleanup() { compose down -v --remove-orphans >/dev/null 2>&1 || true; }
+
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+VERSION="$(compose version --short)"
+VERSION="${VERSION#v}"
+IFS=. read -r MAJOR MINOR PATCH <<EOF
+$VERSION
+EOF
+MAJOR="${MAJOR:-0}"
+MINOR="${MINOR:-0}"
+if (( MAJOR < 2 || (MAJOR == 2 && MINOR < 22) )); then
+  printf 'Docker Compose >= 2.22.0 is required; found %s\n' "$VERSION" >&2
+  exit 1
+fi
+
+cleanup
+compose config --quiet
+"$ROOT/scripts/ci/check-local-dev.sh" "$ROOT"
+compose build
+compose up -d --wait --wait-timeout 60
+compose ps
+
+DB_USER="${POSTGRES_USER:-uptime_lab}"
+DB_NAME="${POSTGRES_DB:-uptime_lab}"
+PROBE_TABLE="public.__uptime_lab_local_dev_probe"
+
+compose exec -T db psql -v ON_ERROR_STOP=1 -U "$DB_USER" -d "$DB_NAME" \
+  -c "CREATE TABLE $PROBE_TABLE (id integer PRIMARY KEY); INSERT INTO $PROBE_TABLE (id) VALUES (1);"
+
+compose down
+compose up -d --wait --wait-timeout 60
+PERSISTED="$(compose exec -T db psql -U "$DB_USER" -d "$DB_NAME" -Atc \
+  "SELECT to_regclass('$PROBE_TABLE') IS NOT NULL;")"
+test "$PERSISTED" = "t"
+
+compose down -v --remove-orphans
+compose up -d --wait --wait-timeout 60
+RESET="$(compose exec -T db psql -U "$DB_USER" -d "$DB_NAME" -Atc \
+  "SELECT to_regclass('$PROBE_TABLE') IS NULL;")"
+test "$RESET" = "t"
+
+cleanup
+trap - EXIT INT TERM
+```
+
+- [ ] **Step 4: Verify fake-Docker GREEN**
+
+```bash
+chmod +x scripts/ci/smoke-local-dev.sh scripts/ci/test-smoke-local-dev.sh
+./scripts/ci/test-smoke-local-dev.sh
+bash -n scripts/ci/smoke-local-dev.sh scripts/ci/test-smoke-local-dev.sh
+```
+
+Expected: `Local-dev smoke tests: 3 passed, 0 failed`.
+
+- [ ] **Step 5: Run real smoke if Docker is available**
+
+```bash
+./scripts/ci/smoke-local-dev.sh
+```
+
+Expected exit `0` and no remaining smoke project.
+
+If Docker is unavailable locally, PR CI is mandatory real-runtime evidence.
+
+- [ ] **Step 6: Self-review Task 4**
+
+Check project isolation, EXIT cleanup, no sleeps, persistence/reset semantics, version floor, no host-port assumption, fresh tests.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add scripts/ci/smoke-local-dev.sh scripts/ci/test-smoke-local-dev.sh
+git commit -m "test(devops): add local-dev smoke verification"
+```
+
+---
+
+### Task 5: Document canonical local development
+
+**Files:**
+- Create: `docs/devops/local-development.md`
+- Modify: `README.md`
+- Modify: `docs/README.md`
+
+**Interfaces:** Produces one canonical operational truth; root/index docs only link.
+
+- [ ] **Step 1: Create `docs/devops/local-development.md`**
+
+Required headings:
+
+```text
+Status
+Prerequisites
+Canonical Topology
+Start the Stack
+Inspect Service State
+Follow Logs
+Health and Readiness
+PostgreSQL Access
+Local Persistence
+Destructive Reset
+Optional Environment Overrides
+Worktree and Project Isolation
+Compose Watch
+CI Verification
+Troubleshooting
+Current Limitations
+Related Architecture
+```
+
+Required commands:
+
+```bash
+docker compose version
+docker compose up -d --build --wait
+docker compose ps
+docker compose logs -f
+docker compose exec db psql -U uptime_lab -d uptime_lab
+docker compose down
+docker compose down -v
+```
+
+Required limitations:
+
+```text
+Web is a placeholder, not React.
+API is a placeholder, not Go.
+Checker is a placeholder, not Rust.
+No product HTTP API exists.
+No host application port is exposed.
+No monitoring migrations/tables exist.
+No probe execution occurs.
+No real develop.watch mappings exist.
+```
+
+Document Compose >=2.22.0, optional `.env`, development-only password, worktree/project isolation, and destructive reset.
+
+- [ ] **Step 2: Update root README**
+
+Replace the future-tense Docker bullet with:
+
+```markdown
+- **Docker Compose** is the canonical local-development substrate. The current Docker foundation runs PostgreSQL plus process-level placeholders; Go, Rust, and React runtimes remain unimplemented.
+```
+
+Add a short `## Local Development` section linking only to `docs/devops/local-development.md`.
+
+- [ ] **Step 3: Update docs index**
+
+Add a `## Local Development` section linking to `devops/local-development.md`.
+
+- [ ] **Step 4: Verify docs**
+
+```bash
+grep -Fq 'Docker Compose >= 2.22.0' docs/devops/local-development.md
+grep -Fq 'docker compose up -d --build --wait' docs/devops/local-development.md
+grep -Fq 'docker compose down -v' docs/devops/local-development.md
+grep -Fq 'Web is a placeholder' docs/devops/local-development.md
+grep -Fq 'devops/local-development.md' README.md
+grep -Fq 'devops/local-development.md' docs/README.md
+./scripts/ci/check-architecture-docs.sh .
+git diff --check
+```
+
+- [ ] **Step 5: Self-review Task 5**
+
+Check DRY ownership, destructive-reset clarity, no production claims, explicit placeholder limitations, fresh evidence.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add docs/devops/local-development.md README.md docs/README.md
+git commit -m "docs(devops): document local development workflow"
+```
+
+---
+
+### Task 6: Integrate path-aware Docker smoke into CI
+
+**Files:**
+- Modify: `.github/workflows/ci.yml`
+
+**Interfaces:**
+- Consumes Task 1 detector, Task 2 checker, Task 4 smoke.
+- Produces `changes.outputs.local_dev`, conditional `local-dev`, and extended stable `CI / gate`.
+
+- [ ] **Step 1: Add `changes` job**
+
+```yaml
+  changes:
+    name: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      local_dev: ${{ steps.detect.outputs.local_dev }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Test local-dev change detection
+        run: ./scripts/ci/test-detect-local-dev-changes.sh
+
+      - name: Detect local-dev changes
+        id: detect
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          local_dev="$(./scripts/ci/detect-local-dev-changes.sh "$BASE_SHA" "$HEAD_SHA")"
+          printf 'local_dev=%s\n' "$local_dev" >> "$GITHUB_OUTPUT"
+```
+
+- [ ] **Step 2: Add conditional `local-dev` job**
+
+```yaml
+  local-dev:
+    name: local-dev
+    needs:
+      - changes
+    if: ${{ needs.changes.outputs.local_dev == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      COMPOSE_PROJECT_NAME: uptime-lab-ci-${{ github.run_id }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Test local-dev topology checks
+        run: ./scripts/ci/test-check-local-dev.sh
+
+      - name: Test local-dev smoke harness
+        run: ./scripts/ci/test-smoke-local-dev.sh
+
+      - name: Run Docker local-dev smoke
+        run: ./scripts/ci/smoke-local-dev.sh
+
+      - name: Cleanup Docker local-dev smoke
+        if: ${{ always() }}
+        run: docker compose down -v --remove-orphans || true
+```
+
+The job-level project name makes workflow cleanup and smoke cleanup target the same isolated namespace.
+
+- [ ] **Step 3: Extend `CI / gate`**
+
+Add `changes` and `local-dev` to `needs`.
+
+Require:
+
+```bash
+test "$POLICY_RESULT" = "success"
+test "$REPOSITORY_RESULT" = "success"
+test "$CHANGES_RESULT" = "success"
+case "$LOCAL_DEV_RESULT" in
+  success|skipped) ;;
+  *) exit 1 ;;
+esac
+```
+
+Keep job name exactly `CI / gate`.
+
+- [ ] **Step 4: Verify workflow security**
+
+```bash
+grep -Fq 'contents: read' .github/workflows/ci.yml
+grep -Fq 'persist-credentials: false' .github/workflows/ci.yml
+! grep -Fq 'pull_request_target' .github/workflows/ci.yml
+grep -Fq 'name: CI / gate' .github/workflows/ci.yml
+grep -Fq 'name: local-dev' .github/workflows/ci.yml
+grep -Fq 'name: changes' .github/workflows/ci.yml
+git diff --check
+```
+
+- [ ] **Step 5: Run locally available checks**
+
+```bash
+./scripts/ci/test-governance.sh
+./scripts/github/test-configure-governance.sh
+./scripts/ci/test-architecture-docs.sh
+./scripts/ci/check-architecture-docs.sh .
+./scripts/ci/test-detect-local-dev-changes.sh
+./scripts/ci/test-check-local-dev.sh
+./scripts/ci/test-smoke-local-dev.sh
+./scripts/ci/check-repository-shape.sh .
+git diff --check
+```
+
+If Docker is available, also run `./scripts/ci/smoke-local-dev.sh`.
+
+- [ ] **Step 6: Self-review Task 6**
+
+Check unrelated-change skip, detector failure semantics, local-dev failure propagation, unchanged gate name, read-only permissions, no third-party path filter, and fresh checks.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add .github/workflows/ci.yml
+git commit -m "ci(devops): add path-aware local-dev smoke"
+```
+
+---
+
+### Task 7: Final verification, stacked PR, and landing gate
+
+**Files:** No new implementation files.
+
+**Interfaces:** Produces a reviewable implementation PR and ordered landing path.
+
+- [ ] **Step 1: Create implementation branch only after plan approval**
+
+```bash
+git switch docs/docker-local-development-plan
+git switch -c devops/docker-local-development
+```
+
+- [ ] **Step 2: Run final static verification**
+
+```bash
+./scripts/ci/test-governance.sh
+./scripts/github/test-configure-governance.sh
+./scripts/ci/test-architecture-docs.sh
+./scripts/ci/check-architecture-docs.sh .
+./scripts/ci/test-detect-local-dev-changes.sh
+./scripts/ci/test-check-local-dev.sh
+./scripts/ci/check-local-dev.sh .
+./scripts/ci/test-smoke-local-dev.sh
+./scripts/ci/check-repository-shape.sh .
+./scripts/ci/check-pr-title.sh "build(devops): establish Docker local development environment"
+bash -n scripts/ci/detect-local-dev-changes.sh \
+  scripts/ci/test-detect-local-dev-changes.sh \
+  scripts/ci/check-local-dev.sh \
+  scripts/ci/test-check-local-dev.sh \
+  scripts/ci/smoke-local-dev.sh \
+  scripts/ci/test-smoke-local-dev.sh \
+  deploy/docker/placeholder/entrypoint.sh
+git diff --check
+```
+
+- [ ] **Step 3: Prove scope**
+
+```bash
+git diff --name-only docs/docker-local-development-plan...HEAD
+```
+
+Allowed only:
+
+```text
+compose.yaml
+.env.example
+deploy/docker/placeholder/**
+scripts/ci/**
+docs/devops/local-development.md
+.github/workflows/ci.yml
+README.md
+docs/README.md
+```
+
+Forbidden:
+
+```text
+apps/
+contracts/
+migrations/
+package.json
+go.mod
+Cargo.toml
+```
+
+- [ ] **Step 4: Run real Docker smoke if available**
+
+```bash
+./scripts/ci/smoke-local-dev.sh
+```
+
+If Docker is unavailable locally, do not claim local runtime verification; PR CI must provide it.
+
+- [ ] **Step 5: Open stacked implementation PR**
+
+Base: `docs/docker-local-development-plan`
+
+Title:
+
+```text
+build(devops): establish Docker local development environment
+```
+
+PR body states:
+- approved Docker-first substrate only;
+- placeholders remain non-functional runtimes;
+- no API contract or business schema;
+- local PostgreSQL persistence only;
+- private networking/no host ports/no real secrets;
+- detector/topology/smoke/real Compose/CI-gate evidence.
+
+- [ ] **Step 6: Require fresh PR CI**
+
+Implementation head must show:
+
+```text
+policy       success
+repository   success
+changes      success
+local-dev    success
+CI / gate    success
+```
+
+`local-dev` must be success, not skipped. Inspect topology tests, fake-smoke tests, real smoke, and cleanup.
+
+- [ ] **Step 7: Whole-branch self-review**
+
+Verify DL-001..DL-018, PostgreSQL 18+ path, no ports/fixed names/fake endpoints, placeholder lifecycle/security, persistence/reset, path-aware CI, docs limitations, and zero runtime leakage.
+
+- [ ] **Step 8: Land stack only after review approval**
+
+```text
+A. Mark design PR #9 ready; require fresh CI; squash-merge to main.
+B. Retarget plan PR to main; require fresh CI; squash-merge.
+C. Retarget implementation PR to main; require fresh CI including local-dev; squash-merge.
+D. Verify final main push has CI / gate = success.
+```
+
+Implementation squash subject:
+
+```text
+build(devops): establish Docker local development environment
+```
+
+- [ ] **Step 9: Stop at next gate**
+
+Do not start Go code. Next separate gate: `Go Monitoring Foundation — scope/design`.
+
+---
+
+## Implementer Self-Review
+
+- [ ] Design, plan, implementation remain independently reviewable.
+- [ ] Only approved infrastructure/docs/CI paths change.
+- [ ] No `apps/**`, `contracts/**`, migrations, `package.json`, `go.mod`, or `Cargo.toml`.
+- [ ] Services exactly Web/API/Checker/DB.
+- [ ] API waits for DB; Checker waits for API; Web independent.
+- [ ] PostgreSQL explicit tag and `/var/lib/postgresql` mount.
+- [ ] Normal `down` persistence and `down -v` reset proven.
+- [ ] No ports, fixed names, profiles, or restart policies.
+- [ ] Placeholders non-root/read-only/tmpfs/init and listener-free.
+- [ ] Invalid `SERVICE_NAME` fails before readiness.
+- [ ] Compose >=2.22.0 enforced and documented.
+- [ ] `.env` optional/untracked; no real secret.
+- [ ] No fake Watch mapping.
+- [ ] Change detection handles deletion and unknown base conservatively.
+- [ ] Smoke cleanup works after success and failure.
+- [ ] `changes` + `local-dev` integrate without renaming `CI / gate`.
+- [ ] Workflow permission remains `contents: read`.
+- [ ] Canonical docs state current limitations.
+- [ ] Every task received explicit self-review.
+
+## Exit Criteria
+
+This plan is complete only when:
+
+1. Docker-local substrate exists with no runtime implementation leakage.
+2. Change-detection tests report `6 passed, 0 failed`.
+3. Topology tests report `16 passed, 0 failed`.
+4. Smoke-harness tests report `3 passed, 0 failed`.
+5. Real Compose smoke proves config, build, health, persistence, reset, and cleanup.
+6. Implementation PR runs path-aware `local-dev`.
+7. `policy`, `repository`, `changes`, `local-dev`, and `CI / gate` are green.
+8. Design -> plan -> implementation land in order under active governance.
+9. Final `main` push has `CI / gate = success`.
+10. No Go/Rust/React/OpenAPI/product implementation begins.
