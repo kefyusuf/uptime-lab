@@ -105,7 +105,8 @@ mutate_service_line() {
 
 make_fixture() {
   rm -rf "$TMP/repo"
-  mkdir -p "$TMP/repo/deploy/docker/placeholder"
+  mkdir -p "$TMP/repo/deploy/docker/placeholder" "$TMP/repo/apps/api"
+  printf 'module github.com/kefyusuf/uptime-lab/apps/api\n\ngo 1.27.1\n' > "$TMP/repo/apps/api/go.mod"
 
   cat > "$TMP/repo/compose.yaml" <<'YAML'
 services:
@@ -271,9 +272,9 @@ insert_after_line "$TMP/repo/compose.yaml" "  web:" "    profiles: [dev]"
 expect_failure "Compose profiles fail" "$CHECKER" "$TMP/repo"
 
 make_fixture
-mkdir -p "$TMP/repo/apps/api"
-printf 'module example.invalid/forbidden\n' > "$TMP/repo/apps/api/go.mod"
-expect_failure "forbidden runtime scaffold path fails" "$CHECKER" "$TMP/repo"
+mkdir -p "$TMP/repo/apps/web"
+printf '{"private":true}\n' > "$TMP/repo/apps/web/package.json"
+expect_failure "future web runtime scaffold fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
 mutate_service_line "$TMP/repo/compose.yaml" web \

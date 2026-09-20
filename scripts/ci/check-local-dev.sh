@@ -110,9 +110,24 @@ grep -Fqx '      - postgres-data:/var/lib/postgresql' <<<"$DB_BLOCK" || fail "db
 grep -Fqx '    healthcheck:' <<<"$DB_BLOCK" || fail "db healthcheck is missing"
 grep -Fq 'pg_isready' <<<"$DB_BLOCK" || fail "db healthcheck must use pg_isready"
 
-for forbidden in apps contracts migrations package.json go.mod Cargo.toml; do
+for forbidden in contracts migrations package.json go.mod go.work Cargo.toml; do
   [[ ! -e "$ROOT/$forbidden" ]] || fail "phase-forbidden path exists: $forbidden"
 done
+
+if [[ -e "$ROOT/apps" && ! -d "$ROOT/apps" ]]; then
+  fail "apps must be a directory when present"
+fi
+
+if [[ -d "$ROOT/apps" ]]; then
+  while IFS= read -r app_path; do
+    app_name="$(basename "$app_path")"
+    [[ "$app_name" == "api" ]] || fail "phase-forbidden app path exists: apps/$app_name"
+  done < <(find "$ROOT/apps" -mindepth 1 -maxdepth 1 -print)
+
+  if [[ -e "$ROOT/apps/api" && ! -d "$ROOT/apps/api" ]]; then
+    fail "apps/api must be a directory"
+  fi
+fi
 
 FROM_LINE="$(awk '/^FROM[[:space:]]+/ { print; exit }' "$DOCKERFILE")"
 [[ "$FROM_LINE" =~ ^FROM[[:space:]][^[:space:]]+:[^[:space:]]+$ ]] || fail "placeholder base image must use an explicit tag"

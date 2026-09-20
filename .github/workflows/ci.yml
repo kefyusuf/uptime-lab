@@ -74,6 +74,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       local_dev: ${{ steps.detect.outputs.local_dev }}
+      go_api: ${{ steps.detect.outputs.go_api }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -84,14 +85,19 @@ jobs:
       - name: Test local-dev change detection
         run: ./scripts/ci/test-detect-local-dev-changes.sh
 
-      - name: Detect local-dev changes
+      - name: Test Go API change detection
+        run: ./scripts/ci/test-detect-go-api-changes.sh
+
+      - name: Detect local-dev and Go API changes
         id: detect
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           local_dev="$(./scripts/ci/detect-local-dev-changes.sh "$BASE_SHA" "$HEAD_SHA")"
+          go_api="$(./scripts/ci/detect-go-api-changes.sh "$BASE_SHA" "$HEAD_SHA")"
           printf 'local_dev=%s\n' "$local_dev" >> "$GITHUB_OUTPUT"
+          printf 'go_api=%s\n' "$go_api" >> "$GITHUB_OUTPUT"
 
   local-dev:
     name: local-dev
@@ -122,6 +128,37 @@ jobs:
         if: ${{ always() }}
         run: docker compose down -v --remove-orphans || true
 
+  go-api:
+    name: go-api
+    needs:
+      - changes
+    if: ${{ needs.changes.outputs.go_api == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.1'
+          cache: false
+
+      - name: Verify Go API foundation
+        working-directory: apps/api
+        run: |
+          set -euo pipefail
+          test -z "$(gofmt -l .)"
+          go mod tidy
+          test -z "$(git status --porcelain -- go.mod go.sum)"
+          go mod verify
+          go vet ./...
+          go test ./...
+
   gate:
     name: CI / gate
     if: ${{ always() }}
@@ -130,6 +167,7 @@ jobs:
       - repository
       - changes
       - local-dev
+      - go-api
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
@@ -139,12 +177,17 @@ jobs:
           REPOSITORY_RESULT: ${{ needs.repository.result }}
           CHANGES_RESULT: ${{ needs.changes.result }}
           LOCAL_DEV_RESULT: ${{ needs.local-dev.result }}
+          GO_API_RESULT: ${{ needs.go-api.result }}
         run: |
           set -euo pipefail
           test "$POLICY_RESULT" = "success"
           test "$REPOSITORY_RESULT" = "success"
           test "$CHANGES_RESULT" = "success"
           case "$LOCAL_DEV_RESULT" in
+            success|skipped) ;;
+            *) exit 1 ;;
+          esac
+          case "$GO_API_RESULT" in
             success|skipped) ;;
             *) exit 1 ;;
           esac
