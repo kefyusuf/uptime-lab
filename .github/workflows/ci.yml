@@ -148,6 +148,9 @@ jobs:
           go-version: '1.27.1'
           cache: false
 
+      - name: Test Go architecture fitness
+        run: ./scripts/ci/test-check-go-architecture.sh
+
       - name: Verify Go API foundation
         working-directory: apps/api
         run: |
