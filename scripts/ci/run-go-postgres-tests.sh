@@ -32,6 +32,6 @@ docker run --rm \
   -w /workspace \
   golang:1.27.1-alpine3.24 \
   sh -euc '
-    go test -tags=integration ./migrations
-    go test -tags=integration ./internal/modules/monitoring/adapters/postgres
+    go test -count=1 -tags=integration ./migrations
+    go test -count=1 -tags=integration ./internal/modules/monitoring/adapters/postgres
   '
