@@ -186,11 +186,12 @@ jobs:
           go vet ./...
           go test ./...
 
-      - name: Verify PostgreSQL migrations
+      - name: Verify PostgreSQL integration
         working-directory: apps/api
         run: |
           bash -n ../../scripts/ci/run-go-postgres-tests.sh
           go test -tags=integration ./migrations
+          go test -tags=integration ./internal/modules/monitoring/adapters/postgres
 
   gate:
     name: CI / gate
