@@ -102,7 +102,7 @@ module github.com/kefyusuf/uptime-lab/apps/api
 
 The baseline language/toolchain is Go 1.27.
 
-The implementation plan MUST pin a current supported Go 1.27 patch level and exact Docker/tool action references.
+At design review time, Go 1.27.1 is the current supported Go 1.27 patch release. The implementation plan MUST re-check and pin the current supported Go 1.27 patch level and exact Docker/tool action references rather than treating the design-time patch as permanently fixed.
 
 No root `go.mod` or `go.work` is created while there is only one Go module.
 
