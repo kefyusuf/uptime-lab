@@ -68,12 +68,68 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: git diff --check "$BASE_SHA" "$HEAD_SHA"
 
+  changes:
+    name: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      local_dev: ${{ steps.detect.outputs.local_dev }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Test local-dev change detection
+        run: ./scripts/ci/test-detect-local-dev-changes.sh
+
+      - name: Detect local-dev changes
+        id: detect
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          local_dev="$(./scripts/ci/detect-local-dev-changes.sh "$BASE_SHA" "$HEAD_SHA")"
+          printf 'local_dev=%s\n' "$local_dev" >> "$GITHUB_OUTPUT"
+
+  local-dev:
+    name: local-dev
+    needs:
+      - changes
+    if: ${{ needs.changes.outputs.local_dev == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      COMPOSE_PROJECT_NAME: uptime-lab-ci-${{ github.run_id }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Test local-dev topology checks
+        run: ./scripts/ci/test-check-local-dev.sh
+
+      - name: Test local-dev smoke harness
+        run: ./scripts/ci/test-smoke-local-dev.sh
+
+      - name: Run Docker local-dev smoke
+        run: ./scripts/ci/smoke-local-dev.sh
+
+      - name: Cleanup Docker local-dev smoke
+        if: ${{ always() }}
+        run: docker compose down -v --remove-orphans || true
+
   gate:
     name: CI / gate
     if: ${{ always() }}
     needs:
       - policy
       - repository
+      - changes
+      - local-dev
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
@@ -81,7 +137,14 @@ jobs:
         env:
           POLICY_RESULT: ${{ needs.policy.result }}
           REPOSITORY_RESULT: ${{ needs.repository.result }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          LOCAL_DEV_RESULT: ${{ needs.local-dev.result }}
         run: |
           set -euo pipefail
           test "$POLICY_RESULT" = "success"
           test "$REPOSITORY_RESULT" = "success"
+          test "$CHANGES_RESULT" = "success"
+          case "$LOCAL_DEV_RESULT" in
+            success|skipped) ;;
+            *) exit 1 ;;
+          esac
