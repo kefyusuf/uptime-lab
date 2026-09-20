@@ -12,7 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 )
 
-
 func TestProviderMigratesMonitoringSchemaUpDownUp(t *testing.T) {
 	db := openIntegrationDB(t)
 	resetMigrationState(t, db)
