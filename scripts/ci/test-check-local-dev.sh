@@ -289,7 +289,7 @@ expect_failure "placeholder healthcheck without readiness marker fails" "$CHECKE
 
 make_fixture
 replace_literal_once "$TMP/repo/compose.yaml" \
-  '      test: ["CMD-SHELL", "pg_isready -U \"${POSTGRES_USER}\" -d \"${POSTGRES_DB}\""]' \
+  '      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]' \
   '      test: ["CMD-SHELL", "test -f /tmp/db-ready"]'
 expect_failure "PostgreSQL healthcheck without pg_isready fails" "$CHECKER" "$TMP/repo"
 
