@@ -205,12 +205,10 @@ The first durable aggregate is deliberately small:
 Monitor
 ├── MonitorID
 ├── TargetURL
-├── Enabled
-├── CreatedAt
-└── UpdatedAt
+└── CreatedAt
 ```
 
-The foundation does not add interval, timeout, next-due time, check policy, last result, incident state, or checker assignment fields.
+The foundation does not add mutable lifecycle/configuration fields such as enabled/disabled state, updated-at state, interval, timeout, next-due time, check policy, last result, incident state, or checker assignment fields.
 
 Those concepts require later product/contract decisions.
 
@@ -224,16 +222,19 @@ Those concepts require later product/contract decisions.
 
 Go 1.27's standard-library `uuid` package is used; no third-party UUID dependency is needed.
 
-#### Enabled
+#### Lifecycle mutation is deferred
 
-A newly registered monitor starts enabled.
+Monitor registration is the only lifecycle transition implemented in this foundation.
 
-Enabled/disabled is a product lifecycle property owned by Monitoring even though due-work scheduling is deferred.
+Enable/disable behavior is intentionally deferred because this milestone has no public transport, scheduler, or other runtime consumer that needs mutable monitor lifecycle state. The later lifecycle/contract design MUST define, before implementation:
 
-State changes are idempotent:
+- the desired-state command semantics for enable/disable;
+- no-op behavior, including whether an unchanged request preserves timestamps and avoids persistence writes;
+- concurrent-write semantics, including optimistic concurrency, row locking, or another explicitly justified model;
+- conflict/error behavior exposed by the application layer;
+- application and PostgreSQL integration tests for concurrent and idempotent transitions.
 
-- enabling an enabled monitor succeeds without producing duplicate side effects;
-- disabling a disabled monitor succeeds without producing duplicate side effects.
+This avoids introducing a version column, row-locking policy, or write semantics before a real lifecycle consumer exists.
 
 No domain event is emitted in this milestone because there is no consumer yet.
 
@@ -283,9 +284,8 @@ The Monitoring application layer initially owns exactly these product operations
 
 1. `RegisterMonitor`
 2. `GetMonitor`
-3. `SetMonitorEnabled`
 
-No scheduler, due-work query, result submission, history query, or incident transition use case exists yet.
+No enable/disable mutation, scheduler, due-work query, result submission, history query, or incident transition use case exists yet.
 
 The use cases are callable from Go tests and module composition, but are not exposed over a product HTTP contract in this milestone.
 
@@ -296,13 +296,12 @@ The first infrastructure port is specific to Monitoring:
 ```text
 MonitorRepository
 ├── Create(ctx, monitor)
-├── ByID(ctx, id)
-└── Save(ctx, monitor)
+└── ByID(ctx, id)
 ```
 
 The exact Go signatures are finalized in the implementation plan, but the capability boundary above is locked.
 
-Lifecycle-changing application use cases MUST load the aggregate, execute the domain transition, and persist the resulting aggregate through `Save`. A persistence method such as `SetEnabled(id, enabled)` that can bypass the domain lifecycle is intentionally excluded.
+There is no generic `Save` or lifecycle-update method in this milestone because no aggregate mutation use case exists. The later lifecycle design must add a persistence capability only after its concurrency and no-op semantics are explicit; a direct field-level method that bypasses domain lifecycle policy remains disallowed.
 
 There is no generic `Repository[T]`, generic Unit of Work, global transaction manager, or shared persistence base interface.
 
@@ -330,9 +329,7 @@ The initial logical schema is:
 |---|---|---|
 | `id` | `uuid` | primary key, supplied by Go |
 | `target_url` | `text` | not null |
-| `enabled` | `boolean` | not null |
 | `created_at` | `timestamptz` | not null |
-| `updated_at` | `timestamptz` | not null |
 
 No additional index is added without a query that needs it.
 
@@ -355,9 +352,9 @@ The PostgreSQL adapter must:
 - use context-aware queries;
 - close rows/resources correctly.
 
-One-statement use cases do not justify a transaction abstraction.
+The initial persistence surface is create/read only, so no transaction abstraction or concurrency token is introduced.
 
-A transaction boundary is introduced only when a use case actually requires multiple atomic writes.
+A transaction or optimistic-concurrency mechanism is introduced only when a concrete mutable use case requires it and its semantics have been designed explicitly.
 
 ### GMF-012 — Migration strategy
 
@@ -510,7 +507,7 @@ Must cover at minimum:
 - userinfo rejection;
 - fragment rejection;
 - UUID identity behavior;
-- enable/disable idempotency.
+- monitor creation timestamp behavior.
 
 #### Application tests
 
@@ -520,7 +517,6 @@ Use an in-memory/fake Monitoring port to verify:
 - repository failure propagation/mapping;
 - get-by-ID;
 - not-found behavior;
-- enable/disable orchestration;
 - deterministic ID/time dependencies.
 
 #### PostgreSQL adapter integration tests
@@ -529,10 +525,9 @@ Run against real PostgreSQL and verify:
 
 - migration up creates the schema/table;
 - monitor insert/read round trip;
-- enabled-state update round trip;
 - duplicate target URLs are allowed;
 - not-found mapping;
-- timestamp preservation;
+- created-at timestamp preservation;
 - migration down/up behavior in an ephemeral database.
 
 Mocks of the PostgreSQL wire protocol are not accepted as the primary adapter evidence.
@@ -607,7 +602,7 @@ The implementation must not rewrite committed architectural ownership merely to 
 
 ### GMF-023 — Events remain deferred
 
-The foundation does not publish `MonitorCreated`, `MonitorEnabled`, or `MonitorDisabled` events merely because the conceptual architecture mentions them.
+The foundation does not publish `MonitorCreated` or speculative lifecycle events merely because the conceptual architecture mentions them. Enable/disable events remain deferred together with the lifecycle capability itself.
 
 Events are introduced when a real reaction/consumer exists.
 
@@ -645,9 +640,7 @@ CREATE SCHEMA monitoring;
 CREATE TABLE monitoring.monitors (
     id uuid PRIMARY KEY,
     target_url text NOT NULL,
-    enabled boolean NOT NULL,
-    created_at timestamptz NOT NULL,
-    updated_at timestamptz NOT NULL
+    created_at timestamptz NOT NULL
 );
 ```
 
@@ -752,6 +745,7 @@ This design does not decide:
 - internal checker endpoint paths or DTOs;
 - pagination;
 - monitor display names;
+- enable/disable lifecycle semantics and concurrency control;
 - polling interval;
 - user-configurable timeout;
 - retry policy;
@@ -806,7 +800,7 @@ This design gate is GREEN only if review agrees that:
 8. migrations are explicit and not auto-applied by API startup;
 9. Docker keeps the four-service topology while only API becomes real;
 10. verification covers architecture, domain, application, migration, persistence, runtime, Docker, and CI;
-11. future scheduling/result/contract work remains possible without rewriting this foundation.
+11. future lifecycle/scheduling/result/contract work remains possible without rewriting this foundation.
 
 ---
 
