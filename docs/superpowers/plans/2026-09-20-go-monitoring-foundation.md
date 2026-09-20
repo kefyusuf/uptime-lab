@@ -104,6 +104,12 @@ main@41a27c0
   └── docs/go-monitoring-foundation-plan
 ```
 
+Plan PR title is locked to:
+
+```text
+docs(api): add Go monitoring foundation implementation plan
+```
+
 Plan landing sequence:
 
 1. plan-only PR -> current `main`;
