@@ -167,7 +167,8 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27.1'
-          cache: false
+          cache: true
+          cache-dependency-path: apps/api/go.sum
 
       - name: Verify Go architecture
         run: |
@@ -180,12 +181,6 @@ jobs:
           set -euo pipefail
           test -z "$(gofmt -l .)"
           go mod tidy
-          printf '%s\n' '--- TASK4-GO-MOD-BEGIN ---'
-          cat go.mod
-          printf '%s\n' '--- TASK4-GO-MOD-END ---'
-          printf '%s\n' '--- TASK4-GO-SUM-BEGIN ---'
-          cat go.sum
-          printf '%s\n' '--- TASK4-GO-SUM-END ---'
           test -z "$(git status --porcelain -- go.mod go.sum)"
           go mod verify
           go vet ./...
