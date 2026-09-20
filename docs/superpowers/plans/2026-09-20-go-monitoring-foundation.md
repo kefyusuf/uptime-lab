@@ -631,6 +631,14 @@ Re-check compatible patch releases immediately before editing `go.mod`.
 
 Migration integration evidence must use real PostgreSQL.
 
+Every test file that requires a live PostgreSQL instance MUST begin with the Go build constraint:
+
+```go
+//go:build integration
+```
+
+Normal `go test ./...` must remain DB-independent. Live-DB packages run only through explicit `-tags=integration` commands.
+
 The SQL migration is logically:
 
 ```sql
@@ -759,6 +767,8 @@ STOP.
 - Modify: `scripts/ci/run-go-postgres-tests.sh`
 
 - [ ] **Step 1: RED integration tests**
+
+The adapter integration test file MUST use `//go:build integration` so ordinary unit/application runs remain DB-independent.
 
 Pin cases:
 
@@ -1839,7 +1849,7 @@ Schema is minimal, duplicate targets remain valid, migrations are explicit, and 
 
 PASS.
 
-Domain/application use cheap tests; architecture uses package metadata; migration/adapter use real PostgreSQL; runtime uses focused lifecycle tests; Docker uses canonical Compose; CI aggregates Go and Docker evidence.
+Domain/application use cheap DB-independent tests; architecture uses package metadata; integration-tagged migration/adapter tests use real PostgreSQL; runtime uses focused lifecycle tests; Docker uses canonical Compose; CI aggregates Go and Docker evidence.
 
 ### CI/security
 
