@@ -67,6 +67,8 @@ Implementation MUST re-check Go/pgx/goose/govulncheck patch-level freshness befo
 - Task 1 bootstraps the minimal path-aware `go-api` CI surface and opens the implementation PR as **draft** after its coherent commit.
 - The draft implementation PR remains open through Tasks 2-8 so every task closes with fresh remote CI evidence on the exact pushed head; it is not marked review-ready and no external implementation review is requested before Task 9.
 - PostgreSQL integration evidence is added to the existing `go-api` job in Task 4 and extended for the adapter in Task 5; canonical Docker evidence becomes Go-source-sensitive in Task 7.
+- Exact Go 1.27.x and real-Docker claims must come from an environment that actually provides them. If the executing local environment lacks the reviewed Go/Docker versions, do not install or claim an ad-hoc substitute; from Task 1 onward, fresh draft-PR `go-api` / `local-dev` jobs provide the canonical exact-environment evidence.
+- Local commands remain useful when a capable environment exists, but missing local capability is never reported as a passed local test; the corresponding remote job must execute the same required layer successfully.
 - Every task ends with explicit self-review, one coherent Conventional Commit, and fresh draft-PR CI evidence once the draft PR exists, using scope `api`, `devops`, `docs`, or `architecture` as appropriate.
 - If a task self-review is RED, revise before committing and do not advance.
 
@@ -440,7 +442,10 @@ with:
 - `persist-credentials: false`;
 - immutable `actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e`;
 - exact reviewed Go 1.27.x patch;
+- `cache: false` while the module is stdlib-only and has no stable dependency checksum file;
 - module root `apps/api`.
+
+Do not point setup-go caching at a nonexistent `go.sum`. Task 4 enables nested-module caching after third-party dependencies create a committed `apps/api/go.sum`.
 
 Minimum initial commands:
 
@@ -448,23 +453,15 @@ Minimum initial commands:
 cd apps/api
 test -z "$(gofmt -l .)"
 
-cp go.mod /tmp/go.mod.before
-test -f go.sum && cp go.sum /tmp/go.sum.before || true
-
 go mod tidy
-cmp -s go.mod /tmp/go.mod.before
-if test -f /tmp/go.sum.before; then
-  cmp -s go.sum /tmp/go.sum.before
-else
-  test ! -s go.sum
-fi
+test -z "$(git status --porcelain -- go.mod go.sum)"
 
 go mod verify
 go vet ./...
 go test ./...
 ```
 
-Adapt the no-`go.sum` assertion mechanically if the exact Go version creates an empty/nonempty file for a stdlib-only module; the invariant is that `go mod tidy` produces no uncommitted manifest delta.
+The path-scoped `git status --porcelain` check is intentional: it catches both tracked manifest modifications and a newly created untracked `go.sum`. The invariant is that `go mod tidy` produces no uncommitted manifest delta.
 
 Update `CI / gate` so `go-api` must be `success` when relevant and may be `skipped` when irrelevant.
 
@@ -763,7 +760,7 @@ test(api): enforce Go architecture boundaries
 
 - [ ] **Step 7: Require fresh draft-PR CI**
 
-Require `go-api=SUCCESS` and `CI / gate=SUCCESS` on the exact Task 3 head. Inspect the Go job to confirm both architecture harness and real-repository architecture check executed.
+Require `go-api=SUCCESS`, `local-dev=SUCCESS`, and `CI / gate=SUCCESS` on the exact Task 3 head. Task 3 modifies `.github/workflows/ci.yml`, which is already a local-dev detector path, so `local-dev` must not be skipped. Inspect the Go job to confirm both architecture harness and real-repository architecture check executed.
 
 STOP.
 
@@ -938,17 +935,24 @@ PGPASSWORD=<ci test password>
 PGSSLMODE=disable
 ```
 
+Once `apps/api/go.sum` is committed, update the existing setup-go step to enable cache deterministically:
+
+```yaml
+cache: true
+cache-dependency-path: apps/api/go.sum
+```
+
 After the existing DB-independent checks run:
 
 ```bash
 go test -tags=integration ./migrations
 ```
 
-This service container is CI test infrastructure only; it does not change product/local Compose topology.
+This service container and its host-port mapping are CI test infrastructure only; they do not change product/local Compose topology.
 
 - [ ] **Step 7: Self-review**
 
-Check schema minimality, explicit ownership, no auto-migrate, no host port, deterministic cleanup, no secret logging, and both local-script + remote-CI real-PostgreSQL evidence.
+Check schema minimality, explicit ownership, no auto-migrate, no product/local Compose host port, CI-only PostgreSQL publish scope, deterministic cleanup, no secret logging, and both local-script + remote-CI real-PostgreSQL evidence.
 
 - [ ] **Step 8: Commit**
 
@@ -1078,7 +1082,7 @@ feat(api): add monitoring postgres adapter
 
 - [ ] **Step 9: Require fresh draft-PR CI**
 
-Require `go-api=SUCCESS` and `CI / gate=SUCCESS` on the exact Task 5 head, with both integration-tagged packages visible in Go job evidence.
+Require `go-api=SUCCESS`, `local-dev=SUCCESS`, and `CI / gate=SUCCESS` on the exact Task 5 head, with both integration-tagged packages visible in Go job evidence. Task 5 modifies `.github/workflows/ci.yml`, so the existing local-dev detector must also run.
 
 STOP.
 
@@ -1724,11 +1728,13 @@ References in design/deferred documentation are allowed; production implementati
 
 - [ ] **Step 5: Run full Go verification**
 
+Run this command set in an environment providing the reviewed Go 1.27.x toolchain. If the executing local environment does not provide that toolchain, do not claim these as local results; use the exact current-head `go-api` job as canonical evidence and inspect every corresponding step.
+
 ```bash
 cd apps/api
 test -z "$(gofmt -l .)"
 go mod tidy
-git diff --exit-code -- go.mod go.sum
+test -z "$(git status --porcelain -- go.mod go.sum)"
 go mod verify
 go vet ./...
 go test ./...
@@ -1749,6 +1755,8 @@ govulncheck -version
 ```
 
 - [ ] **Step 6: Run full Docker verification**
+
+Run locally only when a real compatible Docker/Compose environment is available. Regardless of local availability, the exact current-head `local-dev` job must execute the same canonical topology/smoke layer successfully; CI evidence is mandatory and is not replaced by a fake-Docker harness.
 
 ```bash
 ./scripts/ci/test-detect-local-dev-changes.sh
