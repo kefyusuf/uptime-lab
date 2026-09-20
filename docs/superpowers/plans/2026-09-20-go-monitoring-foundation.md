@@ -64,8 +64,10 @@ Implementation MUST re-check Go/pgx/goose/govulncheck patch-level freshness befo
 - CI keeps read-only permissions, pinned actions, no `pull_request_target`, and stable required check `CI / gate`.
 - Contributor-facing docs and code comments are English.
 - Implementation branch is created only after this plan is reviewed and landed.
-- Do not open the implementation PR until Task 9; task-level validation is local/repository-owned until then.
-- Every task ends with explicit self-review and one coherent Conventional Commit using scope `api`, `devops`, `docs`, or `architecture` as appropriate.
+- Task 1 bootstraps the minimal path-aware `go-api` CI surface and opens the implementation PR as **draft** after its coherent commit.
+- The draft implementation PR remains open through Tasks 2-8 so every task closes with fresh remote CI evidence on the exact pushed head; it is not marked review-ready and no external implementation review is requested before Task 9.
+- PostgreSQL integration evidence is added to the existing `go-api` job in Task 4 and extended for the adapter in Task 5; canonical Docker evidence becomes Go-source-sensitive in Task 7.
+- Every task ends with explicit self-review, one coherent Conventional Commit, and fresh draft-PR CI evidence once the draft PR exists, using scope `api`, `devops`, `docs`, or `architecture` as appropriate.
 - If a task self-review is RED, revise before committing and do not advance.
 
 ---
@@ -127,7 +129,7 @@ main + reviewed plan
   └── feat/go-monitoring-foundation
 ```
 
-Implementation is executed Task 1 -> Task 9. The implementation PR is opened only in Task 9, then receives fresh full CI + external review + whole-branch review before squash landing.
+Implementation is executed Task 1 -> Task 9. Task 1 opens `feat/go-monitoring-foundation` as a **draft PR** after bootstrapping minimal Go CI. Tasks 2-8 advance that same draft PR only after fresh task-level CI succeeds. Task 9 performs the whole-branch review, updates the PR evidence/body, marks it review-ready, requests external review, and controls squash landing.
 
 ---
 
@@ -239,8 +241,11 @@ Cargo.toml                   # root-level
 - Create: `apps/api/internal/modules/monitoring/domain/target_url.go`
 - Create: `apps/api/internal/modules/monitoring/domain/monitor.go`
 - Create: domain tests
+- Create: `scripts/ci/detect-go-api-changes.sh`
+- Create: `scripts/ci/test-detect-go-api-changes.sh`
 - Modify: `scripts/ci/check-local-dev.sh`
 - Modify: `scripts/ci/test-check-local-dev.sh`
+- Modify: `.github/workflows/ci.yml`
 
 **Locked interfaces:**
 
@@ -371,7 +376,99 @@ test -z "$(gofmt -l .)"
 
 If host Go is unavailable, execute equivalent commands with the pinned official Go builder image; do not install an unpinned host toolchain.
 
-- [ ] **Step 5: Self-review**
+- [ ] **Step 5: Add repository-owned Go change detection with TDD**
+
+Create:
+
+```text
+scripts/ci/detect-go-api-changes.sh
+scripts/ci/test-detect-go-api-changes.sh
+```
+
+Interface:
+
+```bash
+./scripts/ci/detect-go-api-changes.sh <base-sha> <head-sha>
+```
+
+Successful stdout is exactly `true` or `false`.
+
+Pin at least:
+
+1. `apps/api/**/*.go` addition/change -> true;
+2. `apps/api/go.mod` -> true;
+3. future `apps/api/go.sum` -> true;
+4. future `apps/api/Dockerfile` -> true;
+5. future Go architecture checker path -> true;
+6. future `scripts/ci/run-go-postgres-tests.sh` -> true;
+7. detector self-change -> true;
+8. workflow change -> true conservatively;
+9. unrelated architecture/frontend documentation -> false;
+10. relevant deletion -> true;
+11. all-zero base -> true;
+12. unavailable base -> true;
+13. unavailable head -> non-zero.
+
+RED the harness before the detector implementation, then GREEN it.
+
+- [ ] **Step 6: Bootstrap minimal path-aware Go CI**
+
+Extend the existing `changes` job with:
+
+```text
+local_dev
+go_api
+```
+
+Run the Go detector self-test in `changes`.
+
+Add conditional job:
+
+```text
+go-api
+```
+
+with:
+
+- `needs: changes`;
+- condition `needs.changes.outputs.go_api == 'true'`;
+- `ubuntu-24.04`;
+- repository read-only permissions;
+- existing immutable checkout SHA;
+- `persist-credentials: false`;
+- immutable `actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e`;
+- exact reviewed Go 1.27.x patch;
+- module root `apps/api`.
+
+Minimum initial commands:
+
+```bash
+cd apps/api
+test -z "$(gofmt -l .)"
+
+cp go.mod /tmp/go.mod.before
+test -f go.sum && cp go.sum /tmp/go.sum.before || true
+
+go mod tidy
+cmp -s go.mod /tmp/go.mod.before
+if test -f /tmp/go.sum.before; then
+  cmp -s go.sum /tmp/go.sum.before
+else
+  test ! -s go.sum
+fi
+
+go mod verify
+go vet ./...
+go test ./...
+```
+
+Adapt the no-`go.sum` assertion mechanically if the exact Go version creates an empty/nonempty file for a stdlib-only module; the invariant is that `go mod tidy` produces no uncommitted manifest delta.
+
+Update `CI / gate` so `go-api` must be `success` when relevant and may be `skipped` when irrelevant.
+
+No PostgreSQL service, integration-tagged test, race test, or govulncheck is added yet.
+
+- [ ] **Step 7: Self-review**
 
 Check:
 
@@ -381,13 +478,41 @@ Check:
 - URL validation does not claim SSRF safety;
 - no mutable lifecycle leaked back in;
 - local-dev fitness checker is phase-consistent again;
-- tests prove original URL preservation and duplicate-target possibility is not precluded.
+- tests prove original URL preservation and duplicate-target possibility is not precluded;
+- Go changes cannot bypass remote CI from this point forward;
+- workflow permissions/action pins remain least-privilege and immutable.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 8: Commit**
 
 ```text
 feat(api): add monitoring domain foundation
 ```
+
+- [ ] **Step 9: Open the draft implementation PR and require fresh CI**
+
+Create/open:
+
+```text
+head: feat/go-monitoring-foundation
+base: main
+draft: true
+title: feat(api): establish Go monitoring foundation
+```
+
+The initial PR body states that implementation is incomplete and records Task 1 evidence only. Do not request external implementation review.
+
+Fresh CI on the committed Task 1 head must show:
+
+```text
+policy       SUCCESS
+repository   SUCCESS
+changes      SUCCESS
+go-api       SUCCESS
+local-dev    SUCCESS
+CI / gate    SUCCESS
+```
+
+`local-dev` is expected to run because Task 1 modifies its repository-owned checker. If detector behavior proves otherwise, investigate rather than changing the expected result casually.
 
 STOP. Do not start Task 2 without the next execution instruction.
 
@@ -509,6 +634,20 @@ Verify:
 feat(api): add monitoring application use cases
 ```
 
+- [ ] **Step 6: Require fresh draft-PR CI**
+
+On the exact Task 2 head require:
+
+```text
+policy       SUCCESS
+repository   SUCCESS
+changes      SUCCESS
+go-api       SUCCESS
+CI / gate    SUCCESS
+```
+
+`local-dev` may be skipped because the real API image does not consume `apps/api/**` yet.
+
 STOP.
 
 ---
@@ -520,6 +659,7 @@ STOP.
 **Files:**
 - Create: `scripts/ci/check-go-architecture.sh`
 - Create: `scripts/ci/test-check-go-architecture.sh`
+- Modify: `.github/workflows/ci.yml`
 
 **Checker contract:**
 
@@ -596,15 +736,32 @@ go test ./...
 go vet ./...
 ```
 
-- [ ] **Step 4: Self-review**
+- [ ] **Step 4: Wire architecture evidence into the existing `go-api` job**
 
-Check deterministic/no-network fixture behavior, clear failure messages, no external architecture framework, and no false dependency restrictions that prevent adapters from depending inward.
+The job created in Task 1 must now run:
 
-- [ ] **Step 5: Commit**
+```bash
+./scripts/ci/test-check-go-architecture.sh
+./scripts/ci/check-go-architecture.sh .
+```
+
+from the repository root in addition to the existing Go fmt/tidy/verify/vet/unit checks.
+
+Do not create a second Go workflow/job for architecture.
+
+- [ ] **Step 5: Self-review**
+
+Check deterministic/no-network fixture behavior, clear failure messages, no external architecture framework, no false dependency restrictions that prevent adapters from depending inward, and remote CI execution on the exact branch head.
+
+- [ ] **Step 6: Commit**
 
 ```text
 test(api): enforce Go architecture boundaries
 ```
+
+- [ ] **Step 7: Require fresh draft-PR CI**
+
+Require `go-api=SUCCESS` and `CI / gate=SUCCESS` on the exact Task 3 head. Inspect the Go job to confirm both architecture harness and real-repository architecture check executed.
 
 STOP.
 
@@ -623,6 +780,7 @@ STOP.
 - Create: `apps/api/migrations/00001_create_monitoring_monitors.sql`
 - Create: `apps/api/cmd/migrate/main.go`
 - Create: `scripts/ci/run-go-postgres-tests.sh`
+- Modify: `.github/workflows/ci.yml`
 
 **Plan-time dependency pins:**
 
@@ -748,15 +906,50 @@ git diff --check
 
 After `go mod tidy`, confirm only intended `go.mod` / `go.sum` changes.
 
-- [ ] **Step 6: Self-review**
+- [ ] **Step 6: Extend `go-api` CI with real PostgreSQL migration evidence**
 
-Check schema minimality, explicit ownership, no auto-migrate, no host port, deterministic cleanup, and no secret logging.
+Add a CI-only PostgreSQL service to the existing `go-api` job:
 
-- [ ] **Step 7: Commit**
+```text
+postgres:18.6-alpine3.24
+```
+
+with dedicated non-secret test database/user/password and `pg_isready` health options.
+
+Set test PG environment explicitly:
+
+```text
+PGHOST=127.0.0.1
+PGPORT=5432
+PGDATABASE=<ci test db>
+PGUSER=<ci test user>
+PGPASSWORD=<ci test password>
+PGSSLMODE=disable
+```
+
+After the existing DB-independent checks run:
+
+```bash
+go test -tags=integration ./migrations
+```
+
+This service container is CI test infrastructure only; it does not change product/local Compose topology.
+
+- [ ] **Step 7: Self-review**
+
+Check schema minimality, explicit ownership, no auto-migrate, no host port, deterministic cleanup, no secret logging, and both local-script + remote-CI real-PostgreSQL evidence.
+
+- [ ] **Step 8: Commit**
 
 ```text
 feat(api): add monitoring database migrations
 ```
+
+- [ ] **Step 9: Require fresh draft-PR CI**
+
+The exact Task 4 head must have `go-api=SUCCESS` and `CI / gate=SUCCESS`. Inspect the Go job to confirm the migration integration test executed against the PostgreSQL service.
+
+Because `.github/workflows/ci.yml` is local-dev relevant, `local-dev` is also expected to run and succeed on this task head.
 
 STOP.
 
@@ -771,6 +964,7 @@ STOP.
 - Create: `apps/api/internal/modules/monitoring/adapters/postgres/repository_integration_test.go`
 - Create: `apps/api/internal/modules/monitoring/module.go`
 - Modify: `scripts/ci/run-go-postgres-tests.sh`
+- Modify: `.github/workflows/ci.yml`
 
 - [ ] **Step 1: RED integration tests**
 
@@ -851,15 +1045,29 @@ cd ../..
 ./scripts/ci/run-go-postgres-tests.sh
 ```
 
-- [ ] **Step 6: Self-review**
+- [ ] **Step 6: Extend remote integration evidence**
 
-Check no pgx type leakage, no generic persistence abstraction, duplicate target support, explicit UUID mapping, and no mutable lifecycle.
+After migration integration succeeds, the existing `go-api` job must run:
 
-- [ ] **Step 7: Commit**
+```bash
+go test -tags=integration ./internal/modules/monitoring/adapters/postgres
+```
+
+Keep migration and adapter packages explicit so schema preparation/order is visible.
+
+- [ ] **Step 7: Self-review**
+
+Check no pgx type leakage, no generic persistence abstraction, duplicate target support, explicit UUID mapping, no mutable lifecycle, and both migration + adapter integration evidence on the draft PR.
+
+- [ ] **Step 8: Commit**
 
 ```text
 feat(api): add monitoring postgres adapter
 ```
+
+- [ ] **Step 9: Require fresh draft-PR CI**
+
+Require `go-api=SUCCESS` and `CI / gate=SUCCESS` on the exact Task 5 head, with both integration-tagged packages visible in Go job evidence.
 
 STOP.
 
@@ -1028,6 +1236,10 @@ Check no product endpoints, no dead Monitoring wiring, readiness/liveness distin
 ```text
 feat(api): add operational control plane runtime
 ```
+
+- [ ] **Step 9: Require fresh draft-PR CI**
+
+Require `go-api=SUCCESS` and `CI / gate=SUCCESS` on the exact Task 6 head. The job must cover the new runtime/config/http tests plus all previously wired integration evidence.
 
 STOP.
 
@@ -1218,195 +1430,106 @@ Check four-service topology, no host ports, API health is real readiness, no aut
 build(api): run control plane in local Docker
 ```
 
+- [ ] **Step 9: Require fresh draft-PR CI**
+
+For the exact Task 7 head:
+
+```text
+go-api       SUCCESS
+local-dev    SUCCESS
+CI / gate    SUCCESS
+```
+
+Neither `go-api` nor `local-dev` may be skipped now that the real API Docker image consumes `apps/api/**`.
+
+Inspect local-dev logs for real API readiness and full canonical smoke.
+
 STOP.
 
 ---
 
-# Task 8 — Add path-aware Go CI, PostgreSQL integration evidence, vulnerability scan, and Go dependency automation
+# Task 8 — Harden Go CI with race, vulnerability scanning, and dependency automation
 
-**Goal:** Make Go verification a first-class conditional CI surface while preserving the stable aggregate gate.
+**Goal:** Complete the already-active path-aware `go-api` CI surface with race/vulnerability evidence and Go dependency automation without duplicating test topology.
 
 **Files:**
-- Create: `scripts/ci/detect-go-api-changes.sh`
-- Create: `scripts/ci/test-detect-go-api-changes.sh`
 - Modify: `.github/workflows/ci.yml`
 - Modify: `.github/dependabot.yml`
 
-**Pinned CI inputs:**
+**Existing CI authority from earlier tasks:**
+
+By Task 8, `go-api` already provides:
+
+- exact Go toolchain;
+- fmt/tidy cleanliness/mod verify/vet;
+- unit/application/runtime tests;
+- architecture harness + real architecture check;
+- CI-only PostgreSQL service;
+- migration integration;
+- PostgreSQL adapter integration;
+- stable `CI / gate` aggregation.
+
+Task 8 hardens that job; it does not recreate it.
+
+**Pinned inputs:**
 
 ```text
 actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-Go 1.27.1
+Go 1.27.x reviewed patch
 govulncheck v1.8.0
 PostgreSQL service image postgres:18.6-alpine3.24
 ```
 
-Re-check patch pins before implementation.
+- [ ] **Step 1: Re-check patch pins**
 
-- [ ] **Step 1: Add Go change-detector TDD**
+Re-check Go 1.27.x and govulncheck compatible patch/version before editing CI. Patch-only updates are recorded in task evidence; major/minor changes return to design/plan review.
 
-Detector interface:
+- [ ] **Step 2: Add race evidence to the existing Go job**
 
-```bash
-./scripts/ci/detect-go-api-changes.sh <base-sha> <head-sha>
-```
-
-stdout exactly:
-
-```text
-true
-```
-
-or:
-
-```text
-false
-```
-
-Pin cases:
-
-1. `apps/api/**/*.go` change -> true;
-2. `apps/api/go.mod` -> true;
-3. `apps/api/go.sum` -> true;
-4. `apps/api/Dockerfile` -> true;
-5. Go architecture checker change -> true;
-6. Go detector change -> true;
-7. workflow change -> true conservatively;
-8. unrelated frontend/architecture doc -> false;
-9. relevant deletion -> true;
-10. zero base -> true;
-11. unavailable base -> true;
-12. unavailable head -> non-zero.
-
-- [ ] **Step 2: Extend `changes` job**
-
-Expose:
-
-```text
-local_dev
-go_api
-```
-
-Run both detector self-tests in CI.
-
-The current local-dev detector remains authoritative for Docker smoke.
-
-- [ ] **Step 3: Add conditional `go-api` job**
-
-Job runs only when:
-
-```text
-needs.changes.outputs.go_api == 'true'
-```
-
-Runner:
-
-```text
-ubuntu-24.04
-```
-
-Permissions remain read-only.
-
-Checkout remains pinned and credentials not persisted.
-
-Setup Go with exact patch and nested cache dependency path:
-
-```text
-apps/api/go.sum
-```
-
-Do not use `stable` or floating `1.27` in CI.
-
-- [ ] **Step 4: Add CI-only real PostgreSQL service**
-
-The Go job may use a GitHub Actions PostgreSQL service container as an isolated integration fixture.
-
-This is not the product/local Compose topology and does not modify `compose.yaml`.
-
-Pin:
-
-```text
-postgres:18.6-alpine3.24
-```
-
-Use dedicated test credentials and pg_isready health options.
-
-Set Go test env:
-
-```text
-PGHOST=127.0.0.1
-PGPORT=5432
-PGDATABASE=<ci test db>
-PGUSER=<ci test user>
-PGPASSWORD=<ci test password>
-PGSSLMODE=disable
-```
-
-No secrets are required.
-
-- [ ] **Step 5: Run Go checks in deterministic order**
-
-Minimum:
+Run after ordinary DB-independent tests:
 
 ```bash
-cd apps/api
-
-test -z "$(gofmt -l .)"
-
-cp go.mod /tmp/go.mod.before
-cp go.sum /tmp/go.sum.before
-go mod tidy
-cmp -s go.mod /tmp/go.mod.before
-cmp -s go.sum /tmp/go.sum.before
-
-go mod verify
-go vet ./...
-../../scripts/ci/check-go-architecture.sh ../..
-
-go test ./...
 go test -race ./...
-
-go test -tags=integration ./migrations
-go test -tags=integration ./internal/modules/monitoring/adapters/postgres
 ```
 
-Adjust relative path mechanically if needed; do not duplicate architecture logic in workflow YAML.
+The integration-tagged PostgreSQL tests remain explicit and separate; do not accidentally include them in the race command unless a deliberate later decision proves that useful and stable.
 
-Integration tests must reset/prepare their own schema deterministically and must not rely on package execution order unless CI invokes packages in explicit order as above.
+- [ ] **Step 3: Add pinned govulncheck**
 
-- [ ] **Step 6: Add pinned govulncheck**
-
-Install exactly:
+Install outside the application module dependency graph:
 
 ```bash
-go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+GOBIN="$RUNNER_TEMP/bin" go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+"$RUNNER_TEMP/bin/govulncheck" ./...
 ```
 
-Prefer `GOBIN=$RUNNER_TEMP/bin` or equivalent isolated tool path.
+Run from `apps/api`.
 
-Run:
+Do not add `golang.org/x/vuln` to application `go.mod`.
 
-```bash
-govulncheck ./...
-```
+- [ ] **Step 4: Audit the final Go job order**
 
-Do not add govulncheck as an application module dependency.
-
-- [ ] **Step 7: Require API Docker evidence**
-
-The existing conditional `local-dev` job should run for `apps/api/**` because Task 7 updated the detector. Therefore Go changes receive both:
+The final job order must make failures diagnosable:
 
 ```text
-Go-native checks + real PostgreSQL integration
-AND
-canonical Compose build/health/smoke
+checkout/setup
+  -> fmt
+  -> tidy cleanliness
+  -> mod verify
+  -> vet
+  -> architecture harness/check
+  -> unit/application/runtime tests
+  -> race
+  -> migration integration
+  -> adapter integration
+  -> govulncheck
 ```
 
-Do not add a second divergent Compose definition in the Go job.
+PostgreSQL service configuration remains CI-only.
 
-- [ ] **Step 8: Update aggregate gate**
+- [ ] **Step 5: Audit aggregate-gate semantics**
 
-Gate needs:
+`CI / gate` must still require:
 
 ```text
 policy
@@ -1416,17 +1539,14 @@ local-dev
 go-api
 ```
 
-Require:
+Rules:
 
-- policy success;
-- repository success;
-- changes success;
-- local-dev success or skipped;
-- go-api success or skipped.
+- baseline jobs must succeed;
+- `go-api` may be skipped only for an irrelevant diff;
+- `local-dev` may be skipped only for an irrelevant diff;
+- this implementation branch must produce both jobs as success once API Docker integration exists.
 
-A Go-relevant PR must produce `go-api=success`, not skipped.
-
-- [ ] **Step 9: Add Go Dependabot ecosystem**
+- [ ] **Step 6: Add Go Dependabot ecosystem**
 
 Extend `.github/dependabot.yml`:
 
@@ -1436,13 +1556,11 @@ directory: /apps/api
 weekly schedule
 ```
 
-Use the existing repository schedule style unless a concrete reason justifies a different cadence.
+Use the repository's existing weekly schedule style.
 
-Do not create npm/Cargo ecosystems yet.
+Do not add npm/Cargo ecosystems.
 
-- [ ] **Step 10: GREEN**
-
-Use repository scripts to validate detector behavior, then open no PR yet.
+- [ ] **Step 7: GREEN**
 
 At minimum:
 
@@ -1452,33 +1570,48 @@ At minimum:
 git diff --check
 ```
 
-Review workflow statically for:
+Statically verify:
 
-- pinned checkout;
-- pinned setup-go;
+- pinned checkout/setup-go;
 - `persist-credentials: false`;
 - `contents: read`;
 - no `pull_request_target`;
 - stable gate name exactly `CI / gate`;
-- Go result required by aggregate gate.
+- govulncheck version is exact;
+- Go Dependabot points only at `/apps/api`.
 
-- [ ] **Step 11: Self-review**
+- [ ] **Step 8: Self-review**
 
-Check CI path specificity, no unpinned action, no secret exposure, service-container scope is CI-only, Go dependency automation only, and both Go/native + canonical Docker evidence exist.
+Check no duplicated workflow logic, no application dependency pollution from tooling, no secret exposure, and no relaxation of integration/local-dev evidence.
 
-- [ ] **Step 12: Commit**
+- [ ] **Step 9: Commit**
 
 ```text
-ci(api): add Go control plane verification
+ci(api): harden Go control plane verification
 ```
+
+- [ ] **Step 10: Require fresh draft-PR CI**
+
+For the exact Task 8 head:
+
+```text
+policy       SUCCESS
+repository   SUCCESS
+changes      SUCCESS
+go-api       SUCCESS
+local-dev    SUCCESS
+CI / gate    SUCCESS
+```
+
+Inspect Go job logs for race + govulncheck in addition to all prior layers.
 
 STOP.
 
 ---
 
-# Task 9 — Update canonical documentation, perform full verification, and open the implementation PR
+# Task 9 — Update canonical documentation, perform whole-branch verification, and finalize the implementation PR
 
-**Goal:** Reconcile documentation with the implemented runtime, run whole-branch verification against the reviewed design/plan, and create the only implementation PR.
+**Goal:** Reconcile documentation with the implemented runtime, run whole-branch verification against the reviewed design/plan, finalize the existing draft implementation PR, close external review, and control landing.
 
 **Files:**
 - Modify: `README.md`
@@ -1670,27 +1803,17 @@ docs(api): document Go monitoring foundation
 
 If Task 9 required a production/test fix, each fix gets its own Conventional Commit before the docs commit when that preserves review clarity.
 
-- [ ] **Step 10: Open implementation PR**
+- [ ] **Step 10: Finalize the existing draft implementation PR**
 
-Branch:
-
-```text
-feat/go-monitoring-foundation
-```
-
-Base:
+The PR already exists from Task 1:
 
 ```text
-main
+head: feat/go-monitoring-foundation
+base: main
+title: feat(api): establish Go monitoring foundation
 ```
 
-Title exactly:
-
-```text
-feat(api): establish Go monitoring foundation
-```
-
-PR body must explicitly report:
+Update the draft PR body to explicitly report:
 
 - Architecture impact;
 - Contract impact: no product/OpenAPI transport added;
@@ -1701,7 +1824,10 @@ PR body must explicitly report:
 - Documentation impact;
 - Breaking changes: None;
 - Deferred lifecycle/concurrency note;
-- exact Go/pgx/goose/govulncheck pins.
+- exact Go/pgx/goose/govulncheck pins;
+- per-task CI evidence summary from Tasks 1-8.
+
+After the body reflects the current head, mark the PR review-ready. Do not change branch/base/title merely to retrigger CI.
 
 - [ ] **Step 11: Require fresh PR CI**
 
@@ -1873,4 +1999,4 @@ The plan PR itself must contain only this plan document.
 
 PASS.
 
-Each task has a RED/GREEN boundary, explicit self-review, atomic commit, and STOP point. Implementation PR/merge is deferred until the final whole-branch gate.
+Each task has a RED/GREEN boundary, explicit self-review, atomic commit, and STOP point. Minimal path-aware Go CI and the draft implementation PR are established in Task 1 so every subsequent task can produce remote evidence on its exact head. The PR remains draft until the final whole-branch gate in Task 9.
