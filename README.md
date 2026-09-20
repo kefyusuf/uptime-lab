@@ -12,9 +12,13 @@ A production-disciplined uptime monitoring laboratory built to exercise clear bo
 - **Go** owns the modular-monolith control plane, domain/application rules, persistence ownership, and API semantics.
 - **Rust** owns bounded concurrent network probe execution through Ports and Adapters.
 - **PostgreSQL** will hold durable application state owned exclusively by the Go control plane.
-- **Docker Compose** will become the canonical local development topology when the Docker foundation is implemented.
+- **Docker Compose** is the canonical local-development substrate. The current Docker foundation runs PostgreSQL plus process-level placeholders; Go, Rust, and React runtimes remain unimplemented.
 
 The canonical architecture specification is [`docs/superpowers/specs/2026-09-17-uptime-lab-foundation-design.md`](docs/superpowers/specs/2026-09-17-uptime-lab-foundation-design.md).
+
+## Local Development
+
+See [`docs/devops/local-development.md`](docs/devops/local-development.md) for prerequisites, canonical Compose commands, persistence/reset semantics, worktree isolation, verification, and current limitations.
 
 ## Engineering Principles
 

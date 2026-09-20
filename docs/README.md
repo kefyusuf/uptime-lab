@@ -13,6 +13,10 @@ Start with the [Architecture index](architecture/README.md) for the canonical sy
 
 Architecture documentation describes end-to-end relationships across web, API, checker, persistence, security, and operations. Area-specific documentation must link back to those cross-area flows instead of becoming isolated silos.
 
+## Local Development
+
+Use [`devops/local-development.md`](devops/local-development.md) as the canonical operational guide for the Docker Compose development environment, persistence/reset semantics, worktree isolation, and local-dev verification.
+
 ## Area Ownership
 
 - `architecture/`: system-level boundaries and cross-area flows.
