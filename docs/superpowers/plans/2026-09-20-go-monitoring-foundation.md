@@ -201,6 +201,8 @@ Existing files modified later:
 - scripts/ci/test-check-local-dev.sh
 - scripts/ci/detect-local-dev-changes.sh
 - scripts/ci/test-detect-local-dev-changes.sh
+- scripts/ci/smoke-local-dev.sh
+- scripts/ci/test-smoke-local-dev.sh (only if control-flow evidence changes)
 - compose.yaml
 - .env.example
 - .github/workflows/ci.yml
@@ -915,6 +917,15 @@ postgres:18.6-alpine3.24
 ```
 
 with dedicated non-secret test database/user/password and `pg_isready` health options.
+
+Because `go-api` runs directly on the `ubuntu-24.04` runner and connects through `127.0.0.1:5432`, the CI service MUST publish PostgreSQL to the runner host:
+
+```yaml
+ports:
+  - 5432:5432
+```
+
+This host-port mapping exists only inside the ephemeral GitHub Actions job. It does **not** relax the product/local `compose.yaml` rule that application/database services remain unexposed to host ports.
 
 Set test PG environment explicitly:
 
