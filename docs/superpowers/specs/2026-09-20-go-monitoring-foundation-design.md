@@ -297,10 +297,12 @@ The first infrastructure port is specific to Monitoring:
 MonitorRepository
 ├── Create(ctx, monitor)
 ├── ByID(ctx, id)
-└── SetEnabled(ctx, id, enabled, updatedAt)
+└── Save(ctx, monitor)
 ```
 
 The exact Go signatures are finalized in the implementation plan, but the capability boundary above is locked.
+
+Lifecycle-changing application use cases MUST load the aggregate, execute the domain transition, and persist the resulting aggregate through `Save`. A persistence method such as `SetEnabled(id, enabled)` that can bypass the domain lifecycle is intentionally excluded.
 
 There is no generic `Repository[T]`, generic Unit of Work, global transaction manager, or shared persistence base interface.
 
@@ -657,7 +659,7 @@ No uniqueness constraint on `target_url` is allowed in this milestone.
 
 ## 6. Initial Composition Model
 
-The API composition root is responsible for constructing technical dependencies and the Monitoring module.
+The API composition root is responsible only for dependencies that the runtime actually consumes in this milestone.
 
 Conceptually:
 
@@ -668,14 +670,14 @@ structured logger
   ↓
 PostgreSQL pool
   ↓
-Monitoring postgres adapter
-  ↓
-Monitoring application use cases
-  ↓
 operational HTTP server
 ```
 
-The product use cases are constructed even though they are not exposed through business HTTP routes yet; integration/application tests provide their executable evidence.
+Monitoring domain, application, ports, migrations, and the PostgreSQL adapter are real implementation deliverables and receive executable unit/integration evidence, but the production API binary does not construct otherwise-unused Monitoring application services merely to prove wiring.
+
+Monitoring application services are added to the runtime composition root when the separate contract/transport phase introduces a real consumer such as a public or internal HTTP adapter.
+
+This avoids dead wiring, blank-identifier dependencies, and a composition root that pretends an unexposed product path exists.
 
 The composition root must not become a service locator.
 
@@ -832,7 +834,7 @@ Domain/application/ports/adapters/platform responsibilities preserve the committ
 
 PASS.
 
-No framework, ORM, sqlc, broker, cache, event bus, generic repository, DI container, extra Compose service, or speculative future module is introduced.
+No framework, ORM, sqlc, broker, cache, event bus, generic repository, DI container, extra Compose service, speculative future module, or dead runtime wiring is introduced.
 
 ### Greenfield/brownfield safety
 
