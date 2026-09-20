@@ -105,17 +105,7 @@ grep -Fqx '    depends_on:' <<<"$CHECKER_BLOCK" || fail "checker dependency is m
 grep -Fqx '      api:' <<<"$CHECKER_BLOCK" || fail "checker must depend on api"
 grep -Fqx '        condition: service_healthy' <<<"$CHECKER_BLOCK" || fail "checker must wait for healthy api"
 
-grep -Eq '^    image:[[:space:]]+postgres:[^[:space:]#]+
-
-for forbidden in apps contracts migrations package.json go.mod Cargo.toml; do
-  [[ ! -e "$ROOT/$forbidden" ]] || fail "phase-forbidden path exists: $forbidden"
-done
-
-FROM_LINE="$(awk '/^FROM[[:space:]]+/ { print; exit }' "$DOCKERFILE")"
-[[ "$FROM_LINE" =~ ^FROM[[:space:]][^[:space:]]+:[^[:space:]]+$ ]] || fail "placeholder base image must use an explicit tag"
-[[ "$FROM_LINE" != *":latest" ]] || fail "placeholder base image must not use latest"
-grep -Fqx 'USER 10001:10001' "$DOCKERFILE" || fail "placeholder must run as USER 10001:10001"
- <<<"$DB_BLOCK" || fail "db must use explicitly tagged postgres image"
+grep -Eq '^    image:[[:space:]]+postgres:[^[:space:]#]+$' <<<"$DB_BLOCK" || fail "db must use explicitly tagged postgres image"
 grep -Fqx '      - postgres-data:/var/lib/postgresql' <<<"$DB_BLOCK" || fail "db must mount postgres-data at /var/lib/postgresql"
 grep -Fqx '    healthcheck:' <<<"$DB_BLOCK" || fail "db healthcheck is missing"
 grep -Fq 'pg_isready' <<<"$DB_BLOCK" || fail "db healthcheck must use pg_isready"
