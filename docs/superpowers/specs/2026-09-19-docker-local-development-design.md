@@ -359,10 +359,18 @@ PostgreSQL readiness uses `pg_isready`.
 
 A placeholder becomes healthy only when:
 
-- its expected process is alive; and
-- its readiness marker exists.
+- its container process is still running; and
+- an explicit Compose `healthcheck` verifies that its readiness marker exists.
 
-A container being merely `running` is insufficient evidence.
+The health contract is therefore the combination of Docker container lifecycle and a service-specific readiness check. A container being merely `running` is insufficient evidence, and a readiness marker string that is not evaluated by the service healthcheck is not valid readiness evidence.
+
+Each placeholder service MUST define an explicit Compose `healthcheck` that tests:
+
+```text
+/run/uptime-lab/ready
+```
+
+If the placeholder process exits, Docker no longer treats the container as running. If the process remains running but the marker is absent, the healthcheck MUST fail.
 
 ### 9.3 Dependency conditions
 
@@ -515,11 +523,13 @@ The Rust Checker is not expected to require a host-facing application port by de
 
 ### 12.1 Database inspection
 
-Canonical database inspection is container-native:
+Canonical database inspection is container-native and uses the values resolved inside the `db` service:
 
 ```bash
-docker compose exec db psql -U uptime_lab -d uptime_lab
+docker compose exec db sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 ```
+
+With no overrides, those variables resolve to the documented `uptime_lab` defaults.
 
 A host database-client port may be considered later as an explicit optional developer aid, but it is not part of the default topology.
 
@@ -551,9 +561,11 @@ volumes:
 
 Compose generates project-scoped physical resources.
 
-This supports simultaneous worktrees and parallel CI/local environments without manual naming logic.
+Native Compose scoping isolates environments only when each invocation resolves to a distinct project name. The ordinary single-worktree workflow may rely on Compose's directory-derived project name.
 
-A developer may explicitly set `COMPOSE_PROJECT_NAME` when useful, but it is not part of the required canonical workflow.
+Parallel worktrees are supported only when their resolved Compose project names are distinct. If two worktrees can share the same directory basename, each simultaneous worktree MUST use a distinct `COMPOSE_PROJECT_NAME` (or equivalent `-p` project name) consistently for startup, inspection, logs, shutdown, and destructive reset.
+
+CI MUST use an isolated project name per run. The Compose file itself still MUST NOT hard-code a project name.
 
 ---
 
@@ -635,6 +647,17 @@ remains gitignored.
 
 Copying `.env.example` is optional, not a prerequisite for canonical startup.
 
+The official PostgreSQL image applies `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` initialization semantics only when the database data directory is empty. Once the project-scoped named volume contains an initialized PostgreSQL cluster, changing those values does not retrofit the existing cluster.
+
+To apply changed initialization values through the canonical local-development workflow, the developer must intentionally reset local database state:
+
+```bash
+docker compose down -v
+docker compose up -d --build --wait
+```
+
+The `down -v` step is destructive and removes the local PostgreSQL volume.
+
 ### 15.2 Deferred configuration
 
 Runtime-specific environment variables remain deferred until the corresponding runtime foundation exists.
@@ -681,6 +704,9 @@ scripts/ci/
 - no `container_name`;
 - no fixed root Compose project name;
 - `db` uses a named volume;
+- `db` defines an explicit Compose healthcheck using `pg_isready`;
+- each placeholder defines an explicit Compose healthcheck that evaluates `/run/uptime-lab/ready`;
+- placeholder health must not be reduced to container-running state alone;
 - `api` waits for healthy `db`;
 - `checker` waits for healthy `api`;
 - `web` has no hard startup dependency;
@@ -711,7 +737,10 @@ Representative required cases:
 7. Web hard dependency fails;
 8. floating `latest` tag fails;
 9. missing placeholder hardening invariant fails;
-10. fixed/global resource naming fails.
+10. fixed/global resource naming fails;
+11. missing placeholder healthcheck fails;
+12. placeholder healthcheck that does not evaluate the readiness marker fails;
+13. missing or incorrect PostgreSQL `pg_isready` healthcheck fails.
 
 The exact final count is locked by the implementation plan, but positive and representative negative evidence are mandatory.
 
@@ -940,7 +969,8 @@ The Docker-first Local Development Environment is complete only when all criteri
 
 ### 24.2 Dependency and health
 
-- DB uses real PostgreSQL readiness;
+- DB uses an explicit Compose healthcheck backed by real PostgreSQL `pg_isready` readiness;
+- each placeholder uses an explicit Compose healthcheck that evaluates its readiness marker while container lifecycle supplies process-running evidence;
 - API waits for healthy DB;
 - Checker waits for healthy API;
 - Web starts independently;
@@ -1011,7 +1041,7 @@ Once this written specification is approved, the following decisions are locked 
 - **DL-005:** Canonical host requirements are Git + Docker + Docker Compose >= 2.22.0; host Go/Rust/Node are not required.
 - **DL-006:** PostgreSQL local state uses a project-scoped named volume; reset is explicit through `down -v`.
 - **DL-007:** Default topology is private-network only; no host ports are published.
-- **DL-008:** Readiness is service-specific and deterministic; canonical startup uses Compose `--wait`; arbitrary sleeps are forbidden.
+- **DL-008:** Readiness is service-specific and deterministic; PostgreSQL and placeholders use explicit Compose healthchecks, placeholder readiness combines running-container lifecycle with the readiness marker, canonical startup uses Compose `--wait`, and arbitrary sleeps are forbidden.
 - **DL-009:** A single generic placeholder image is used; runtime-specific placeholder Dockerfiles are forbidden.
 - **DL-010:** Local DB configuration uses zero-config development defaults with optional gitignored `.env` override; no real secrets.
 - **DL-011:** Canonical lifecycle is direct `docker compose`; no Make/just/custom CLI abstraction.
