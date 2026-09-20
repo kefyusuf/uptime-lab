@@ -186,9 +186,11 @@ jobs:
           go vet ./...
           go test ./...
 
-      - name: Prove Task 4 migration RED
+      - name: Verify PostgreSQL migrations
         working-directory: apps/api
-        run: go test -tags=integration ./migrations
+        run: |
+          bash -n ../../scripts/ci/run-go-postgres-tests.sh
+          go test -tags=integration ./migrations
 
   gate:
     name: CI / gate
