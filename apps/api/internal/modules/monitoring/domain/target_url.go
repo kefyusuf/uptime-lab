@@ -3,6 +3,7 @@ package domain
 import (
 	"fmt"
 	"net/url"
+	"strings"
 )
 
 // TargetURL is the validated HTTP(S) target registered for a monitor.
@@ -20,7 +21,8 @@ func NewTargetURL(raw string) (TargetURL, error) {
 		return TargetURL{}, fmt.Errorf("%w: %v", ErrInvalidTargetURL, err)
 	}
 
-	if !parsed.IsAbs() || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+	if !parsed.IsAbs() ||
+		(!strings.EqualFold(parsed.Scheme, "http") && !strings.EqualFold(parsed.Scheme, "https")) {
 		return TargetURL{}, ErrInvalidTargetURL
 	}
 	if parsed.Hostname() == "" {
