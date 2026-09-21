@@ -60,6 +60,12 @@ case_success_path() {
   grep -Fq 'build' "$DOCKER_LOG" || return 1
   grep -Fq 'up -d --wait --wait-timeout 60' "$DOCKER_LOG" || return 1
   grep -Fq 'ps' "$DOCKER_LOG" || return 1
+  grep -Fq 'ps -q api' "$DOCKER_LOG" || return 1
+  grep -Fq 'inspect --format {{.State.Health.Status}} api-container' "$DOCKER_LOG" || return 1
+  grep -Fq 'exec -T api wget -q -O - http://127.0.0.1:8080/livez' "$DOCKER_LOG" || return 1
+  grep -Fq 'exec -T api wget -q -O - http://127.0.0.1:8080/readyz' "$DOCKER_LOG" || return 1
+  grep -Fq 'ps -q checker' "$DOCKER_LOG" || return 1
+  grep -Fq 'inspect --format {{.State.Health.Status}} checker-container' "$DOCKER_LOG" || return 1
   grep -Fq 'psql' "$DOCKER_LOG" || return 1
   grep -Fq 'POSTGRES_USER' "$DOCKER_LOG" || return 1
   grep -Fq 'POSTGRES_DB' "$DOCKER_LOG" || return 1
