@@ -4,21 +4,31 @@ A production-disciplined uptime monitoring laboratory built to exercise clear bo
 
 ## Status
 
-`uptime-lab` is in the foundation phase. The architecture is approved, but the application runtimes are not implemented yet. The repository should not be treated as a production-ready monitoring service.
+uptime-lab is still in the foundation phase and is not a production-ready monitoring service.
+
+The **Go Monitoring Foundation is implemented**: the repository contains the Go Control Plane runtime, immutable Monitoring registration/read application behavior, PostgreSQL persistence and migrations, operational health endpoints, Docker integration, and CI verification.
+
+The public product API, internal checker API, mutable monitor lifecycle, scheduling/results, Rust checker runtime, and React web runtime remain deferred. Web and Checker are still process-level placeholders in the canonical Docker Compose topology.
 
 ## Architecture
 
-- **React + TypeScript** owns presentation and browser interaction.
-- **Go** owns the modular-monolith control plane, domain/application rules, persistence ownership, and API semantics.
-- **Rust** owns bounded concurrent network probe execution through Ports and Adapters.
-- **PostgreSQL** will hold durable application state owned exclusively by the Go control plane.
-- **Docker Compose** is the canonical local-development substrate. The current Docker foundation runs PostgreSQL plus process-level placeholders; Go, Rust, and React runtimes remain unimplemented.
+- **React + TypeScript** owns presentation and browser interaction. Its runtime is not implemented yet.
+- **Go** owns the modular-monolith control plane, domain/application rules, PostgreSQL persistence ownership, migrations, and API semantics. The current runtime exposes operational health only.
+- **Rust** owns bounded concurrent network probe execution through Ports and Adapters. Its runtime is not implemented yet.
+- **PostgreSQL** holds durable application state owned exclusively by the Go Control Plane. The implemented Monitoring namespace currently contains only monitoring.monitors.
+- **Docker Compose** is the canonical local-development substrate. It runs PostgreSQL, the real Go API, and placeholder Web/Checker processes without publishing application host ports.
 
-The canonical architecture specification is [`docs/superpowers/specs/2026-09-17-uptime-lab-foundation-design.md`](docs/superpowers/specs/2026-09-17-uptime-lab-foundation-design.md).
+The canonical architecture specification is [docs/superpowers/specs/2026-09-17-uptime-lab-foundation-design.md](docs/superpowers/specs/2026-09-17-uptime-lab-foundation-design.md).
+
+The implemented Go foundation is documented in [docs/backend/go-control-plane.md](docs/backend/go-control-plane.md).
 
 ## Local Development
 
-See [`docs/devops/local-development.md`](docs/devops/local-development.md) for prerequisites, canonical Compose commands, persistence/reset semantics, worktree isolation, verification, and current limitations.
+See [docs/devops/local-development.md](docs/devops/local-development.md) for prerequisites, canonical Compose commands, explicit migrations, persistence/reset semantics, worktree isolation, verification, and current limitations.
+
+## Testing
+
+See [docs/testing/go-monitoring-foundation.md](docs/testing/go-monitoring-foundation.md) for the evidence model covering domain/application tests, architecture fitness functions, PostgreSQL integration, runtime lifecycle tests, Docker smoke, race detection, and vulnerability scanning.
 
 ## Engineering Principles
 
@@ -31,17 +41,17 @@ See [`docs/devops/local-development.md`](docs/devops/local-development.md) for p
 
 ## Repository Workflow
 
-`main` is the only long-lived branch. Changes use short-lived branches, pull requests, Conventional Commits, required CI, and squash merge.
+main is the only long-lived branch. Changes use short-lived branches, pull requests, Conventional Commits, required CI, and squash merge.
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`docs/devops/repository-governance.md`](docs/devops/repository-governance.md) once the repository-governance baseline is present.
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/devops/repository-governance.md](docs/devops/repository-governance.md).
 
 ## Documentation
 
-Start at [`docs/README.md`](docs/README.md).
+Start at [docs/README.md](docs/README.md).
 
 ## Security
 
-Read [`SECURITY.md`](SECURITY.md) before reporting a vulnerability or exposing an experimental build to untrusted networks.
+Read [SECURITY.md](SECURITY.md) before reporting a vulnerability or exposing an experimental build to untrusted networks.
 
 ## License
 
