@@ -41,6 +41,8 @@ assert_service_healthy() {
     printf 'Service %s health is %s, want healthy\n' "$service" "$health" >&2
     return 1
   }
+
+  printf 'Service %s health=%s\n' "$service" "$health"
 }
 
 assert_api_operational_health() {
@@ -61,6 +63,7 @@ assert_api_operational_health() {
     return 1
   }
 
+  printf 'API probes: livez=%s readyz=%s\n' "$livez" "$readyz"
   assert_service_healthy checker
 }
 
@@ -75,16 +78,22 @@ assert_api_operational_health
 
 PROBE_TABLE="public.__uptime_lab_local_dev_probe"
 
-compose exec -T db sh -lc   'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$1"'   sh "CREATE TABLE $PROBE_TABLE (id integer PRIMARY KEY); INSERT INTO $PROBE_TABLE (id) VALUES (1);"
+compose exec -T db sh -lc \
+  'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$1"' \
+  sh "CREATE TABLE $PROBE_TABLE (id integer PRIMARY KEY); INSERT INTO $PROBE_TABLE (id) VALUES (1);"
 
 compose down
 compose up -d --wait --wait-timeout 60
-PERSISTED="$(compose exec -T db sh -lc   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"'   sh "SELECT to_regclass('$PROBE_TABLE') IS NOT NULL;")"
+PERSISTED="$(compose exec -T db sh -lc \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"' \
+  sh "SELECT to_regclass('$PROBE_TABLE') IS NOT NULL;")"
 test "$PERSISTED" = "t"
 
 compose down -v --remove-orphans
 compose up -d --wait --wait-timeout 60
-RESET="$(compose exec -T db sh -lc   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"'   sh "SELECT to_regclass('$PROBE_TABLE') IS NULL;")"
+RESET="$(compose exec -T db sh -lc \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"' \
+  sh "SELECT to_regclass('$PROBE_TABLE') IS NULL;")"
 test "$RESET" = "t"
 
 cleanup
