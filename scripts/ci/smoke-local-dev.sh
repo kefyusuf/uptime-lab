@@ -67,7 +67,8 @@ assert_api_operational_health() {
 cleanup
 compose config --quiet
 "$ROOT/scripts/ci/check-local-dev.sh" "$ROOT"
-compose build
+compose build api
+compose build web checker
 compose up -d --wait --wait-timeout 60
 compose ps
 assert_api_operational_health
