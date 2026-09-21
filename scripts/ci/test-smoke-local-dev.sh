@@ -38,6 +38,28 @@ if [[ "$joined" == *"version --short"* ]]; then
   exit 0
 fi
 
+if [[ "$joined" == *"ps -q api"* ]]; then
+  printf 'api-container\n'
+  exit 0
+fi
+
+if [[ "$joined" == *"ps -q checker"* ]]; then
+  printf 'checker-container\n'
+  exit 0
+fi
+
+if [[ "$joined" == *"inspect --format {{.State.Health.Status}} api-container"* ]] || \
+   [[ "$joined" == *"inspect --format {{.State.Health.Status}} checker-container"* ]]; then
+  printf 'healthy\n'
+  exit 0
+fi
+
+if [[ "$joined" == *"exec -T api wget -q -O - http://127.0.0.1:8080/livez"* ]] || \
+   [[ "$joined" == *"exec -T api wget -q -O - http://127.0.0.1:8080/readyz"* ]]; then
+  printf 'ok\n'
+  exit 0
+fi
+
 if [[ "$joined" == *"psql"* && "$joined" == *"-Atc"* ]]; then
   printf 't\n'
   exit 0
