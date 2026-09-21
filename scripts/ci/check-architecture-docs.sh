@@ -18,6 +18,7 @@ REQUIRED_FILES=(
   docs/adr/0001-multi-runtime-monorepo.md
   docs/adr/0002-control-plane-and-execution-plane.md
   docs/adr/0003-contract-and-data-ownership.md
+  docs/backend/go-control-plane.md
 )
 
 fail() {
@@ -86,6 +87,7 @@ require_text docs/architecture/container-view.md 'Cross-runtime communication is
 require_text docs/architecture/dependency-rules.md 'Rust Checker -> PostgreSQL is forbidden.'
 require_text docs/architecture/dependency-rules.md 'Cross-runtime implementation-code sharing is forbidden.'
 require_text docs/architecture/data-ownership.md 'Go exclusively owns durable product state in PostgreSQL.'
+require_text docs/backend/go-control-plane.md 'Go Control Plane'
 
 sequence_count="$(grep -c '^sequenceDiagram$' "$ROOT/docs/architecture/runtime-flows.md" || true)"
 [[ "$sequence_count" -eq 4 ]] || fail "runtime-flows.md must contain exactly four sequenceDiagram blocks (found $sequence_count)"
@@ -93,7 +95,6 @@ sequence_count="$(grep -c '^sequenceDiagram$' "$ROOT/docs/architecture/runtime-f
 require_text docs/architecture/change-flow.md 'Configure HTTP Request Timeout'
 
 FORBIDDEN_DIRS=(
-  docs/backend
   docs/frontend
   docs/checker
 )
