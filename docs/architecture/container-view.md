@@ -88,8 +88,8 @@ No application host ports are published. API waits for healthy PostgreSQL; Check
 ~~~mermaid
 flowchart LR
     Web[Web placeholder]
-    Go[Go Control Plane
-operational HTTP only]
+    Go["`Go Control Plane
+operational HTTP only`"]
     Checker[Checker placeholder]
     DB[(PostgreSQL)]
 
