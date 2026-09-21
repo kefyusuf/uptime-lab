@@ -2,67 +2,115 @@
 
 **Architecture state:** Committed
 
-**Implementation state:** Conceptual boundaries only; runtime source trees are not implemented yet.
+**Implementation state:** Partial. The initial Go Monitoring module and platform runtime are implemented. Rust and React runtime boundaries remain architectural commitments only.
 
 ## Purpose
 
-This document defines ownership boundaries inside each runtime without inventing package, crate, or feature structures that do not yet exist. The goal is to make later implementation reviewable against stable responsibilities rather than to pre-create folders.
+This document defines ownership boundaries inside each runtime while distinguishing implemented code from deferred responsibilities.
 
 ## Go Control Plane
 
-The Go Control Plane is a modular monolith. A business module owns one coherent product capability and exposes behavior through an application-level boundary rather than through its persistence implementation.
+The Go Control Plane is a modular monolith. Business capability code lives under module-owned boundaries; platform runtime concerns remain separate.
 
-Each business module is expected to own:
+The implemented Monitoring source tree contains:
 
-- its domain model and invariants;
-- application use cases;
-- ports required from infrastructure;
-- persistence responsibility for its own state;
-- domain events representing completed domain facts;
-- externally exposed application behavior used by HTTP adapters or other modules.
+~~~text
+internal/modules/monitoring/
+├── domain/
+├── application/
+├── ports/
+├── adapters/postgres/
+└── module.go
 
-A Go business module does not own framework bootstrapping, generic infrastructure, or another module's persistence tables.
+internal/platform/
+├── config/
+├── database/
+├── httpserver/
+└── observability/
+~~~
 
-## Monitoring
+The dependency direction is enforced by repository-owned Go architecture fitness checks.
 
-Monitoring is the initial Go business capability.
+### Domain
 
-It will own monitor configuration semantics, monitor lifecycle rules, due-check coordination, normalized check-result interpretation, and the monitoring persistence boundary when the Go foundation is implemented.
+Monitoring domain code currently owns:
 
-This statement does not create Go directories, packages, tables, or endpoint schemas in the documentation phase.
+- MonitorID;
+- TargetURL;
+- immutable Monitor;
+- creation-time validation;
+- UTC creation-time normalization.
 
-## Future Business Modules
+TargetURL validation is syntactic only. It accepts absolute HTTP/HTTPS targets without userinfo or fragments and preserves the accepted original string. It performs no DNS/network resolution and makes no execution-safety claim.
 
-Capabilities such as Incidents and Notifications are examples of potential future modules. They are not implementation commitments and must not be scaffolded merely because they are plausible.
+### Application
 
-A future module is introduced only when a real product requirement justifies a separate ownership boundary.
+Monitoring currently exposes exactly two use cases:
+
+1. RegisterMonitor
+2. GetMonitor
+
+RegisterMonitor validates the target, receives a MonitorID from an injected ID generator, receives time from an injected clock, constructs one immutable Monitor, and calls repository Create.
+
+GetMonitor retrieves one monitor by identity and maps persistence failures into stable application errors.
+
+There is no enable/disable, update, delete, list, scheduling, due-work, result submission, history, or incident transition use case.
+
+### Ports
+
+The implemented persistence capability is intentionally narrow:
+
+~~~text
+MonitorRepository
+├── Create(ctx, monitor)
+└── ByID(ctx, id)
+~~~
+
+There is no generic Repository[T], Save method, Unit of Work, transaction manager, or global persistence base abstraction.
+
+### PostgreSQL Adapter
+
+The PostgreSQL adapter depends inward on Monitoring domain and ports and uses pgx only at the infrastructure boundary.
+
+It owns hand-written SQL for monitoring.monitors and maps pgx.ErrNoRows into the module-owned not-found signal. Other database failures remain infrastructure errors and do not become application contracts.
+
+### Module Composition
+
+monitoring.Module groups RegisterMonitor and GetMonitor when supplied with:
+
+- MonitorRepository;
+- application ID generator;
+- Clock.
+
+It does not create platform resources or read environment variables.
+
+The production cmd/api binary intentionally does not construct this module yet because no product HTTP/internal transport consumes it. This avoids dead service wiring.
+
+## Deferred Monitoring Responsibilities
+
+The broader committed Monitoring capability will eventually include lifecycle, scheduling/due-work coordination, normalized result interpretation, and additional persistence behavior.
+
+Those responsibilities are **not implemented** in the current foundation.
+
+Before mutable lifecycle is added, concurrency, idempotency/no-op behavior, and persistence semantics must be designed explicitly.
 
 ## Rust Checker
 
-The Rust Checker is not a DDD modular monolith. It is an execution runtime organized around Ports and Adapters.
+The Rust Checker is not implemented yet. The future execution runtime remains organized around Ports and Adapters and will own bounded network execution.
 
-The conceptual responsibilities are:
-
-- **checker core** — execution policy, normalized probe concepts, and inward-facing ports;
-- **protocol probe adapters** — HTTP initially, with other protocols introduced only when required;
-- **control-plane client adapter** — mapping between internal contract representations and checker-core concepts;
-- **binary/composition root** — configuration, dependency construction, lifecycle, and worker loop ownership.
-
-Adapter-specific HTTP client errors, transport types, and framework/library details do not belong in checker-core semantics.
+Rust adapters must not own product/domain decisions and must never access PostgreSQL directly.
 
 ## Frontend
 
-The Web Client uses feature/domain-oriented boundaries rather than backend-style Clean Architecture folders.
+The React/TypeScript runtime is not implemented yet.
 
-The committed dependency direction is:
+The committed frontend dependency direction remains:
 
-```text
+~~~text
 app -> pages -> widgets -> features -> entities -> shared
-```
+~~~
 
-Higher layers may compose lower layers. Lower layers must not import from higher layers. `shared` is frontend-local technical reuse, not a cross-runtime business model.
-
-Concrete pages, features, state-management libraries, and generated API clients remain deferred to the frontend foundation.
+No frontend package tree is created merely to mirror this architecture before the runtime exists.
 
 ## Cross-Boundary Rules
 
@@ -79,14 +127,15 @@ The following rules are normative:
 
 ## Extension Without Premature Distribution
 
-The modular monolith is intentionally designed so a business capability can later be extracted if measurable scale, deployment, reliability, or ownership requirements justify that cost.
+The modular monolith preserves a future extraction path, but service extraction is not a current goal.
 
-Service extraction is not a current goal. The architecture prefers strong module boundaries inside one Control Plane process over early service decomposition.
+Strong in-process module boundaries are preferred over premature distribution.
 
 ## Related Decisions
 
 - [Container View](container-view.md)
 - [Dependency Rules](dependency-rules.md)
 - [Data Ownership](data-ownership.md)
+- [Go Control Plane](../backend/go-control-plane.md)
 - [ADR-0001: Multi-runtime monorepo](../adr/0001-multi-runtime-monorepo.md)
 - [ADR-0002: Control plane and execution plane](../adr/0002-control-plane-and-execution-plane.md)
