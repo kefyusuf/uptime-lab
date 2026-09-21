@@ -16,12 +16,18 @@ expect_failure() { local n="$1"; shift; if "$@" >/dev/null 2>&1; then fail "$n";
 
 make_fixture() {
   rm -rf "$TMP/repo"
-  mkdir -p "$TMP/repo/docs/architecture" "$TMP/repo/docs/adr"
+  mkdir -p "$TMP/repo/docs/architecture" "$TMP/repo/docs/adr" "$TMP/repo/docs/backend"
 
   cat > "$TMP/repo/docs/README.md" <<'DOC'
 # Documentation
 
 See [Architecture](architecture/README.md).
+DOC
+
+  cat > "$TMP/repo/docs/backend/go-control-plane.md" <<'DOC'
+# Go Control Plane
+
+The Go Control Plane foundation is implemented.
 DOC
 
   cat > "$TMP/repo/docs/glossary.md" <<'DOC'
@@ -216,8 +222,12 @@ sed -i '0,/^sequenceDiagram$/{/^sequenceDiagram$/d;}' "$TMP/repo/docs/architectu
 expect_failure "only three sequence diagrams fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
-mkdir -p "$TMP/repo/docs/backend"
-expect_failure "speculative backend docs directory fails" "$CHECKER" "$TMP/repo"
+rm "$TMP/repo/docs/backend/go-control-plane.md"
+expect_failure "missing implemented Go backend documentation fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+mkdir -p "$TMP/repo/docs/frontend"
+expect_failure "speculative frontend docs directory fails" "$CHECKER" "$TMP/repo"
 
 printf '\nArchitecture documentation tests: %d passed, %d failed\n' "$PASS" "$FAIL"
 test "$FAIL" -eq 0
