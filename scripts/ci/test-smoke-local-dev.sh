@@ -79,7 +79,8 @@ case_success_path() {
 
   grep -Fq 'version --short' "$DOCKER_LOG" || return 1
   grep -Fq 'config --quiet' "$DOCKER_LOG" || return 1
-  grep -Fq 'build' "$DOCKER_LOG" || return 1
+  grep -Fq 'build api' "$DOCKER_LOG" || return 1
+  grep -Fq 'build web checker' "$DOCKER_LOG" || return 1
   grep -Fq 'up -d --wait --wait-timeout 60' "$DOCKER_LOG" || return 1
   grep -Fq 'ps' "$DOCKER_LOG" || return 1
   grep -Fq 'ps -q api' "$DOCKER_LOG" || return 1
