@@ -107,6 +107,7 @@ make_fixture() {
   rm -rf "$TMP/repo"
   mkdir -p "$TMP/repo/deploy/docker/placeholder" "$TMP/repo/apps/api"
   printf 'module github.com/kefyusuf/uptime-lab/apps/api\n\ngo 1.27.1\n' > "$TMP/repo/apps/api/go.mod"
+  : > "$TMP/repo/apps/api/go.sum"
 
   cat > "$TMP/repo/compose.yaml" <<'YAML'
 services:
@@ -141,18 +142,25 @@ services:
       start_period: 3s
 
   api:
-    build: ./deploy/docker/placeholder
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
     environment:
-      SERVICE_NAME: api
+      UPTIME_LAB_HTTP_ADDR: ":8080"
+      UPTIME_LAB_LOG_LEVEL: info
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: ${POSTGRES_DB:-uptime_lab}
+      PGUSER: ${POSTGRES_USER:-uptime_lab}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-uptime_lab_local}
+      PGSSLMODE: disable
     init: true
     read_only: true
-    tmpfs:
-      - /run/uptime-lab:uid=10001,gid=10001,mode=0700
     healthcheck:
-      test: ["CMD-SHELL", "test -f /run/uptime-lab/ready"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/readyz"]
       interval: 2s
-      timeout: 1s
-      retries: 10
+      timeout: 2s
+      retries: 15
       start_period: 2s
     depends_on:
       db:
@@ -200,10 +208,30 @@ set -eu
 : > /run/uptime-lab/ready
 exec tail -f /dev/null
 SH
+
+  cat > "$TMP/repo/apps/api/Dockerfile" <<'DOCKER'
+FROM golang:1.27.1-alpine3.24 AS builder
+WORKDIR /src/apps/api
+COPY apps/api/go.mod apps/api/go.sum ./
+RUN go mod download
+COPY apps/api/ ./
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -buildvcs=false -o /out/uptime-lab-api ./cmd/api \
+    && CGO_ENABLED=0 GOOS=linux go build -trimpath -buildvcs=false -o /out/uptime-lab-migrate ./cmd/migrate
+
+FROM alpine:3.24.2
+RUN apk add --no-cache ca-certificates \
+    && addgroup -S -g 10001 uptime \
+    && adduser -S -D -H -u 10001 -G uptime uptime
+COPY --from=builder /out/uptime-lab-api /usr/local/bin/uptime-lab-api
+COPY --from=builder /out/uptime-lab-migrate /usr/local/bin/uptime-lab-migrate
+RUN chmod 0555 /usr/local/bin/uptime-lab-api /usr/local/bin/uptime-lab-migrate
+USER 10001:10001
+ENTRYPOINT ["/usr/local/bin/uptime-lab-api"]
+DOCKER
 }
 
 make_fixture
-expect_success "canonical fixture passes" "$CHECKER" "$TMP/repo"
+expect_success "canonical real-API fixture passes" "$CHECKER" "$TMP/repo"
 
 make_fixture
 remove_service_block "$TMP/repo/compose.yaml" checker
@@ -231,32 +259,23 @@ insert_after_line "$TMP/repo/compose.yaml" "  web:" "    network_mode: host"
 expect_failure "host network mode fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
-replace_literal_once "$TMP/repo/compose.yaml" \
-  "postgres-data:/var/lib/postgresql" \
-  "postgres-data:/var/lib/postgresql/data"
+replace_literal_once "$TMP/repo/compose.yaml" "postgres-data:/var/lib/postgresql" "postgres-data:/var/lib/postgresql/data"
 expect_failure "PostgreSQL old data mount fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
-mutate_service_line "$TMP/repo/compose.yaml" api \
-  "        condition: service_healthy" \
-  "        condition: service_started"
+mutate_service_line "$TMP/repo/compose.yaml" api "        condition: service_healthy" "        condition: service_started"
 expect_failure "API missing db service_healthy fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
-mutate_service_line "$TMP/repo/compose.yaml" checker \
-  "        condition: service_healthy" \
-  "        condition: service_started"
+mutate_service_line "$TMP/repo/compose.yaml" checker "        condition: service_healthy" "        condition: service_started"
 expect_failure "Checker missing api service_healthy fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
-insert_after_line "$TMP/repo/compose.yaml" "  web:" \
-  $'    depends_on:\n      api:\n        condition: service_healthy'
+insert_after_line "$TMP/repo/compose.yaml" "  web:" $'    depends_on:\n      api:\n        condition: service_healthy'
 expect_failure "Web hard dependency fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
-replace_literal_once "$TMP/repo/compose.yaml" \
-  "image: postgres:18.6-alpine3.24" \
-  "image: postgres:latest"
+replace_literal_once "$TMP/repo/compose.yaml" "image: postgres:18.6-alpine3.24" "image: postgres:latest"
 expect_failure "floating latest image fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
@@ -277,22 +296,90 @@ printf '{"private":true}\n' > "$TMP/repo/apps/web/package.json"
 expect_failure "future web runtime scaffold fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
-mutate_service_line "$TMP/repo/compose.yaml" web \
-  "    healthcheck:" \
-  "    x-healthcheck:"
+mutate_service_line "$TMP/repo/compose.yaml" web "    healthcheck:" "    x-healthcheck:"
 expect_failure "placeholder missing explicit healthcheck fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
-mutate_service_line "$TMP/repo/compose.yaml" web \
-  '      test: ["CMD-SHELL", "test -f /run/uptime-lab/ready"]' \
-  '      test: ["CMD-SHELL", "test -f /run/uptime-lab/not-ready"]'
+mutate_service_line "$TMP/repo/compose.yaml" web '      test: ["CMD-SHELL", "test -f /run/uptime-lab/ready"]' '      test: ["CMD-SHELL", "test -f /run/uptime-lab/not-ready"]'
 expect_failure "placeholder healthcheck without readiness marker fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
-replace_literal_once "$TMP/repo/compose.yaml" \
-  '      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]' \
-  '      test: ["CMD-SHELL", "test -f /tmp/db-ready"]'
+replace_literal_once "$TMP/repo/compose.yaml" '      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]' '      test: ["CMD-SHELL", "test -f /tmp/db-ready"]'
 expect_failure "PostgreSQL healthcheck without pg_isready fails" "$CHECKER" "$TMP/repo"
 
+make_fixture
+replace_literal_once "$TMP/repo/compose.yaml" $'    build:\n      context: .\n      dockerfile: apps/api/Dockerfile' '    build: ./deploy/docker/placeholder'
+expect_failure "API placeholder build fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+replace_literal_once "$TMP/repo/compose.yaml" "      dockerfile: apps/api/Dockerfile" "      dockerfile: deploy/docker/placeholder/Dockerfile"
+expect_failure "API wrong Dockerfile path fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+mutate_service_line "$TMP/repo/compose.yaml" api "    init: true" ""
+expect_failure "API missing init fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+mutate_service_line "$TMP/repo/compose.yaml" api "    read_only: true" ""
+expect_failure "API missing read_only fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+mutate_service_line "$TMP/repo/compose.yaml" api "      PGHOST: db" ""
+expect_failure "API missing PGHOST fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+mutate_service_line "$TMP/repo/compose.yaml" api '      PGDATABASE: ${POSTGRES_DB:-uptime_lab}' ""
+expect_failure "API missing PGDATABASE fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+mutate_service_line "$TMP/repo/compose.yaml" api '      PGUSER: ${POSTGRES_USER:-uptime_lab}' ""
+expect_failure "API missing PGUSER fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+mutate_service_line "$TMP/repo/compose.yaml" api '      UPTIME_LAB_HTTP_ADDR: ":8080"' ""
+expect_failure "API missing HTTP address fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+replace_literal_once "$TMP/repo/compose.yaml" "http://127.0.0.1:8080/readyz" "http://127.0.0.1:8080/livez"
+expect_failure "API healthcheck without readyz fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+mutate_service_line "$TMP/repo/compose.yaml" api '      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/readyz"]' '      test: ["CMD-SHELL", "test -f /run/uptime-lab/ready"]'
+expect_failure "API placeholder readiness marker fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+replace_literal_once "$TMP/repo/apps/api/Dockerfile" "FROM golang:1.27.1-alpine3.24 AS builder" "FROM golang:latest AS builder"
+expect_failure "API floating builder image fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+replace_literal_once "$TMP/repo/apps/api/Dockerfile" "FROM alpine:3.24.2" "FROM alpine:latest"
+expect_failure "API floating runtime image fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+replace_literal_once "$TMP/repo/apps/api/Dockerfile" "USER 10001:10001" "# USER intentionally omitted"
+expect_failure "API Dockerfile missing non-root USER fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+mkdir -p "$TMP/repo/apps/checker"
+printf 'module example.invalid/checker\n' > "$TMP/repo/apps/checker/go.mod"
+expect_failure "future checker runtime scaffold fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+printf 'module example.invalid/root\n' > "$TMP/repo/go.mod"
+expect_failure "root go.mod fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+replace_literal_once "$TMP/repo/apps/api/Dockerfile" "COPY --from=builder /out/uptime-lab-migrate /usr/local/bin/uptime-lab-migrate" "# migration binary copy intentionally omitted"
+expect_failure "API Dockerfile missing migrate binary fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+replace_literal_once "$TMP/repo/apps/api/Dockerfile" 'ENTRYPOINT ["/usr/local/bin/uptime-lab-api"]' 'ENTRYPOINT ["/usr/local/bin/uptime-lab-migrate"]'
+expect_failure "API Dockerfile wrong default entrypoint fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+replace_literal_once "$TMP/repo/apps/api/Dockerfile" "apk add --no-cache ca-certificates" "apk add --no-cache busybox"
+expect_failure "API runtime missing CA certificates fails" "$CHECKER" "$TMP/repo"
+
 printf '\nLocal development tests: %d passed, %d failed\n' "$PASS" "$FAIL"
+test "$PASS" -eq 37
 test "$FAIL" -eq 0
