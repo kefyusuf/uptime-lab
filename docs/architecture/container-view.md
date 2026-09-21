@@ -2,109 +2,148 @@
 
 **Architecture state:** Committed
 
-**Implementation state:** Planned runtime topology; runtime foundations are not implemented yet.
+**Implementation state:** Partial. PostgreSQL and the Go Control Plane operational runtime are implemented. Web and Checker remain placeholders. Public product and internal checker transport contracts are deferred.
 
 ## Purpose
 
-This document is the C4 Level 2 view for `uptime-lab`. It defines the runtime/container responsibilities that later implementation must preserve. It describes semantic relationships, not final endpoint paths or framework-specific internals.
+This document is the C4 Level 2 view for uptime-lab. It distinguishes the committed end-state ownership relationships from the runtime surface that is actually implemented today.
 
 ## Containers and Responsibilities
 
 ### Web Client — React + TypeScript
 
-The Web Client owns browser presentation and user interaction. It consumes the public product contract exposed by the Go Control Plane. It does not own durable business state and it does not execute monitoring probes.
+The Web Client owns browser presentation and user interaction in the committed architecture. The React runtime is not implemented yet; the current Compose web service is a non-root placeholder.
+
+The future browser will consume a public product contract exposed by Go. That public product contract does not exist in the current Go Monitoring Foundation.
 
 The browser never accesses PostgreSQL directly.
 
 ### Control Plane — Go
 
-The Go runtime owns product/domain coordination, public and internal API semantics, monitor lifecycle behavior, scheduling decisions, durable persistence ownership, and normalization of execution results into product state.
+The Go Control Plane is implemented as the current real application runtime.
+
+Implemented responsibilities include:
+
+- immutable Monitoring domain values;
+- RegisterMonitor and GetMonitor application use cases;
+- a Monitoring create/read repository port;
+- PostgreSQL persistence for monitoring.monitors;
+- explicit goose-backed migrations;
+- typed runtime configuration and structured logging;
+- operational GET /livez and GET /readyz endpoints;
+- graceful server lifecycle and PostgreSQL readiness checks.
+
+The production API binary intentionally does not construct the Monitoring repository/module/use cases yet because there is no product transport consumer. No /monitors endpoint exists.
 
 Go exclusively owns durable product state in PostgreSQL.
 
-The Control Plane coordinates monitoring work but does not own low-level network probe execution.
+The Control Plane does not own low-level network probe execution.
 
 ### Checker / Execution Plane — Rust
 
-The Rust runtime owns bounded network execution. It obtains due work through the internal control boundary, executes protocol-specific probes under explicit budgets, and submits normalized results back to Go.
+The Rust execution runtime is not implemented yet. The current Compose checker service is a hardened placeholder that starts only after the real Go API becomes healthy.
+
+The committed Rust runtime will own bounded network execution and will obtain work/submit normalized results through a future internal Go contract.
 
 Rust never accesses PostgreSQL directly.
 
-Raw transport behavior remains inside the execution boundary; product/domain interpretation belongs to the Control Plane.
-
 ### PostgreSQL
 
-PostgreSQL is the durable application store owned exclusively through the Go Control Plane. Future schemas may align with Go business-module ownership, beginning with the Monitoring capability.
+PostgreSQL is the durable application store owned exclusively through Go.
 
-No browser or checker code may use PostgreSQL as an integration shortcut.
+The implemented application schema is intentionally minimal:
+
+~~~text
+monitoring.monitors
+├── id uuid PRIMARY KEY
+├── target_url text NOT NULL
+└── created_at timestamptz NOT NULL
+~~~
+
+No enabled flag, updated_at/version field, scheduling table, check_runs table, or monitor_states table is implemented in this foundation.
 
 ### External HTTP/HTTPS Target
 
-The monitored target is external and untrusted. The checker reaches it through bounded outbound execution rather than exposing target behavior directly to the rest of the system.
+The monitored target remains external and untrusted.
+
+Current Go TargetURL validation is only syntactic registration validation. No probe is executed in this milestone, and URL acceptance must not be interpreted as SSRF safety. DNS resolution, private/reserved-network blocking, redirect safety, rebinding protection, timeouts, and response budgets belong to the future Rust execution boundary.
 
 ### Docker Compose
 
-Docker Compose is committed as the future canonical local orchestration topology. It is infrastructure, not a domain/runtime owner, and its implementation belongs to a later foundation phase.
+Docker Compose is the implemented canonical local-development topology.
 
-## Container Diagram
+It runs exactly four services:
 
-```mermaid
+~~~text
+web      placeholder
+db       PostgreSQL
+api      real Go Control Plane
+checker  placeholder
+~~~
+
+No application host ports are published. API waits for healthy PostgreSQL; Checker waits for real API readiness.
+
+## Current Runtime Diagram
+
+~~~mermaid
 flowchart LR
-    User[User / Operator]
-    Web[Web Client\nReact + TypeScript]
-    Go[Control Plane\nGo]
-    Rust[Checker / Execution Plane\nRust]
+    Web[Web placeholder]
+    Go["`Go Control Plane
+operational HTTP only`"]
+    Checker[Checker placeholder]
     DB[(PostgreSQL)]
-    Target[External HTTP/HTTPS Target]
 
-    User --> Web
-    Web -->|Public product API| Go
-    Rust -->|Internal control API| Go
-    Go -->|Owned persistence| DB
-    Rust -->|Bounded probe execution| Target
-```
+    Go -->|owned persistence| DB
+    DB -->|service health prerequisite| Go
+    Go -->|service health prerequisite| Checker
+~~~
 
-## Relationship Semantics
+## Committed Cross-Runtime Relationships
 
-The relationship labels are architectural contracts:
+The following architectural relationships remain committed but are not all implemented yet:
 
-| Relationship | Meaning |
+| Relationship | Current state |
 |---|---|
-| Web -> Go: Public product API | User-facing configuration and query semantics are owned by Go and consumed by the browser. |
-| Rust -> Go: Internal control API | Work assignment and normalized result submission cross the process boundary through a controlled internal contract. |
-| Go -> PostgreSQL: Owned persistence | Durable product state is written and read only through Go-owned persistence boundaries. |
-| Rust -> Target: Bounded probe execution | External network execution is isolated in Rust and must obey security/resource budgets. |
-
-The initial transport is expected to be HTTP, but endpoint paths and schema shapes are deferred to the contract foundation.
-
-## Ownership Rules
+| Web -> Go: Public product API | Deferred; no product endpoint exists. |
+| Rust -> Go: Internal control API | Deferred; Rust is still a placeholder. |
+| Go -> PostgreSQL: Owned persistence | Implemented for Monitoring create/read state. |
+| Rust -> Target: Bounded probe execution | Deferred; no probe execution runtime exists. |
 
 Cross-runtime communication is contract-driven.
 
-The following ownership rules are normative:
+PostgreSQL is never used as a cross-runtime integration bus.
+
+## Operational Health
+
+The implemented Go HTTP surface is operational only:
+
+- GET /livez proves the process HTTP server is alive and does not touch PostgreSQL.
+- GET /readyz performs a bounded PostgreSQL connectivity check.
+
+Readiness does **not** claim migration/schema compatibility yet. Product endpoints must not be introduced until that compatibility question is decided by the later contract/API foundation.
+
+## Ownership Rules
 
 - Web owns presentation and interaction, not product persistence.
 - Go owns business/domain coordination and durable product state.
 - Rust owns bounded network execution, not product persistence.
-- PostgreSQL is not a cross-runtime integration bus.
 - External targets are never trusted as internal system components.
-
-## Planned Local Orchestration
-
-The future local development topology will run the Web Client, Go Control Plane, Rust Checker, and PostgreSQL under Docker Compose. This architecture document commits the relationship, not the compose file, image strategy, health checks, or development lifecycle implementation.
+- No browser or checker code may use PostgreSQL as an integration shortcut.
 
 ## Security Boundaries
 
-There are three important trust transitions:
+The committed system has three trust transitions:
 
-1. browser input entering the public Control Plane boundary;
-2. internal work/result data crossing between Go and Rust;
-3. untrusted target/DNS/network behavior entering the Rust execution boundary.
+1. browser input entering a future public Go product boundary;
+2. internal work/result data crossing a future Go/Rust contract;
+3. untrusted target/DNS/network behavior entering the future Rust execution boundary.
 
-The third boundary is especially security-sensitive because it carries SSRF, redirect, DNS rebinding, private-network, cloud-metadata, timeout, response-size, and concurrency risks.
+Only the Go operational runtime and PostgreSQL persistence boundary are implemented in the current foundation.
 
 ## Related Decisions
 
+- [Module Boundaries](module-boundaries.md)
+- [Data Ownership](data-ownership.md)
 - [ADR-0001: Multi-runtime monorepo](../adr/0001-multi-runtime-monorepo.md)
 - [ADR-0002: Control plane and execution plane](../adr/0002-control-plane-and-execution-plane.md)
 - [ADR-0003: Contract and data ownership](../adr/0003-contract-and-data-ownership.md)

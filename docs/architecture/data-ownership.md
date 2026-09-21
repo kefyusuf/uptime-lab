@@ -2,7 +2,7 @@
 
 **Architecture state:** Committed
 
-**Implementation state:** Ownership is committed; concrete schemas, tables, and migrations are deferred to the persistence foundation.
+**Implementation state:** Implemented for the initial Monitoring create/read persistence surface. Broader product schemas remain deferred.
 
 ## Primary Ownership Rule
 
@@ -14,66 +14,121 @@ PostgreSQL is a persistence mechanism behind Go-owned boundaries. It is not a sh
 
 ### Web Client
 
-The browser reads or changes product state through the public Go contract. It never accesses PostgreSQL directly and does not derive product state by reading database representations.
+The React runtime is not implemented yet. The future browser reads or changes product state through the public Go contract and never accesses PostgreSQL directly.
 
 ### Rust Checker
 
-The checker obtains work and submits normalized results through the internal Go contract. It never accesses PostgreSQL directly, even if direct database access could appear operationally simpler.
+The Rust runtime is not implemented yet. The future checker obtains work and submits normalized results through the internal Go contract and never accesses PostgreSQL directly.
 
 ### Go Control Plane
 
-Go owns transaction boundaries, schema access, persistence mapping, migrations, and the interpretation of durable product state.
+Go owns schema access, persistence mapping, migrations, and interpretation of durable product state.
+
+The implemented production API runtime creates a PostgreSQL pool but exposes no product data endpoints yet.
+
+## Monitoring Schema
+
+The initial module-owned namespace is implemented:
+
+~~~text
+monitoring
+~~~
+
+The current application table is exactly:
+
+~~~sql
+CREATE TABLE monitoring.monitors (
+    id uuid PRIMARY KEY,
+    target_url text NOT NULL,
+    created_at timestamptz NOT NULL
+);
+~~~
+
+The schema intentionally does **not** include:
+
+- enabled;
+- updated_at;
+- version/concurrency columns;
+- target_url uniqueness;
+- scheduling/due-work tables;
+- check_runs;
+- monitor_states;
+- incidents.
+
+Duplicate target URLs are allowed.
+
+## Persistence Boundary
+
+Monitoring owns a create/read repository port and a concrete pgx adapter.
+
+The adapter:
+
+- inserts the application-assigned UUID;
+- reads UUID text and reconstructs MonitorID explicitly;
+- preserves TargetURL text;
+- preserves creation instants with UTC domain semantics;
+- maps no-row behavior into a Monitoring-owned not-found signal;
+- does not expose pgx errors as application contracts.
+
+No update/delete/list query or transaction abstraction exists yet.
+
+## Migrations
+
+Versioned SQL migrations live under apps/api/migrations and are executed through the separate uptime-lab-migrate binary.
+
+Supported migration commands are:
+
+~~~text
+up
+down
+status
+~~~
+
+API startup does **not** auto-apply migrations.
+
+The migration command uses pgx/libpq-compatible PostgreSQL configuration and goose as a library. Migration metadata is platform infrastructure and is not Monitoring business state.
+
+The current migration is real-PostgreSQL verified for up/down/up behavior.
 
 ## Go Module Ownership
 
-Within the modular monolith, each business module owns its persistence boundary. A module's tables are implementation detail of that module, not a cross-module API.
+Within the modular monolith, a business module's tables are implementation details of that module, not a cross-module API.
 
 A module may not query another module's tables to bypass the owning module's application boundary.
 
-Cross-module SQL reads are forbidden unless a future accepted architecture decision explicitly replaces this rule with a new integration model.
+Cross-module SQL reads remain forbidden unless a future accepted architecture decision replaces this rule.
 
 ## Cross-Module Integration
 
-A business module may interact with another module through:
+A future business module may interact through:
 
-1. a declared application-level interface for synchronous behavior; or
-2. a domain/integration event when asynchronous decoupling is justified by an actual requirement.
+1. a declared application-level interface; or
+2. a domain/integration event when asynchronous decoupling is justified by a concrete requirement.
 
-An integration event is not automatically required merely because modules are separate. In-process application boundaries are preferred while the system remains a modular monolith.
-
-## Initial Monitoring Namespace
-
-The initial intended PostgreSQL namespace is:
-
-```text
-monitoring.*
-```
-
-This names ownership, not a final schema. Concrete tables, columns, indexes, migration tooling, and data-retention policies belong to the Go/persistence implementation plan.
+An event bus is not required merely because modules are separate. No Kafka, RabbitMQ, Redis broker, outbox, or event-sourcing infrastructure is part of this foundation.
 
 ## Extraction Consequence
 
-Clear data ownership preserves an extraction path. If Monitoring or another module later requires an independent process, its state ownership and integration boundary are already identifiable instead of being hidden in cross-module SQL coupling.
+Clear ownership preserves a future extraction path. That option is a consequence of modular boundaries, not a roadmap commitment.
 
-That option is a consequence of good boundaries, not a roadmap commitment: service extraction is not a current goal.
+## Deferred Persistence Decisions
 
-## Non-goals
+The current foundation does not define:
 
-This document does not define:
+- mutable lifecycle concurrency semantics;
+- read replicas;
+- partitioning/sharding;
+- retention/archival policy;
+- product history/check-result schemas;
+- broker/outbox topology;
+- production deployment migration orchestration.
 
-- table or column schemas;
-- migration syntax or migration tooling;
-- transaction isolation level;
-- read replicas, partitioning, sharding, or database clustering;
-- event sourcing;
-- a broker or outbox implementation;
-- retention or archival policy.
-
-Those decisions require concrete workload or product requirements.
+Those require concrete product/workload requirements.
 
 ## Related Decisions
 
 - [Container View](container-view.md)
 - [Module Boundaries](module-boundaries.md)
 - [Dependency Rules](dependency-rules.md)
+- [Go Control Plane](../backend/go-control-plane.md)
 - [ADR-0003: Contract and data ownership](../adr/0003-contract-and-data-ownership.md)

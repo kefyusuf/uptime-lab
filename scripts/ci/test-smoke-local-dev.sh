@@ -38,6 +38,28 @@ if [[ "$joined" == *"version --short"* ]]; then
   exit 0
 fi
 
+if [[ "$joined" == *"ps -q api"* ]]; then
+  printf 'api-container\n'
+  exit 0
+fi
+
+if [[ "$joined" == *"ps -q checker"* ]]; then
+  printf 'checker-container\n'
+  exit 0
+fi
+
+if [[ "$joined" == *"inspect --format {{.State.Health.Status}} api-container"* ]] || \
+   [[ "$joined" == *"inspect --format {{.State.Health.Status}} checker-container"* ]]; then
+  printf 'healthy\n'
+  exit 0
+fi
+
+if [[ "$joined" == *"exec -T api wget -q -O - http://127.0.0.1:8080/livez"* ]] || \
+   [[ "$joined" == *"exec -T api wget -q -O - http://127.0.0.1:8080/readyz"* ]]; then
+  printf 'ok\n'
+  exit 0
+fi
+
 if [[ "$joined" == *"psql"* && "$joined" == *"-Atc"* ]]; then
   printf 't\n'
   exit 0
@@ -57,9 +79,16 @@ case_success_path() {
 
   grep -Fq 'version --short' "$DOCKER_LOG" || return 1
   grep -Fq 'config --quiet' "$DOCKER_LOG" || return 1
-  grep -Fq 'build' "$DOCKER_LOG" || return 1
+  grep -Fq 'build api' "$DOCKER_LOG" || return 1
+  grep -Fq 'build web checker' "$DOCKER_LOG" || return 1
   grep -Fq 'up -d --wait --wait-timeout 60' "$DOCKER_LOG" || return 1
   grep -Fq 'ps' "$DOCKER_LOG" || return 1
+  grep -Fq 'ps -q api' "$DOCKER_LOG" || return 1
+  grep -Fq 'inspect --format {{.State.Health.Status}} api-container' "$DOCKER_LOG" || return 1
+  grep -Fq 'exec -T api wget -q -O - http://127.0.0.1:8080/livez' "$DOCKER_LOG" || return 1
+  grep -Fq 'exec -T api wget -q -O - http://127.0.0.1:8080/readyz' "$DOCKER_LOG" || return 1
+  grep -Fq 'ps -q checker' "$DOCKER_LOG" || return 1
+  grep -Fq 'inspect --format {{.State.Health.Status}} checker-container' "$DOCKER_LOG" || return 1
   grep -Fq 'psql' "$DOCKER_LOG" || return 1
   grep -Fq 'POSTGRES_USER' "$DOCKER_LOG" || return 1
   grep -Fq 'POSTGRES_DB' "$DOCKER_LOG" || return 1
