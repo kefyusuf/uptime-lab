@@ -28,7 +28,7 @@ fi
 LOCAL_DEV=false
 while IFS= read -r path; do
   case "$path" in
-    compose.yaml|.env.example|deploy/docker/*|\
+    compose.yaml|.env.example|apps/api/*|deploy/docker/*|\
     scripts/ci/detect-local-dev-changes.sh|scripts/ci/test-detect-local-dev-changes.sh|\
     scripts/ci/check-local-dev.sh|scripts/ci/test-check-local-dev.sh|\
     scripts/ci/smoke-local-dev.sh|scripts/ci/test-smoke-local-dev.sh|\
