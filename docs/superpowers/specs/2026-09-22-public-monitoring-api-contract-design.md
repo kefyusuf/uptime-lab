@@ -1,9 +1,9 @@
 # Public Monitoring API Contract Design
 
-**Status:** Review candidate  
-**Date:** 2026-09-22  
-**Repository:** `kefyusuf/uptime-lab`  
-**Scope:** Public Monitoring HTTP contract semantics only  
+**Status:** Review candidate
+**Date:** 2026-09-22
+**Repository:** `kefyusuf/uptime-lab`
+**Scope:** Public Monitoring HTTP contract semantics only
 **Base:** `main@3830f51813d459e085de2d2915a1cb555d4735b0`
 
 ---
