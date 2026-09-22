@@ -124,7 +124,7 @@ The implementation command is pinned exactly:
 npx --yes @redocly/cli@2.53.3 lint --extends=spec contracts/openapi/public.yaml
 ```
 
-and bundling is used to produce a resolved JSON representation for repository-owned semantic checks.
+and bundling is used to produce one canonical bundled JSON representation for repository-owned semantic checks. The bundle may retain internal component `$ref` values; the semantic checker therefore validates the bundled document structure and references rather than assuming full dereferencing.
 
 Redocly's documented `spec` ruleset follows the OpenAPI specification, while the repository-owned checker enforces product-specific invariants.
 
@@ -162,7 +162,16 @@ The job MUST set:
 package-manager-cache: false
 ```
 
-because there is no package manifest/lockfile to cache and the repository does not need npm dependency caching for one exact `npx` tool execution.
+and the contract-validation commands MUST run with:
+
+```text
+REDOCLY_TELEMETRY=off
+REDOCLY_SUPPRESS_UPDATE_NOTICE=true
+```
+
+This disables optional telemetry and update-notice network behavior during verification.
+
+There is no package manifest/lockfile to cache and the repository does not need npm dependency caching for one exact `npx` tool execution.
 
 Immediately before Task 1, re-check the current supported Node 24 LTS patch and setup-node immutable SHA. Patch-only Node updates are allowed with evidence.
 
@@ -513,11 +522,11 @@ The job:
 2. sets up the exact reviewed Node runtime through immutable `actions/setup-node`;
 3. disables package-manager caching;
 4. asserts the expected Redocly version;
-5. runs:
+5. runs with `REDOCLY_TELEMETRY=off` and `REDOCLY_SUPPRESS_UPDATE_NOTICE=true`:
    ```bash
    npx --yes @redocly/cli@<exact> lint --extends=spec contracts/openapi/public.yaml
    ```
-6. runs Redocly `bundle` to a temporary JSON output so all references must resolve.
+6. runs Redocly `bundle` with the same environment controls to a temporary JSON output so references must resolve.
 
 No generated artifact is committed.
 
@@ -558,8 +567,10 @@ git diff --check
 If the executing local environment has a compatible Node runtime:
 
 ```bash
-npx --yes @redocly/cli@<exact> lint --extends=spec contracts/openapi/public.yaml
-npx --yes @redocly/cli@<exact> bundle contracts/openapi/public.yaml --output /tmp/uptime-lab-public-openapi.json --ext json
+REDOCLY_TELEMETRY=off REDOCLY_SUPPRESS_UPDATE_NOTICE=true \
+  npx --yes @redocly/cli@<exact> lint --extends=spec contracts/openapi/public.yaml
+REDOCLY_TELEMETRY=off REDOCLY_SUPPRESS_UPDATE_NOTICE=true \
+  npx --yes @redocly/cli@<exact> bundle contracts/openapi/public.yaml --output /tmp/uptime-lab-public-openapi.json --ext json
 ```
 
 Do not claim local Redocly evidence if the runtime is unavailable.
@@ -646,9 +657,9 @@ STOP.
 
 ## Step 1 — Define the checker boundary
 
-The repository-owned checker consumes the resolved JSON produced by Redocly `bundle`.
+The repository-owned checker consumes the canonical bundled JSON produced by Redocly `bundle`.
 
-It does not parse YAML itself.
+It does not parse YAML itself and does not assume Redocly fully dereferenced internal component references.
 
 This intentionally separates:
 
@@ -984,8 +995,10 @@ Using the reviewed exact tool versions:
 
 ```bash
 ./scripts/ci/test-detect-public-contract-changes.sh
-npx --yes @redocly/cli@<exact> lint --extends=spec contracts/openapi/public.yaml
-npx --yes @redocly/cli@<exact> bundle contracts/openapi/public.yaml --output /tmp/uptime-lab-public-openapi.json --ext json
+REDOCLY_TELEMETRY=off REDOCLY_SUPPRESS_UPDATE_NOTICE=true \
+  npx --yes @redocly/cli@<exact> lint --extends=spec contracts/openapi/public.yaml
+REDOCLY_TELEMETRY=off REDOCLY_SUPPRESS_UPDATE_NOTICE=true \
+  npx --yes @redocly/cli@<exact> bundle contracts/openapi/public.yaml --output /tmp/uptime-lab-public-openapi.json --ext json
 node scripts/ci/test-check-public-contract.mjs
 node scripts/ci/check-public-contract.mjs /tmp/uptime-lab-public-openapi.json .
 ```
