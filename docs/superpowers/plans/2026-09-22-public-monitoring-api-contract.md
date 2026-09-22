@@ -392,7 +392,8 @@ Problem
 - required `targetUrl`;
 - exactly one declared property: `targetUrl`;
 - unknown request members rejected with `additionalProperties: false`;
-- `targetUrl` is a string with URI intent documented;
+- `targetUrl` is a string with `format: uri`;
+- do not add a URL regex or enum that attempts to duplicate the Go parser;
 - descriptions must explicitly preserve the domain boundary:
   - absolute HTTP/HTTPS;
   - hostname required;
@@ -410,9 +411,9 @@ Do not encode a brittle regex that becomes stricter/different from the Go domain
 - required `id`, `targetUrl`, `createdAt`;
 - exactly those three declared properties;
 - `additionalProperties: false`;
-- `id` string, `format: uuid`;
-- `targetUrl` string;
-- `createdAt` string, `format: date-time`.
+- `id` string, `format: uuid`, with the description stating that newly registered identities are Go-generated UUID v7;
+- `targetUrl` string, `format: uri`, preserving the accepted value;
+- `createdAt` string, `format: date-time`, with the description stating that emitted values are UTC-normalized.
 
 ### Problem
 
@@ -426,9 +427,17 @@ detail
 instance
 ```
 
+Use these schemas:
+
+- `type`: string, `format: uri-reference`;
+- `title`: string;
+- `status`: integer, minimum 100, maximum 599;
+- `detail`: string;
+- `instance`: string, `format: uri-reference`.
+
 Do not add repository-specific validation extensions or numeric error codes.
 
-The contract may constrain its own emitted Problem object to those fields; no custom error envelope is introduced.
+The contract constrains its own emitted Problem object to those selected fields and does not define custom extension members in this milestone; no custom error envelope is introduced.
 
 ## Step 7 — Define operation responses exactly
 
@@ -437,6 +446,7 @@ The contract may constrain its own emitted Problem object to those fields; no cu
 Request:
 
 ```text
+required requestBody
 Content-Type: application/json
 CreateMonitorRequest
 ```
@@ -455,6 +465,7 @@ The 201 response:
 
 - body: `application/json` -> `Monitor`;
 - `Location` header points to `/monitors/{monitorId}`;
+- `Location` uses a string schema with `format: uri-reference`;
 - no 200 alternative;
 - no 409 duplicate-target behavior.
 
@@ -687,7 +698,11 @@ At minimum prove rejection of:
 - missing GET /monitors/{monitorId};
 - wrong operation ID;
 - wrong response status set;
-- missing 201 Location header;
+- missing or non-URI-reference 201 Location header;
+- missing/optional POST request body;
+- targetUrl without `format: uri`;
+- Monitor id without `format: uuid`;
+- Monitor createdAt without `format: date-time`;
 - wrong success media type;
 - missing `application/problem+json` on an error response;
 - extra request property;
@@ -736,6 +751,19 @@ GET /monitors/{monitorId} -> getMonitor
 CreateMonitorRequest
 Monitor
 Problem
+```
+
+The checker also enforces the locked standard formats:
+
+```text
+CreateMonitorRequest.targetUrl -> uri
+Monitor.id                     -> uuid
+Monitor.targetUrl              -> uri
+Monitor.createdAt              -> date-time
+POST 201 Location              -> uri-reference
+Problem.type                   -> uri-reference
+Problem.instance               -> uri-reference
+Problem.status                 -> integer 100..599
 ```
 
 ### Exact operation/media/status contracts
