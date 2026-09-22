@@ -157,7 +157,7 @@ The initial public contract will use:
 openapi: 3.1.2
 ```
 
-At design time, OpenAPI 3.2.1 is the latest published OAS release, but this milestone requires no 3.2-specific capability. The first contract therefore uses the published 3.1.2 line rather than coupling the project to a newly released minor version without product benefit.
+At design time, OpenAPI 3.2.1 is the latest published OAS release, but this milestone requires no 3.2-specific capability. The first contract therefore uses the published 3.1.2 line rather than expanding the project's OpenAPI feature baseline without a concrete product need.
 
 The OpenAPI version may be revisited through an explicit later contract decision.
 
@@ -793,7 +793,7 @@ Target registration remains syntactic only, authentication is not invented, and 
 
 PASS.
 
-OAS 3.1.2 is sufficient for the required JSON Schema/OpenAPI surface. The just-released 3.2 line is not adopted without a product need.
+OAS 3.1.2 is sufficient for the required JSON Schema/OpenAPI surface. The 3.2 feature line is not adopted without a concrete product need.
 
 ### Diff hygiene
 
