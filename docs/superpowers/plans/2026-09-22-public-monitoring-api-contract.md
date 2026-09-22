@@ -411,7 +411,7 @@ Do not encode a brittle regex that becomes stricter/different from the Go domain
 - required `id`, `targetUrl`, `createdAt`;
 - exactly those three declared properties;
 - `additionalProperties: false`;
-- `id` string, `format: uuid`, with the description stating that newly registered identities are Go-generated UUID v7;
+- `id` string, `format: uuid`; the public contract MUST NOT promise a UUID version because the current domain accepts any non-zero UUID and no production Monitor composition currently binds a v7-only generator;
 - `targetUrl` string, `format: uri`, preserving the accepted value;
 - `createdAt` string, `format: date-time`, with the description stating that emitted values are UTC-normalized.
 
@@ -513,7 +513,33 @@ The first OpenAPI document MUST NOT contain:
 
 ## Step 9 — Add path-aware CI
 
-Extend the `changes` job output with:
+Before adding the contract job, make PR checkout semantics explicit across the existing workflow.
+
+Every `actions/checkout` step in `.github/workflows/ci.yml` MUST retain `fetch-depth: 0` and `persist-credentials: false`, and MUST set:
+
+```yaml
+ref: ${{ github.event.pull_request.head.sha || github.sha }}
+```
+
+This ensures pull-request jobs validate the contributor branch head rather than GitHub's synthetic merge revision. Push-to-main jobs continue to validate `github.sha`.
+
+Do not change the existing base/head range semantics used for diff detection.
+
+For jobs that make exact-head evidence claims, add a cheap post-checkout assertion:
+
+```bash
+test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
+```
+
+with:
+
+```text
+EXPECTED_HEAD_SHA = github.event.pull_request.head.sha || github.sha
+```
+
+This exact-revision assertion must run before the job's substantive validation steps.
+
+Then extend the `changes` job output with:
 
 ```text
 public_contract
@@ -545,7 +571,19 @@ No `npm install`, package manifest, or lockfile is introduced.
 
 ## Step 10 — Update the aggregate gate
 
-`CI / gate` must now depend on:
+Retain the stable job identity:
+
+```text
+CI / gate
+```
+
+The gate MUST retain:
+
+```yaml
+if: ${{ always() }}
+```
+
+and MUST depend on exactly the relevant prerequisite jobs:
 
 ```text
 policy
@@ -556,12 +594,22 @@ go-api
 public-contract
 ```
 
-Rules:
+Its result logic must read all six `needs.*.result` values, including `needs.public-contract.result`.
 
-- policy/repository/changes must succeed;
-- local-dev/go-api/public-contract may be `success` or validly `skipped` when their detector is irrelevant;
-- for this implementation branch, Task 1 must produce `public-contract = success`;
-- because Task 1 changes `.github/workflows/ci.yml` and local-dev phase-guard scripts, expect Go/local-dev detection according to the existing detector rules; do not weaken those detectors to save CI.
+Required matrix:
+
+- `policy` = `success`;
+- `repository` = `success`;
+- `changes` = `success`;
+- `local-dev` = `success` or `skipped`;
+- `go-api` = `success` or `skipped`;
+- `public-contract` = `success` or `skipped`.
+
+The public-contract detector harness MUST cover both detector-true and detector-false diffs. The workflow review must verify that detector-false yields a skipped `public-contract` job that is accepted by the aggregate gate, while detector-true requires that job to succeed.
+
+For this implementation branch, Task 1 must produce `public-contract = success`.
+
+Because Task 1 changes `.github/workflows/ci.yml` and local-dev phase-guard scripts, expect Go/local-dev detection according to the existing detector rules; do not weaken those detectors merely to save CI.
 
 ## Step 11 — Local/cheap GREEN
 
@@ -598,7 +646,11 @@ Check:
 - no schema/db change;
 - no package manifest;
 - local-dev guard changed only as required;
-- stable gate semantics preserved;
+- stable gate semantics preserved, including `if: always()` and success/skipped handling for all conditional jobs;
+- public-contract detector true/false cases are covered;
+- pull-request checkout uses the explicit PR head SHA rather than the merge ref;
+- exact-head assertions run before substantive validation;
+- public Monitor ID is documented only as UUID, with no unsupported UUID-version guarantee;
 - actions immutable-pinned;
 - exact tool versions.
 
@@ -633,7 +685,16 @@ The PR body must state explicitly:
 
 ## Step 15 — Require exact-head remote evidence
 
-Task 1 does not close until exact-head PR CI has:
+Task 1 does not close until the workflow run is tied to the current PR head SHA and every validating checkout uses that same SHA.
+
+Required evidence:
+
+1. GitHub PR metadata reports the current head SHA.
+2. The workflow run `head_sha` equals that PR head SHA.
+3. Required jobs log a successful exact-revision assertion after checkout.
+4. The workflow file uses `ref: ${{ github.event.pull_request.head.sha || github.sha }}` for PR-capable checkout steps.
+
+Only after those checks pass may the following job results be reported as exact-head evidence:
 
 ```text
 policy           SUCCESS
@@ -757,7 +818,7 @@ The checker also enforces the locked standard formats:
 
 ```text
 CreateMonitorRequest.targetUrl -> uri
-Monitor.id                     -> uuid
+Monitor.id                     -> uuid (no public UUID-version guarantee)
 Monitor.targetUrl              -> uri
 Monitor.createdAt              -> date-time
 POST 201 Location              -> uri-reference
