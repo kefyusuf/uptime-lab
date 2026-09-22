@@ -283,6 +283,8 @@ jobs:
           npx --yes @redocly/cli@2.53.3 lint --extends=spec contracts/openapi/public.yaml
           npx --yes @redocly/cli@2.53.3 bundle contracts/openapi/public.yaml --output "$RUNNER_TEMP/public-openapi.json" --ext json
           test -s "$RUNNER_TEMP/public-openapi.json"
+          node scripts/ci/test-check-public-contract.mjs
+          node scripts/ci/check-public-contract.mjs "$RUNNER_TEMP/public-openapi.json" .
 
   gate:
     name: CI / gate
