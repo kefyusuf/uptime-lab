@@ -8,7 +8,7 @@ uptime-lab is still in the foundation phase and is not a production-ready monito
 
 The **Go Monitoring Foundation is implemented**: the repository contains the Go Control Plane runtime, immutable Monitoring registration/read application behavior, PostgreSQL persistence and migrations, operational health endpoints, Docker integration, and CI verification.
 
-The public product API, internal checker API, mutable monitor lifecycle, scheduling/results, Rust checker runtime, and React web runtime remain deferred. Web and Checker are still process-level placeholders in the canonical Docker Compose topology.
+The public Monitoring OpenAPI contract is now defined as a source artifact at `contracts/openapi/public.yaml`, covering exactly `POST /monitors` and `GET /monitors/{monitorId}`. The Go runtime still exposes only `/livez` and `/readyz`; no public product handler or transport adapter is wired. The internal checker contract, mutable monitor lifecycle, scheduling/results, Rust checker runtime, React web runtime, authentication/CORS, and public exposure remain deferred. Web and Checker are still process-level placeholders in the canonical Docker Compose topology.
 
 ## Architecture
 
@@ -29,6 +29,8 @@ See [docs/devops/local-development.md](docs/devops/local-development.md) for pre
 ## Testing
 
 See [docs/testing/go-monitoring-foundation.md](docs/testing/go-monitoring-foundation.md) for the evidence model covering domain/application tests, architecture fitness functions, PostgreSQL integration, runtime lifecycle tests, Docker smoke, race detection, and vulnerability scanning.
+
+See [docs/testing/public-monitoring-contract.md](docs/testing/public-monitoring-contract.md) for the public Monitoring OpenAPI source contract, semantic fitness checks, and CI behavior. Contract verification does not imply Go transport conformance.
 
 ## Engineering Principles
 

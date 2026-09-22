@@ -6,6 +6,7 @@ Project documentation is organized by responsibility and by cross-runtime archit
 
 - Foundation design: [superpowers/specs/2026-09-17-uptime-lab-foundation-design.md](superpowers/specs/2026-09-17-uptime-lab-foundation-design.md)
 - Go Monitoring Foundation design: [superpowers/specs/2026-09-20-go-monitoring-foundation-design.md](superpowers/specs/2026-09-20-go-monitoring-foundation-design.md)
+- Public Monitoring API Contract design: [superpowers/specs/2026-09-22-public-monitoring-api-contract-design.md](superpowers/specs/2026-09-22-public-monitoring-api-contract-design.md)
 - Implementation plans: [superpowers/plans/](superpowers/plans/)
 
 Design/spec/plan documents preserve the decision history for the phase in which they were written. Current implementation truth is described by the canonical architecture, backend, testing, and devops documents below.
@@ -14,9 +15,10 @@ Design/spec/plan documents preserve the decision history for the phase in which 
 
 - Go Control Plane: [backend/go-control-plane.md](backend/go-control-plane.md)
 - Go Monitoring verification: [testing/go-monitoring-foundation.md](testing/go-monitoring-foundation.md)
+- Public Monitoring contract verification: [testing/public-monitoring-contract.md](testing/public-monitoring-contract.md)
 - Canonical local runtime: [devops/local-development.md](devops/local-development.md)
 
-The Go Monitoring Foundation implements immutable Register/Get behavior and PostgreSQL persistence, but no public product HTTP contract or internal checker contract is exposed yet.
+The Go Monitoring Foundation implements immutable Register/Get behavior and PostgreSQL persistence. The public Monitoring OpenAPI contract now exists as the source artifact `contracts/openapi/public.yaml`, but the Go runtime still exposes only operational `/livez` and `/readyz`; no public product handler is wired. The internal checker contract remains undefined and unimplemented. Authentication, CORS, and public network exposure remain deferred.
 
 ## Architecture
 

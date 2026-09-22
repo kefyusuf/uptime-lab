@@ -16,18 +16,28 @@ expect_failure() { local n="$1"; shift; if "$@" >/dev/null 2>&1; then fail "$n";
 
 make_fixture() {
   rm -rf "$TMP/repo"
-  mkdir -p "$TMP/repo/docs/architecture" "$TMP/repo/docs/adr" "$TMP/repo/docs/backend"
+  mkdir -p "$TMP/repo/docs/architecture" "$TMP/repo/docs/adr" "$TMP/repo/docs/backend" "$TMP/repo/docs/testing"
 
   cat > "$TMP/repo/docs/README.md" <<'DOC'
 # Documentation
 
 See [Architecture](architecture/README.md).
+See [Public Monitoring Contract](testing/public-monitoring-contract.md).
 DOC
 
   cat > "$TMP/repo/docs/backend/go-control-plane.md" <<'DOC'
 # Go Control Plane
 
 The Go Control Plane foundation is implemented.
+The public source contract is contracts/openapi/public.yaml.
+DOC
+
+  cat > "$TMP/repo/docs/testing/public-monitoring-contract.md" <<'DOC'
+# Public Monitoring Contract Testing
+
+Authoritative source: contracts/openapi/public.yaml.
+OpenAPI 3.1.2 is validated with @redocly/cli@2.53.3.
+Contract verification is separate from Go transport conformance.
 DOC
 
   cat > "$TMP/repo/docs/glossary.md" <<'DOC'
@@ -79,6 +89,10 @@ Go exclusively owns durable product state in PostgreSQL.
 Rust never accesses PostgreSQL directly.
 The browser never accesses PostgreSQL directly.
 Cross-runtime communication is contract-driven.
+
+Public contract: defined (`contracts/openapi/public.yaml`).
+Go public transport adapter: deferred.
+Internal checker contract: deferred.
 
 ```mermaid
 flowchart LR
@@ -224,6 +238,18 @@ expect_failure "only three sequence diagrams fails" "$CHECKER" "$TMP/repo"
 make_fixture
 rm "$TMP/repo/docs/backend/go-control-plane.md"
 expect_failure "missing implemented Go backend documentation fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+rm "$TMP/repo/docs/testing/public-monitoring-contract.md"
+expect_failure "missing public contract testing guide fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+sed -i '/testing\/public-monitoring-contract\.md/d' "$TMP/repo/docs/README.md"
+expect_failure "missing public contract testing navigation fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+sed -i '/Go public transport adapter: deferred\./d' "$TMP/repo/docs/architecture/container-view.md"
+expect_failure "missing public transport deferral fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
 mkdir -p "$TMP/repo/docs/frontend"

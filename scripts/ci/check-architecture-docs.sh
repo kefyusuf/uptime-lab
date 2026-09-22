@@ -19,6 +19,7 @@ REQUIRED_FILES=(
   docs/adr/0002-control-plane-and-execution-plane.md
   docs/adr/0003-contract-and-data-ownership.md
   docs/backend/go-control-plane.md
+  docs/testing/public-monitoring-contract.md
 )
 
 fail() {
@@ -48,6 +49,7 @@ for path in "${REQUIRED_FILES[@]}"; do
 done
 
 require_text docs/README.md 'architecture/README.md'
+require_text docs/README.md 'testing/public-monitoring-contract.md'
 
 for link in \
   'system-context.md' \
@@ -84,10 +86,18 @@ require_text docs/architecture/container-view.md 'Go exclusively owns durable pr
 require_text docs/architecture/container-view.md 'Rust never accesses PostgreSQL directly.'
 require_text docs/architecture/container-view.md 'The browser never accesses PostgreSQL directly.'
 require_text docs/architecture/container-view.md 'Cross-runtime communication is contract-driven.'
+require_text docs/architecture/container-view.md 'Public contract: defined (`contracts/openapi/public.yaml`).'
+require_text docs/architecture/container-view.md 'Go public transport adapter: deferred.'
+require_text docs/architecture/container-view.md 'Internal checker contract: deferred.'
 require_text docs/architecture/dependency-rules.md 'Rust Checker -> PostgreSQL is forbidden.'
 require_text docs/architecture/dependency-rules.md 'Cross-runtime implementation-code sharing is forbidden.'
 require_text docs/architecture/data-ownership.md 'Go exclusively owns durable product state in PostgreSQL.'
 require_text docs/backend/go-control-plane.md 'Go Control Plane'
+require_text docs/backend/go-control-plane.md 'contracts/openapi/public.yaml'
+require_text docs/testing/public-monitoring-contract.md 'contracts/openapi/public.yaml'
+require_text docs/testing/public-monitoring-contract.md 'OpenAPI 3.1.2'
+require_text docs/testing/public-monitoring-contract.md '@redocly/cli@2.53.3'
+require_text docs/testing/public-monitoring-contract.md 'Go transport conformance'
 
 sequence_count="$(grep -c '^sequenceDiagram$' "$ROOT/docs/architecture/runtime-flows.md" || true)"
 [[ "$sequence_count" -eq 4 ]] || fail "runtime-flows.md must contain exactly four sequenceDiagram blocks (found $sequence_count)"

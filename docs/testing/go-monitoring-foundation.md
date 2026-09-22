@@ -21,7 +21,7 @@ This document maps each implemented foundation responsibility to its cheapest me
 | real API readiness/start ordering | canonical Docker Compose smoke |
 | PostgreSQL persistence/reset | canonical Docker Compose smoke |
 | known Go vulnerabilities | pinned govulncheck |
-| full branch aggregation | go-api + local-dev + CI / gate |
+| full branch aggregation | path-aware go-api/local-dev/public-contract jobs + CI / gate |
 
 ## Domain Tests
 
@@ -213,18 +213,9 @@ Workflow changes conservatively trigger both relevant surfaces.
 
 ## Canonical CI
 
-The implementation branch requires all of:
+The repository-level aggregate remains `CI / gate`. `go-api`, `local-dev`, and `public-contract` are path-aware jobs; each must succeed when its detector fires and may be skipped when unrelated. Policy, repository, and change-detection jobs remain required.
 
-~~~text
-policy       SUCCESS
-repository   SUCCESS
-changes      SUCCESS
-go-api       SUCCESS
-local-dev    SUCCESS
-CI / gate    SUCCESS
-~~~
-
-For the Go Monitoring Foundation implementation PR, go-api and local-dev must execute rather than skip.
+For public-contract verification details, see [public-monitoring-contract.md](public-monitoring-contract.md).
 
 ## Useful Commands
 
@@ -267,9 +258,11 @@ docker compose config --quiet
 
 ## Deferred Verification
 
+Public OpenAPI artifact verification is no longer deferred; it is owned by [public-monitoring-contract.md](public-monitoring-contract.md). Go transport conformance remains deferred because no public handler is implemented.
+
 There are intentionally no tests yet for:
 
-- public product API/OpenAPI;
+- public product HTTP handler/transport conformance;
 - internal checker API;
 - mutable monitor lifecycle;
 - scheduling/due work;
@@ -277,4 +270,4 @@ There are intentionally no tests yet for:
 - Rust probe execution;
 - React UI flows.
 
-Those layers are added only when their contracts and implementations exist.
+Those runtime layers are added only when their implementations exist.

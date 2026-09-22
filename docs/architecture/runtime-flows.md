@@ -2,11 +2,11 @@
 
 **Architecture state:** Committed
 
-**Implementation state:** Conceptual cross-runtime flows; product runtimes are not implemented yet.
+**Implementation state:** The public Monitoring contract is defined, but the Go public transport adapter is deferred. Go operational runtime and Monitoring application/persistence behavior exist; Web, Rust, and internal-contract flows remain conceptual.
 
 ## Purpose
 
-This document defines the canonical collaboration patterns between the Web Client, Go Control Plane, Rust Execution Plane, PostgreSQL, and external targets. It intentionally avoids endpoint names and transport DTOs; concrete contracts belong to the later OpenAPI foundation.
+This document defines the canonical collaboration patterns between the Web Client, Go Control Plane, Rust Execution Plane, PostgreSQL, and external targets. Where a contract is already defined, the flow names that operation; undefined internal-contract flows remain conceptual.
 
 ## Create Monitor
 
@@ -19,7 +19,7 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     User->>Web: Configure HTTP/HTTPS monitor
-    Web->>Go: Submit through public contract
+    Web->>Go: POST /monitors (contract defined; transport deferred)
     Go->>Monitoring: Execute monitor registration use case
     Monitoring->>DB: Persist through owned persistence boundary
     DB-->>Monitoring: Persisted
@@ -28,7 +28,7 @@ sequenceDiagram
     Web-->>User: Show configured monitor
 ```
 
-The browser never persists monitor state directly. The Go Control Plane is the durable-state owner and the Monitoring capability mediates product semantics before persistence.
+The browser never persists monitor state directly. The Go Control Plane is the durable-state owner and the Monitoring capability mediates product semantics before persistence. `POST /monitors` is defined in `contracts/openapi/public.yaml`, but this sequence is not executable end-to-end yet because no Go public handler is wired.
 
 ## Execute Due Check
 
@@ -40,7 +40,7 @@ sequenceDiagram
     participant Monitoring as Monitoring Application/Domain
     participant DB as PostgreSQL
 
-    Rust->>Go: Request due work through internal contract
+    Rust->>Go: Request due work through future internal contract
     Go-->>Rust: Work description
     Rust->>Target: Execute bounded probe
     Target-->>Rust: Protocol result
@@ -49,7 +49,7 @@ sequenceDiagram
     Monitoring->>DB: Persist result/state
 ```
 
-Rust owns bounded execution, not scheduling truth or product persistence. Work descriptions and normalized results cross the process boundary through the internal contract.
+Rust owns bounded execution, not scheduling truth or product persistence. Work descriptions and normalized results will cross the process boundary through an internal contract that remains undefined and unimplemented.
 
 ## Read Current State
 
@@ -61,17 +61,17 @@ sequenceDiagram
     participant Monitoring as Monitoring Application/Domain
     participant DB as PostgreSQL
 
-    User->>Web: Open monitor status/history
-    Web->>Go: Query through public contract
-    Go->>Monitoring: Execute read use case
-    Monitoring->>DB: Read owned monitor state/history
-    DB-->>Monitoring: Durable state
-    Monitoring-->>Go: Product view data
-    Go-->>Web: Stable public response
-    Web-->>User: Render current state/history
+    User->>Web: Open monitor
+    Web->>Go: GET /monitors/{monitorId} (contract defined; transport deferred)
+    Go->>Monitoring: Execute GetMonitor use case
+    Monitoring->>DB: Read owned monitor
+    DB-->>Monitoring: Durable monitor
+    Monitoring-->>Go: Monitor
+    Go-->>Web: Contract-shaped Monitor response
+    Web-->>User: Render monitor
 ```
 
-Read ownership follows the same rule as writes: browser access remains contract-driven and PostgreSQL is never a browser-facing integration surface.
+Read ownership follows the same rule as writes: browser access remains contract-driven and PostgreSQL is never a browser-facing integration surface. `GET /monitors/{monitorId}` is defined as a contract operation, not as a currently live HTTP route.
 
 ## Failure Boundary
 
