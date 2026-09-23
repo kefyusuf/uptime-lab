@@ -628,9 +628,11 @@ Prove:
 For both resource shapes:
 
 - HEAD does not execute GET;
-- GET /monitors is 405 or 404 according to the final explicit route shape, but MUST NOT become a list operation;
-- PUT/PATCH/DELETE/OPTIONS do not execute an application use case;
-- method-not-allowed responses set the correct Allow header for a known resource path.
+- GET /monitors returns 405 Method Not Allowed, sets Allow: POST, and does not become a list operation;
+- POST /monitors/{monitorId} returns 405 Method Not Allowed, sets Allow: GET, and does not execute an application use case;
+- PUT/PATCH/DELETE/OPTIONS do not execute an application use case on either known resource shape;
+- method-not-allowed responses set the exact Allow header for the known resource path;
+- trailing-slash/nested paths outside the two exact resource shapes remain 404.
 
 Unknown paths remain 404.
 
@@ -1303,10 +1305,18 @@ root package manifests
 
 ## Step 2 — Capability search
 
-Search added code/docs for:
+Search added code/docs for collection/lifecycle/security drift.
+
+The collection-route search must distinguish the forbidden exact collection operation from the approved item route:
 
 ~~~text
-GET /monitors
+forbidden collection operation: exact GET /monitors
+approved item operation:        GET /monitors/{monitorId}
+~~~
+
+Also search for:
+
+~~~text
 PUT
 PATCH
 DELETE
@@ -1323,13 +1333,16 @@ internal.yaml
 ports:
 ~~~
 
-Any hit must be:
+A hit is acceptable only when it is:
 
+- the approved GET /monitors/{monitorId} route declaration;
 - a negative test;
 - an explicit deferred statement;
 - an existing operational context.
 
-Otherwise review it as scope drift.
+An exact collection-route GET /monitors declaration outside negative/deferred evidence is scope drift.
+
+Otherwise review the hit as scope drift.
 
 ## Step 3 — Full repository verification
 
