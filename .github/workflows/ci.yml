@@ -71,6 +71,15 @@ jobs:
           ./scripts/ci/test-architecture-docs.sh
           ./scripts/ci/check-architecture-docs.sh .
 
+      - name: Test migration history invariant
+        run: ./scripts/ci/test-check-migration-history.sh
+
+      - name: Validate immutable migration history
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: ./scripts/ci/check-migration-history.sh "$BASE_SHA" "$HEAD_SHA"
+
       - name: Validate repository invariants
         run: ./scripts/ci/check-repository-shape.sh .
 
