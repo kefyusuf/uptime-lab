@@ -171,13 +171,24 @@ Transport-owned narrow interfaces/fakes are preferred for handler tests.
 
 Transport DTOs are not domain models and are not cross-runtime source-of-truth types.
 
-### GPTA-005 — Production identity and time remain server-side
+### GPTA-005 — Production identity and time remain server-side and persistence-canonical
 
 Production registration keeps application-owned identity/time injection.
 
-Composition supplies Go-generated UUID v7 and time.Now.
+Composition supplies:
 
-The HTTP request never accepts a client monitor ID or creation timestamp. PostgreSQL continues to persist the application-assigned UUID and timestamp.
+- Go-generated UUID v7;
+- a UTC clock normalized to PostgreSQL-compatible microsecond precision.
+
+The production clock must canonicalize the instant before Monitor construction, conceptually:
+
+~~~text
+time.Now().UTC().Truncate(time.Microsecond)
+~~~
+
+PostgreSQL 18 timestamptz has one-microsecond resolution. Canonicalizing before persistence prevents POST from returning a higher-precision createdAt instant that changes by a sub-microsecond after the same Monitor is read back through PostgreSQL.
+
+The HTTP request never accepts a client monitor ID or creation timestamp. PostgreSQL continues to persist the application-assigned UUID and canonical timestamp.
 
 The implementation plan must define a safe invariant-preserving UUID v7 -> domain.MonitorID wrapper; ID generation must not move into persistence or transport DTOs.
 
@@ -251,7 +262,9 @@ Mapping:
 
 - id -> MonitorID.String();
 - targetUrl -> exact TargetURL.String();
-- createdAt -> UTC RFC 3339 representation.
+- createdAt -> the already-canonical UTC microsecond instant, serialized as RFC 3339 without losing its fractional precision.
+
+POST and a later GET for the same persisted Monitor must represent the same createdAt instant; persistence round-trip must not alter the externally observed creation instant.
 
 POST additionally emits Location: /monitors/{canonical-monitor-id}.
 
@@ -287,15 +300,21 @@ Important gate finding:
 
 The initial compatibility mechanism is:
 
-1. derive the expected migration version set from repository-owned embedded migration sources;
+1. derive the expected positive migration version set from repository-owned embedded migration sources;
 2. query the existing goose version table through a read-only goose database Store API;
-3. select applied versions;
-4. ignore only goose's version-zero bootstrap record;
-5. require exact set equality between applied DB versions and expected embedded versions.
+3. validate migration metadata integrity for the pinned Provider lifecycle:
+   - exactly one applied version-zero bootstrap record exists;
+   - each positive version appears at most once;
+   - every retained row is marked applied;
+   - duplicate, false/unapplied, or otherwise ambiguous rows fail readiness;
+4. remove the validated version-zero bootstrap record from comparison;
+5. require exact set equality between positive applied DB versions and expected embedded versions.
 
-Readiness is false when PostgreSQL is unreachable, the goose version table does not exist, required migrations are missing, DB versions are ahead, an expected version is absent, an unknown applied version exists, or the read-only metadata query fails.
+Readiness is false when PostgreSQL is unreachable, the goose version table does not exist, the version-zero bootstrap record is missing/invalid, metadata is duplicate or ambiguous, required migrations are missing, DB versions are ahead, an expected version is absent, an unknown applied version exists, or the read-only metadata query fails.
 
 No DDL/DML is permitted in the readiness path.
+
+This is a repository migration-state compatibility check, not an arbitrary manual-DDL drift detector. Its validity depends on the migration-source immutability rule below and on schema changes being performed through repository-owned migrations.
 
 This exact-set policy is intentionally conservative. A future rolling-deployment compatibility-range model requires a separate design.
 
@@ -382,6 +401,7 @@ The HTTP adapter may depend inward on Monitoring application/domain contracts.
 Handler tests must cover at minimum:
 
 - POST 201 + Location + exact Monitor JSON;
+- POST createdAt remains exactly stable after persistence and subsequent GET at canonical microsecond precision;
 - exact target raw-text preservation, including accepted non-RFC-3986 text;
 - malformed JSON -> 400 Problem;
 - unsupported/missing Content-Type -> 415 Problem;
@@ -399,11 +419,15 @@ Handler tests must cover at minimum:
 Real PostgreSQL schema-readiness evidence must prove:
 
 - no migration/version table -> unready without mutation;
-- exact required migration set -> ready;
+- exact required migration metadata -> ready;
+- missing/invalid version-zero bootstrap -> unready;
 - missing/rolled-back migration -> unready;
+- duplicate or false/unapplied migration metadata -> unready;
 - unknown/ahead applied version -> unready;
 - connectivity failure -> unready;
 - readiness checks do not create/modify migration metadata.
+
+Repository/CI evidence must also prove that modification, rename, or deletion of an already-landed SQL migration fails while addition of a new migration version is allowed.
 
 Canonical Docker smoke must evolve to prove:
 
@@ -442,6 +466,23 @@ This milestone keeps:
 - no public ingress/TLS decision.
 
 Public exposure/security remains a later explicit gate.
+
+### GPTA-021 — Landed SQL migrations are immutable repository history
+
+Migration-version readiness is safe only if a version ID cannot silently acquire different SQL after it has landed.
+
+The implementation phase must add a mechanical repository/CI invariant:
+
+- an existing tracked file under apps/api/migrations/*.sql that is present in the PR/push base may not be modified, renamed, or deleted;
+- schema evolution must add a new migration version instead;
+- new migration files remain allowed and must pass the existing migration/integration evidence;
+- helper/provider Go code is not treated as immutable migration content by this rule.
+
+The check must operate from Git history/diff rather than relying on reviewer convention.
+
+This is deliberately conservative: every landed SQL migration is immutable even if a particular developer database has not applied it yet.
+
+The readiness mechanism does not add migration checksums or new database metadata in this milestone.
 
 ---
 
@@ -548,17 +589,18 @@ The design gate is GREEN only if review agrees that:
 7. targetUrl is preserved and not re-constrained by RFC 3986 format validation;
 8. HEAD does not silently become GET;
 9. responses contain only contracted Monitor/Problem surface;
-10. UUID v7/time generation remains server-side;
+10. UUID v7/time generation remains server-side and createdAt is canonicalized to persistence-compatible microsecond precision before construction;
 11. readiness becomes schema-compatible before handlers are considered ready;
 12. readiness is strictly read-only;
 13. compatibility is tied to repository-owned embedded migrations;
-14. fresh local bootstrap keeps migrations explicit;
-15. Compose remains four services with no host ports;
-16. no auth/CORS/rate-limit/public-exposure policy is invented;
-17. no internal Checker contract is created;
-18. no new durable product state is required;
-19. architecture fitness protects the transport boundary;
-20. real PostgreSQL + Docker evidence is required before implementation can land.
+14. landed SQL migration files are mechanically immutable and schema evolution requires new versions;
+15. fresh local bootstrap keeps migrations explicit;
+16. Compose remains four services with no host ports;
+17. no auth/CORS/rate-limit/public-exposure policy is invented;
+18. no internal Checker contract is created;
+19. no new durable product state is required;
+20. architecture fitness protects the transport boundary;
+21. real PostgreSQL + Docker evidence is required before implementation can land.
 
 ---
 
@@ -578,11 +620,15 @@ PASS. Monitoring HTTP is an outward adapter, platform stays module-agnostic, and
 
 ### Persistence safety
 
-PASS. No migration/schema/product-state change is required.
+PASS. No migration/schema/product-state change is required. Landed SQL migration sources become mechanically immutable, so version-based readiness cannot silently bless different SQL under the same version ID.
+
+### Timestamp persistence consistency
+
+PASS after review. Production createdAt is canonicalized to PostgreSQL-compatible microsecond precision before Monitor construction, preventing POST/GET persistence round-trip drift.
 
 ### Readiness safety
 
-PASS after revision. Direct goose Provider status/version methods were rejected because they can ensure/create the version table. The locked mechanism is read-only migration metadata access plus exact expected/applied set comparison.
+PASS after revision. Direct goose Provider status/version methods were rejected because they can ensure/create the version table. The locked mechanism is read-only migration metadata access, explicit version-table integrity validation, and exact expected/applied positive-version comparison. It intentionally does not claim to detect unsupported manual DDL drift.
 
 ### Migration ownership
 
