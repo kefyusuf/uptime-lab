@@ -105,13 +105,15 @@ components:
       properties:
         targetUrl:
           type: string
-          format: uri
           description: >
-            Exact target text to register. The Monitoring domain requires an
-            absolute HTTP or HTTPS URI with a hostname, rejects embedded
+            Exact target text to register. The Monitoring domain accepts an
+            absolute HTTP or HTTPS target with a hostname, rejects embedded
             userinfo and fragments, permits query strings and explicit ports,
-            and preserves accepted input text. Registration validation is
-            syntactic only and is not SSRF or execution-safety approval.
+            and preserves accepted input text. The public contract intentionally
+            does not apply RFC 3986 format: uri because the existing domain
+            parser can accept and preserve values outside that syntax.
+            Registration validation is syntactic only and is not SSRF or
+            execution-safety approval.
           examples:
             - https://example.com/health?region=eu
     Monitor:
@@ -128,8 +130,9 @@ components:
           description: Stable monitor UUID. The public contract does not guarantee a UUID version.
         targetUrl:
           type: string
-          format: uri
-          description: Exact target text accepted at registration.
+          description: >
+            Exact target text accepted at registration and preserved by the
+            Monitoring domain. No RFC 3986 format constraint is applied.
         createdAt:
           type: string
           format: date-time

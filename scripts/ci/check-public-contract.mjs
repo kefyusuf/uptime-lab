@@ -115,6 +115,12 @@ function assertStringFormat(schema, format, label) {
   assert(schema.format === format, `${label}.format must be ${format}`);
 }
 
+function assertStringWithoutFormat(schema, label) {
+  assert(isObject(schema), `${label} must be an object`);
+  assert(schema.type === 'string', `${label}.type must be string`);
+  assert(!own(schema, 'format'), `${label}.format must be absent`);
+}
+
 function assertObjectShape(schema, properties, required, label) {
   assert(isObject(schema), `${label} must be an object`);
   assert(schema.type === 'object', `${label}.type must be object`);
@@ -217,7 +223,7 @@ export function validatePublicContract(document, repositoryRoot = '.') {
 
   const createSchema = document.components.schemas.CreateMonitorRequest;
   assertObjectShape(createSchema, ['targetUrl'], ['targetUrl'], 'CreateMonitorRequest');
-  assertStringFormat(createSchema.properties.targetUrl, 'uri', 'CreateMonitorRequest.targetUrl');
+  assertStringWithoutFormat(createSchema.properties.targetUrl, 'CreateMonitorRequest.targetUrl');
 
   const monitorSchema = document.components.schemas.Monitor;
   assertObjectShape(
@@ -227,7 +233,7 @@ export function validatePublicContract(document, repositoryRoot = '.') {
     'Monitor',
   );
   assertStringFormat(monitorSchema.properties.id, 'uuid', 'Monitor.id');
-  assertStringFormat(monitorSchema.properties.targetUrl, 'uri', 'Monitor.targetUrl');
+  assertStringWithoutFormat(monitorSchema.properties.targetUrl, 'Monitor.targetUrl');
   assertStringFormat(monitorSchema.properties.createdAt, 'date-time', 'Monitor.createdAt');
 
   const idDescription = String(monitorSchema.properties.id.description ?? '');

@@ -98,7 +98,7 @@ function validDocument() {
           additionalProperties: false,
           required: ['targetUrl'],
           properties: {
-            targetUrl: { type: 'string', format: 'uri' },
+            targetUrl: { type: 'string' },
           },
         },
         Monitor: {
@@ -111,7 +111,7 @@ function validDocument() {
               format: 'uuid',
               description: 'Stable monitor UUID.',
             },
-            targetUrl: { type: 'string', format: 'uri' },
+            targetUrl: { type: 'string' },
             createdAt: { type: 'string', format: 'date-time' },
           },
         },
@@ -204,9 +204,9 @@ expectReject('wrong POST request media fails', (d) => {
   content['text/plain'] = content['application/json'];
   delete content['application/json'];
 }, 'requestBody.content keys');
-expectReject('targetUrl without uri format fails', (d) => { delete d.components.schemas.CreateMonitorRequest.properties.targetUrl.format; }, 'CreateMonitorRequest.targetUrl.format must be uri');
+expectReject('targetUrl RFC uri format fails', (d) => { d.components.schemas.CreateMonitorRequest.properties.targetUrl.format = 'uri'; }, 'CreateMonitorRequest.targetUrl.format must be absent');
 expectReject('Monitor id without uuid format fails', (d) => { delete d.components.schemas.Monitor.properties.id.format; }, 'Monitor.id.format must be uuid');
-expectReject('Monitor targetUrl without uri format fails', (d) => { delete d.components.schemas.Monitor.properties.targetUrl.format; }, 'Monitor.targetUrl.format must be uri');
+expectReject('Monitor targetUrl RFC uri format fails', (d) => { d.components.schemas.Monitor.properties.targetUrl.format = 'uri'; }, 'Monitor.targetUrl.format must be absent');
 expectReject('Monitor createdAt without date-time format fails', (d) => { delete d.components.schemas.Monitor.properties.createdAt.format; }, 'Monitor.createdAt.format must be date-time');
 expectReject('UUID v7 public promise fails', (d) => { d.components.schemas.Monitor.properties.id.description = 'UUID v7 identity.'; }, 'must not promise UUID v7');
 expectReject('wrong POST success media fails', (d) => {

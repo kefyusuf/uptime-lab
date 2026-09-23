@@ -57,8 +57,10 @@ REDOCLY_SUPPRESS_UPDATE_NOTICE=true
 From the repository root:
 
 ~~~bash
+(
 set -euo pipefail
 tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
 
 REDOCLY_TELEMETRY=off REDOCLY_SUPPRESS_UPDATE_NOTICE=true \
   npx --yes @redocly/cli@2.53.3 lint --extends=spec contracts/openapi/public.yaml
@@ -70,7 +72,7 @@ REDOCLY_TELEMETRY=off REDOCLY_SUPPRESS_UPDATE_NOTICE=true \
 node scripts/ci/test-check-public-contract.mjs
 node scripts/ci/check-public-contract.mjs "$tmp" .
 ./scripts/ci/test-detect-public-contract-changes.sh
-rm -f "$tmp"
+)
 ~~~
 
 Documentation fitness is verified separately:
@@ -90,7 +92,7 @@ The repository-owned checker mechanically protects the landed contract decisions
 - request/response media and status sets;
 - `Location` header shape;
 - exact request, Monitor, and Problem schema surfaces;
-- standard URI, UUID, date-time, and URI-reference formats;
+- explicit absence of an RFC 3986 `uri` format on `targetUrl`, plus locked UUID, date-time, and URI-reference formats;
 - absence of servers and security schemes;
 - absence of speculative `contracts/openapi/internal.yaml`;
 - absence of a public UUID-version guarantee.
