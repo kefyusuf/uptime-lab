@@ -1,0 +1,157 @@
+openapi: 3.1.2
+info:
+  title: uptime-lab Public API
+  version: 0.1.0
+  description: >
+    Pre-stable public contract for the implemented Monitoring registration and
+    get-by-ID application behavior. This contract is not yet exposed by the Go
+    runtime.
+paths:
+  /monitors:
+    post:
+      operationId: registerMonitor
+      summary: Register a monitor
+      description: >
+        Registers a new monitor. Duplicate target URLs are allowed and each
+        successful request creates a distinct monitor identity. Registration is
+        not idempotent and does not establish that the target is safe to probe.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMonitorRequest'
+      responses:
+        '201':
+          description: Monitor registered.
+          headers:
+            Location:
+              description: Relative reference for retrieving the created monitor.
+              schema:
+                type: string
+                format: uri-reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Monitor'
+        '400':
+          description: Malformed request content.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '415':
+          description: Unsupported request media type.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Request content is understood but violates the monitor contract.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          description: Monitor persistence failed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /monitors/{monitorId}:
+    get:
+      operationId: getMonitor
+      summary: Get a monitor
+      parameters:
+        - name: monitorId
+          in: path
+          required: true
+          description: Stable monitor UUID.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Monitor found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Monitor'
+        '400':
+          description: monitorId is not a valid UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: Monitor not found.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          description: Monitor persistence failed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+components:
+  schemas:
+    CreateMonitorRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - targetUrl
+      properties:
+        targetUrl:
+          type: string
+          description: >
+            Exact target text to register. The Monitoring domain accepts an
+            absolute HTTP or HTTPS target with a hostname, rejects embedded
+            userinfo and fragments, permits query strings and explicit ports,
+            and preserves accepted input text. The public contract intentionally
+            does not apply RFC 3986 format: uri because the existing domain
+            parser can accept and preserve values outside that syntax.
+            Registration validation is syntactic only and is not SSRF or
+            execution-safety approval.
+          examples:
+            - https://example.com/health?region=eu
+    Monitor:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - targetUrl
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Stable monitor UUID. The public contract does not guarantee a UUID version.
+        targetUrl:
+          type: string
+          description: >
+            Exact target text accepted at registration and preserved by the
+            Monitoring domain. No RFC 3986 format constraint is applied.
+        createdAt:
+          type: string
+          format: date-time
+          description: Immutable monitor creation instant emitted with UTC domain semantics.
+    Problem:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 100
+          maximum: 599
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri-reference

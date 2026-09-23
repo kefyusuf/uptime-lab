@@ -4,7 +4,7 @@
 
 The Go Control Plane foundation is implemented.
 
-The current runtime is intentionally narrow: it owns Monitoring domain/application/persistence foundations and operational health, but no public product transport or internal checker transport is exposed yet.
+The current runtime is intentionally narrow: it owns Monitoring domain/application/persistence foundations and operational health. The repository now defines the public Monitoring OpenAPI source contract, but no public product transport or internal checker transport is exposed yet.
 
 Reviewed Go toolchain: Go 1.27.1.
 
@@ -15,6 +15,8 @@ The implemented Go module is rooted at:
 ~~~text
 apps/api
 ~~~
+
+The repository-level public Monitoring contract is authoritative at `contracts/openapi/public.yaml`. It defines `POST /monitors` and `GET /monitors/{monitorId}` but is not served by `apps/api` yet.
 
 The runtime currently owns:
 
@@ -248,6 +250,8 @@ GET /livez
 GET /readyz
 ~~~
 
+The source contract defines future public `POST /monitors` and `GET /monitors/{monitorId}` operations, but those routes are not registered in the current server.
+
 /livez:
 
 - returns 200;
@@ -285,7 +289,7 @@ It intentionally does **not** construct:
 - GetMonitor;
 - goose migration provider.
 
-That is deliberate. There is no product transport consumer yet, so wiring those services would be dead production composition.
+That is deliberate. The OpenAPI source artifact is not a runtime consumer; there is no product transport adapter yet, so wiring those services would be dead production composition.
 
 ## Docker
 
@@ -320,13 +324,13 @@ govulncheck v1.8.0
 
 The stable aggregate required check is CI / gate.
 
-See [../testing/go-monitoring-foundation.md](../testing/go-monitoring-foundation.md) for the evidence ownership map.
+See [../testing/go-monitoring-foundation.md](../testing/go-monitoring-foundation.md) for the Go evidence ownership map and [../testing/public-monitoring-contract.md](../testing/public-monitoring-contract.md) for public-contract verification.
 
 ## Deferred
 
 The following remain explicitly deferred:
 
-- public/OpenAPI product contract;
+- public Monitoring Go transport adapter and handler conformance;
 - internal Go/Rust checker contract;
 - Monitoring product HTTP handlers;
 - production MonitorID generator composition;

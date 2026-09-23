@@ -127,7 +127,7 @@ grep -Fqx '      - postgres-data:/var/lib/postgresql' <<<"$DB_BLOCK" || fail "db
 grep -Fqx '    healthcheck:' <<<"$DB_BLOCK" || fail "db healthcheck is missing"
 grep -Fq 'pg_isready' <<<"$DB_BLOCK" || fail "db healthcheck must use pg_isready"
 
-for forbidden in contracts migrations package.json go.mod go.work Cargo.toml; do
+for forbidden in migrations package.json go.mod go.work Cargo.toml; do
   [[ ! -e "$ROOT/$forbidden" ]] || fail "phase-forbidden path exists: $forbidden"
 done
 

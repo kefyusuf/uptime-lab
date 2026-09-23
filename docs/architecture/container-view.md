@@ -2,7 +2,7 @@
 
 **Architecture state:** Committed
 
-**Implementation state:** Partial. PostgreSQL and the Go Control Plane operational runtime are implemented. Web and Checker remain placeholders. Public product and internal checker transport contracts are deferred.
+**Implementation state:** Partial. PostgreSQL and the Go Control Plane operational runtime are implemented. The public Monitoring OpenAPI contract is defined as a source artifact, while its Go transport adapter is deferred. Web and Checker remain placeholders; the internal checker contract is deferred.
 
 ## Purpose
 
@@ -14,7 +14,7 @@ This document is the C4 Level 2 view for uptime-lab. It distinguishes the commit
 
 The Web Client owns browser presentation and user interaction in the committed architecture. The React runtime is not implemented yet; the current Compose web service is a non-root placeholder.
 
-The future browser will consume a public product contract exposed by Go. That public product contract does not exist in the current Go Monitoring Foundation.
+The future browser will consume the defined public Monitoring contract at `contracts/openapi/public.yaml` after a Go transport adapter exists. The contract source exists today, but no `/monitors` route is wired in the current Go runtime.
 
 The browser never accesses PostgreSQL directly.
 
@@ -33,7 +33,7 @@ Implemented responsibilities include:
 - operational GET /livez and GET /readyz endpoints;
 - graceful server lifecycle and PostgreSQL readiness checks.
 
-The production API binary intentionally does not construct the Monitoring repository/module/use cases yet because there is no product transport consumer. No /monitors endpoint exists.
+The production API binary intentionally does not construct the Monitoring repository/module/use cases yet because there is no runtime product transport consumer. The source contract exists independently of runtime composition; no `/monitors` endpoint exists.
 
 Go exclusively owns durable product state in PostgreSQL.
 
@@ -100,11 +100,17 @@ operational HTTP only`"]
 
 ## Committed Cross-Runtime Relationships
 
+Current contract/transport state:
+
+- Public contract: defined (`contracts/openapi/public.yaml`).
+- Go public transport adapter: deferred.
+- Internal checker contract: deferred.
+
 The following architectural relationships remain committed but are not all implemented yet:
 
 | Relationship | Current state |
 |---|---|
-| Web -> Go: Public product API | Deferred; no product endpoint exists. |
+| Web -> Go: Public product API | Contract defined; Go transport deferred and no product endpoint exists. |
 | Rust -> Go: Internal control API | Deferred; Rust is still a placeholder. |
 | Go -> PostgreSQL: Owned persistence | Implemented for Monitoring create/read state. |
 | Rust -> Target: Bounded probe execution | Deferred; no probe execution runtime exists. |
@@ -120,7 +126,7 @@ The implemented Go HTTP surface is operational only:
 - GET /livez proves the process HTTP server is alive and does not touch PostgreSQL.
 - GET /readyz performs a bounded PostgreSQL connectivity check.
 
-Readiness does **not** claim migration/schema compatibility yet. Product endpoints must not be introduced until that compatibility question is decided by the later contract/API foundation.
+Readiness does **not** claim migration/schema compatibility yet. The public contract is defined, but product endpoints remain absent; schema-compatible readiness must be decided and implemented before the future Go transport adapter is activated.
 
 ## Ownership Rules
 

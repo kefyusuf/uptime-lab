@@ -2,7 +2,7 @@
 
 **Architecture state:** Committed
 
-**Implementation state:** Normative rules; automated runtime-specific fitness functions are deferred until the corresponding code exists.
+**Implementation state:** Normative rules with Go dependency fitness and public-contract semantic fitness implemented. Frontend and Rust enforcement remain deferred until those runtimes exist.
 
 ## Purpose
 
@@ -68,18 +68,25 @@ Imports flow toward lower layers. This rule is conceptual until the React founda
 
 Cross-runtime communication is contract-driven. Contracts describe data exchanged between processes; they do not authorize sharing implementation packages across TypeScript, Go, and Rust.
 
+Current boundary state:
+
+- the public Monitoring contract is defined at `contracts/openapi/public.yaml`;
+- the Go public transport adapter is deferred, so no `/monitors` runtime route exists;
+- the internal Go/Rust checker contract remains deferred.
+
 Database tables, generated ORM types, Rust structs, and Go domain structs are not cross-runtime contracts by default.
 
-## Future Enforcement
+## Enforcement State
 
-Later foundation phases should translate these rules into the cheapest runtime-native fitness functions:
+The repository applies the cheapest available fitness functions as each boundary becomes real:
 
-- Go import/dependency tests for domain/application/adapter direction and module isolation;
-- frontend lint/import-boundary rules for feature-layer direction;
-- Rust crate/module dependency checks that keep core isolated from adapters;
-- contract compatibility checks at public/internal API boundaries.
+- Go import/dependency tests enforce domain/application/adapter direction and module isolation;
+- public Monitoring contract semantics are enforced by repository-owned contract fitness checks over Redocly-bundled JSON;
+- frontend lint/import-boundary rules remain deferred until React source exists;
+- Rust crate/module dependency checks remain deferred until Rust source exists;
+- internal-contract compatibility checks remain deferred because that contract does not exist yet.
 
-This document intentionally does not select the exact tools before the runtime structures exist.
+This document does not preselect tools for deferred runtime structures.
 
 ## Related Decisions
 

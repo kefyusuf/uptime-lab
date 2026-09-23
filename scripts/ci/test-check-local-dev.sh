@@ -105,9 +105,10 @@ mutate_service_line() {
 
 make_fixture() {
   rm -rf "$TMP/repo"
-  mkdir -p "$TMP/repo/deploy/docker/placeholder" "$TMP/repo/apps/api"
+  mkdir -p "$TMP/repo/deploy/docker/placeholder" "$TMP/repo/apps/api" "$TMP/repo/contracts/openapi"
   printf 'module github.com/kefyusuf/uptime-lab/apps/api\n\ngo 1.27.1\n' > "$TMP/repo/apps/api/go.mod"
   : > "$TMP/repo/apps/api/go.sum"
+  printf 'openapi: 3.1.2\n' > "$TMP/repo/contracts/openapi/public.yaml"
 
   cat > "$TMP/repo/compose.yaml" <<'YAML'
 services:

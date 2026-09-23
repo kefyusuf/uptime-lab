@@ -108,7 +108,7 @@ Semantics:
 - /readyz performs a bounded PostgreSQL connectivity check;
 - readiness does not claim migration/schema compatibility.
 
-There is no public /monitors endpoint and no internal checker product endpoint.
+The repository defines the public Monitoring source contract at `contracts/openapi/public.yaml`, but there is no live `/monitors` endpoint and no internal checker product endpoint.
 
 Because no host application port is published, health is normally observed through Compose health or container-local commands rather than host HTTP.
 
@@ -322,7 +322,7 @@ Use a distinct COMPOSE_PROJECT_NAME for each worktree.
 - Web is a placeholder, not React.
 - Checker is a placeholder, not Rust.
 - API exposes only /livez and /readyz.
-- No public product HTTP API exists.
+- The public Monitoring OpenAPI contract is defined as a source artifact, but no public product HTTP handler/endpoint is wired.
 - No internal checker API exists.
 - Monitoring Register/Get code is not wired into the production HTTP runtime yet.
 - No mutable monitor lifecycle exists.
@@ -339,4 +339,5 @@ Use a distinct COMPOSE_PROJECT_NAME for each worktree.
 - [Data Ownership](../architecture/data-ownership.md)
 - [Go Control Plane](../backend/go-control-plane.md)
 - [Go Monitoring Testing](../testing/go-monitoring-foundation.md)
+- [Public Monitoring Contract Testing](../testing/public-monitoring-contract.md)
 - [Repository Governance](repository-governance.md)
