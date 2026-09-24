@@ -20,30 +20,35 @@ const (
 	maxHeaderBytes          = 1 << 20
 )
 
-// ReadinessPinger is the minimal database capability required by /readyz.
-type ReadinessPinger interface {
-	Ping(context.Context) error
+// ReadinessChecker is the generic capability required by /readyz.
+type ReadinessChecker interface {
+	Check(context.Context) error
 }
 
-// Server exposes operational health only.
+// Server exposes platform-owned operational health and delegates product traffic.
 type Server struct {
 	httpServer       *http.Server
-	readiness        ReadinessPinger
+	readiness        ReadinessChecker
 	readinessTimeout time.Duration
 	shutdownTimeout  time.Duration
 }
 
-// New constructs the operational HTTP server.
-func New(addr string, readiness ReadinessPinger) *Server {
+// New constructs the HTTP server with platform operational routes taking precedence over product traffic.
+func New(addr string, readiness ReadinessChecker, product http.Handler) *Server {
 	server := &Server{
 		readiness:        readiness,
 		readinessTimeout: defaultReadinessTimeout,
 		shutdownTimeout:  defaultShutdownTimeout,
 	}
 
+	if product == nil {
+		product = http.NotFoundHandler()
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/livez", server.handleLivez)
 	mux.HandleFunc("/readyz", server.handleReadyz)
+	mux.Handle("/", product)
 
 	server.httpServer = &http.Server{
 		Addr:              addr,
@@ -122,7 +127,7 @@ func (server *Server) handleReadyz(writer http.ResponseWriter, request *http.Req
 	ctx, cancel := context.WithTimeout(request.Context(), server.readinessTimeout)
 	defer cancel()
 
-	if err := server.readiness.Ping(ctx); err != nil {
+	if err := server.readiness.Check(ctx); err != nil {
 		writePlain(writer, http.StatusServiceUnavailable, "unavailable\n")
 		return
 	}

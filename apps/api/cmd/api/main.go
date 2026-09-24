@@ -13,6 +13,12 @@ import (
 	"github.com/kefyusuf/uptime-lab/apps/api/internal/platform/observability"
 )
 
+type readinessFunc func(context.Context) error
+
+func (check readinessFunc) Check(ctx context.Context) error {
+	return check(ctx)
+}
+
 func main() {
 	os.Exit(run())
 }
@@ -46,7 +52,7 @@ func run() int {
 	}
 	defer pool.Close()
 
-	server := httpserver.New(runtimeConfig.HTTPAddr, pool)
+	server := httpserver.New(runtimeConfig.HTTPAddr, readinessFunc(pool.Ping), nil)
 
 	logger.Info(
 		"operational HTTP server starting",
