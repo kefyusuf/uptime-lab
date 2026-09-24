@@ -9,7 +9,7 @@ import (
 )
 
 // IDGenerator provides monitor identities to the application layer.
-type IDGenerator func() domain.MonitorID
+type IDGenerator func() (domain.MonitorID, error)
 
 // Clock provides the current time to the application layer.
 type Clock func() time.Time
@@ -41,7 +41,10 @@ func (useCase RegisterMonitor) Execute(ctx context.Context, rawTarget string) (d
 		return domain.Monitor{}, err
 	}
 
-	id := useCase.idGenerator()
+	id, err := useCase.idGenerator()
+	if err != nil {
+		return domain.Monitor{}, err
+	}
 	createdAt := useCase.clock()
 
 	monitor, err := domain.NewMonitor(id, target, createdAt)

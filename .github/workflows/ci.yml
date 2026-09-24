@@ -243,6 +243,7 @@ jobs:
           bash -n ../../scripts/ci/run-go-postgres-tests.sh
           go test -count=1 -tags=integration ./migrations
           go test -count=1 -tags=integration ./internal/modules/monitoring/adapters/postgres
+          go test -count=1 -tags=integration ./cmd/api
 
       - name: Verify Go vulnerabilities
         working-directory: apps/api
