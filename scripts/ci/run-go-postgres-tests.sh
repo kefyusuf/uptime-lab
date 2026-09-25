@@ -34,4 +34,5 @@ docker run --rm \
   sh -euc '
     go test -count=1 -tags=integration ./migrations
     go test -count=1 -tags=integration ./internal/modules/monitoring/adapters/postgres
+    go test -count=1 -tags=integration ./cmd/api
   '

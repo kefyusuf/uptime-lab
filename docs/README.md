@@ -15,10 +15,11 @@ Design/spec/plan documents preserve the decision history for the phase in which 
 
 - Go Control Plane: [backend/go-control-plane.md](backend/go-control-plane.md)
 - Go Monitoring verification: [testing/go-monitoring-foundation.md](testing/go-monitoring-foundation.md)
+- Go public transport verification: [testing/go-public-transport-adapter.md](testing/go-public-transport-adapter.md)
 - Public Monitoring contract verification: [testing/public-monitoring-contract.md](testing/public-monitoring-contract.md)
 - Canonical local runtime: [devops/local-development.md](devops/local-development.md)
 
-The Go Monitoring Foundation implements immutable Register/Get behavior and PostgreSQL persistence. The public Monitoring OpenAPI contract now exists as the source artifact `contracts/openapi/public.yaml`, but the Go runtime still exposes only operational `/livez` and `/readyz`; no public product handler is wired. The internal checker contract remains undefined and unimplemented. Authentication, CORS, and public network exposure remain deferred.
+The Go Monitoring Foundation implements immutable Register/Get behavior and PostgreSQL persistence. The public Monitoring contract at `contracts/openapi/public.yaml` is now served by the Go runtime for exactly `POST /monitors` and `GET /monitors/{monitorId}`. `/readyz` is schema-aware and read-only; API startup still never applies migrations. This live product transport is container-internal in the canonical Compose topology and does not imply public network exposure. The internal Checker contract remains undefined and unimplemented. Authentication, CORS, rate limiting, ingress/TLS, and public network exposure remain deferred.
 
 ## Architecture
 

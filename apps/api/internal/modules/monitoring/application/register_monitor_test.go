@@ -50,9 +50,9 @@ func TestRegisterMonitorCreatesAndPersistsMonitor(t *testing.T) {
 
 	useCase := NewRegisterMonitor(
 		repository,
-		func() domain.MonitorID {
+		func() (domain.MonitorID, error) {
 			idCalls++
-			return id
+			return id, nil
 		},
 		func() time.Time {
 			clockCalls++
@@ -94,9 +94,9 @@ func TestRegisterMonitorRejectsInvalidTargetBeforeDependenciesOrPersistence(t *t
 
 	useCase := NewRegisterMonitor(
 		repository,
-		func() domain.MonitorID {
+		func() (domain.MonitorID, error) {
 			idCalls++
-			return domain.MonitorID{}
+			return domain.MonitorID{}, nil
 		},
 		func() time.Time {
 			clockCalls++
@@ -113,13 +113,44 @@ func TestRegisterMonitorRejectsInvalidTargetBeforeDependenciesOrPersistence(t *t
 	}
 }
 
+func TestRegisterMonitorPropagatesIDGeneratorFailureWithoutClockOrPersistence(t *testing.T) {
+	repository := &fakeMonitorRepository{}
+	generatorErr := errors.New("secure identity generation failed")
+	clockCalls := 0
+
+	useCase := NewRegisterMonitor(
+		repository,
+		func() (domain.MonitorID, error) {
+			return domain.MonitorID{}, generatorErr
+		},
+		func() time.Time {
+			clockCalls++
+			return time.Now()
+		},
+	)
+
+	_, err := useCase.Execute(context.Background(), "https://example.com")
+	if !errors.Is(err, generatorErr) {
+		t.Fatalf("Execute() error = %v, want generator error", err)
+	}
+	if errors.Is(err, domain.ErrInvalidTargetURL) {
+		t.Fatalf("generator error = %v, must not be classified as invalid target", err)
+	}
+	if repository.createCalls != 0 {
+		t.Fatalf("repository Create calls = %d, want 0", repository.createCalls)
+	}
+	if clockCalls != 0 {
+		t.Fatalf("clock calls = %d, want 0 after generator failure", clockCalls)
+	}
+}
+
 func TestRegisterMonitorMapsRepositoryFailureToStableApplicationError(t *testing.T) {
 	repository := &fakeMonitorRepository{createErr: errors.New("postgres password=secret")}
 	id := mustMonitorID(t, "018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2")
 
 	useCase := NewRegisterMonitor(
 		repository,
-		func() domain.MonitorID { return id },
+		func() (domain.MonitorID, error) { return id, nil },
 		func() time.Time { return time.Date(2026, time.September, 20, 20, 0, 0, 0, time.UTC) },
 	)
 
@@ -140,7 +171,7 @@ func TestRegisterMonitorRejectsInvalidGeneratedIDBeforePersistence(t *testing.T)
 	clockCalls := 0
 	useCase := NewRegisterMonitor(
 		repository,
-		func() domain.MonitorID { return domain.MonitorID{} },
+		func() (domain.MonitorID, error) { return domain.MonitorID{}, nil },
 		func() time.Time {
 			clockCalls++
 			return time.Date(2026, time.September, 20, 20, 0, 0, 0, time.UTC)
@@ -167,7 +198,7 @@ func TestRegisterMonitorUsesDeterministicClockOnce(t *testing.T) {
 
 	useCase := NewRegisterMonitor(
 		repository,
-		func() domain.MonitorID { return id },
+		func() (domain.MonitorID, error) { return id, nil },
 		func() time.Time {
 			calls++
 			return fixed
@@ -196,10 +227,10 @@ func TestRegisterMonitorDoesNotPreRejectDuplicateTargetText(t *testing.T) {
 
 	useCase := NewRegisterMonitor(
 		repository,
-		func() domain.MonitorID {
+		func() (domain.MonitorID, error) {
 			id := ids[index]
 			index++
-			return id
+			return id, nil
 		},
 		func() time.Time { return time.Date(2026, time.September, 20, 20, 0, 0, 0, time.UTC) },
 	)

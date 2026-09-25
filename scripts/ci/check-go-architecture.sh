@@ -20,10 +20,13 @@ for bucket in shared common; do
   [[ ! -d "$API_ROOT/internal/$bucket" ]] || fail "root business bucket internal/$bucket is forbidden"
 done
 
-DOMAIN="$MODULE/internal/modules/monitoring/domain"
-APPLICATION="$MODULE/internal/modules/monitoring/application"
-PORTS="$MODULE/internal/modules/monitoring/ports"
-ADAPTERS="$MODULE/internal/modules/monitoring/adapters"
+MONITORING="$MODULE/internal/modules/monitoring"
+DOMAIN="$MONITORING/domain"
+APPLICATION="$MONITORING/application"
+PORTS="$MONITORING/ports"
+ADAPTERS="$MONITORING/adapters"
+HTTP_ADAPTER="$ADAPTERS/http"
+POSTGRES_ADAPTER="$ADAPTERS/postgres"
 PLATFORM="$MODULE/internal/platform"
 
 is_path_or_child() {
@@ -89,6 +92,12 @@ while IFS='|' read -r package imports; do
     fi
 
     if is_path_or_child "$package" "$APPLICATION"; then
+      case "$imported" in
+        net/http)
+          reject_import "$package" "$imported" "application must not depend on HTTP transport"
+          ;;
+      esac
+
       if is_path_or_child "$imported" "$ADAPTERS"; then
         reject_import "$package" "$imported" "application must not depend on adapters"
       fi
@@ -118,6 +127,27 @@ while IFS='|' read -r package imports; do
       fi
       if is_goose "$imported"; then
         reject_import "$package" "$imported" "ports must not depend on goose"
+      fi
+    fi
+
+    if is_path_or_child "$package" "$PLATFORM"; then
+      if is_path_or_child "$imported" "$MONITORING"; then
+        reject_import "$package" "$imported" "platform must remain business-module agnostic"
+      fi
+    fi
+
+    if is_path_or_child "$package" "$HTTP_ADAPTER"; then
+      if is_path_or_child "$imported" "$POSTGRES_ADAPTER"; then
+        reject_import "$package" "$imported" "Monitoring HTTP adapter must not depend on postgres adapter"
+      fi
+      if is_path_or_child "$imported" "$PLATFORM"; then
+        reject_import "$package" "$imported" "Monitoring HTTP adapter must not depend on platform"
+      fi
+      if is_pgx "$imported"; then
+        reject_import "$package" "$imported" "Monitoring HTTP adapter must not depend on pgx"
+      fi
+      if is_goose "$imported"; then
+        reject_import "$package" "$imported" "Monitoring HTTP adapter must not depend on goose"
       fi
     fi
   done

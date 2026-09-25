@@ -2,7 +2,7 @@
 
 **Architecture state:** Committed
 
-**Implementation state:** The public Monitoring contract is defined, but the Go public transport adapter is deferred. Go operational runtime and Monitoring application/persistence behavior exist; Web, Rust, and internal-contract flows remain conceptual.
+**Implementation state:** The public Monitoring contract and Go transport adapter are implemented and executable inside the Go runtime. Monitoring application/persistence behavior and schema-aware readiness are live; Web, Rust, and internal-Checker flows remain conceptual.
 
 ## Purpose
 
@@ -19,7 +19,7 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     User->>Web: Configure HTTP/HTTPS monitor
-    Web->>Go: POST /monitors (contract defined; transport deferred)
+    Web->>Go: POST /monitors (Go transport implemented)
     Go->>Monitoring: Execute monitor registration use case
     Monitoring->>DB: Persist through owned persistence boundary
     DB-->>Monitoring: Persisted
@@ -28,7 +28,7 @@ sequenceDiagram
     Web-->>User: Show configured monitor
 ```
 
-The browser never persists monitor state directly. The Go Control Plane is the durable-state owner and the Monitoring capability mediates product semantics before persistence. `POST /monitors` is defined in `contracts/openapi/public.yaml`, but this sequence is not executable end-to-end yet because no Go public handler is wired.
+The browser never persists monitor state directly. The Go Control Plane is the durable-state owner and the Monitoring capability mediates product semantics before persistence. `POST /monitors` is live in the Go runtime and conforms to `contracts/openapi/public.yaml`; the complete browser-to-Go flow remains deferred because the Web runtime and public network exposure do not exist yet.
 
 ## Execute Due Check
 
@@ -62,7 +62,7 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     User->>Web: Open monitor
-    Web->>Go: GET /monitors/{monitorId} (contract defined; transport deferred)
+    Web->>Go: GET /monitors/{monitorId} (Go transport implemented)
     Go->>Monitoring: Execute GetMonitor use case
     Monitoring->>DB: Read owned monitor
     DB-->>Monitoring: Durable monitor
@@ -71,7 +71,7 @@ sequenceDiagram
     Web-->>User: Render monitor
 ```
 
-Read ownership follows the same rule as writes: browser access remains contract-driven and PostgreSQL is never a browser-facing integration surface. `GET /monitors/{monitorId}` is defined as a contract operation, not as a currently live HTTP route.
+Read ownership follows the same rule as writes: browser access remains contract-driven and PostgreSQL is never a browser-facing integration surface. `GET /monitors/{monitorId}` is a live Go HTTP route, while a real browser caller remains deferred.
 
 ## Failure Boundary
 

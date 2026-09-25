@@ -2,7 +2,7 @@
 
 **Architecture state:** Committed
 
-**Implementation state:** Normative rules with Go dependency fitness and public-contract semantic fitness implemented. Frontend and Rust enforcement remain deferred until those runtimes exist.
+**Implementation state:** Normative rules with Go dependency fitness, public-contract semantic fitness, and public Monitoring transport boundary fitness implemented. Frontend and Rust enforcement remain deferred until those runtimes exist.
 
 ## Purpose
 
@@ -71,8 +71,9 @@ Cross-runtime communication is contract-driven. Contracts describe data exchange
 Current boundary state:
 
 - the public Monitoring contract is defined at `contracts/openapi/public.yaml`;
-- the Go public transport adapter is deferred, so no `/monitors` runtime route exists;
-- the internal Go/Rust checker contract remains deferred.
+- the Go public transport adapter is implemented for exactly `POST /monitors` and `GET /monitors/{monitorId}`;
+- the internal Go/Rust Checker contract remains deferred;
+- public network exposure remains deferred even though the Go transport exists.
 
 Database tables, generated ORM types, Rust structs, and Go domain structs are not cross-runtime contracts by default.
 
@@ -80,7 +81,7 @@ Database tables, generated ORM types, Rust structs, and Go domain structs are no
 
 The repository applies the cheapest available fitness functions as each boundary becomes real:
 
-- Go import/dependency tests enforce domain/application/adapter direction and module isolation;
+- Go import/dependency tests enforce domain/application/adapter direction and module isolation, including platform -> Monitoring and Monitoring HTTP -> PostgreSQL/platform prohibitions;
 - public Monitoring contract semantics are enforced by repository-owned contract fitness checks over Redocly-bundled JSON;
 - frontend lint/import-boundary rules remain deferred until React source exists;
 - Rust crate/module dependency checks remain deferred until Rust source exists;

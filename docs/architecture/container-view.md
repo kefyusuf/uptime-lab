@@ -2,7 +2,7 @@
 
 **Architecture state:** Committed
 
-**Implementation state:** Partial. PostgreSQL and the Go Control Plane operational runtime are implemented. The public Monitoring OpenAPI contract is defined as a source artifact, while its Go transport adapter is deferred. Web and Checker remain placeholders; the internal checker contract is deferred.
+**Implementation state:** Partial. PostgreSQL, the Go Control Plane, schema-aware readiness, and the public Monitoring HTTP transport are implemented. Web and Checker remain placeholders; the internal Checker contract and public network exposure are deferred.
 
 ## Purpose
 
@@ -14,7 +14,7 @@ This document is the C4 Level 2 view for uptime-lab. It distinguishes the commit
 
 The Web Client owns browser presentation and user interaction in the committed architecture. The React runtime is not implemented yet; the current Compose web service is a non-root placeholder.
 
-The future browser will consume the defined public Monitoring contract at `contracts/openapi/public.yaml` after a Go transport adapter exists. The contract source exists today, but no `/monitors` route is wired in the current Go runtime.
+The future browser will consume the defined public Monitoring contract at `contracts/openapi/public.yaml`. The Go transport now serves the contracted `/monitors` operations, but the React browser runtime is not implemented and Compose publishes no application host ports.
 
 The browser never accesses PostgreSQL directly.
 
@@ -30,10 +30,13 @@ Implemented responsibilities include:
 - PostgreSQL persistence for monitoring.monitors;
 - explicit goose-backed migrations;
 - typed runtime configuration and structured logging;
-- operational GET /livez and GET /readyz endpoints;
-- graceful server lifecycle and PostgreSQL readiness checks.
+- operational `GET /livez` and `GET /readyz` endpoints;
+- read-only migration-set schema compatibility for readiness;
+- the public Monitoring HTTP adapter for exactly `POST /monitors` and `GET /monitors/{monitorId}`;
+- production composition of the Monitoring PostgreSQL repository, module, and HTTP adapter;
+- graceful server lifecycle and bounded readiness checks.
 
-The production API binary intentionally does not construct the Monitoring repository/module/use cases yet because there is no runtime product transport consumer. The source contract exists independently of runtime composition; no `/monitors` endpoint exists.
+The production API binary constructs the Monitoring repository/module/HTTP adapter and composes it behind the generic platform HTTP server. API startup does not apply migrations and does not require a successful schema query; schema state is evaluated by `/readyz`.
 
 Go exclusively owns durable product state in PostgreSQL.
 
@@ -77,25 +80,26 @@ It runs exactly four services:
 ~~~text
 web      placeholder
 db       PostgreSQL
-api      real Go Control Plane
+api      real Go Control Plane + Monitoring HTTP
 checker  placeholder
 ~~~
 
-No application host ports are published. API waits for healthy PostgreSQL; Checker waits for real API readiness.
+No application host ports are published. API starts after healthy PostgreSQL but may remain live and unready until explicit migrations make the schema compatible. Checker waits for real API readiness.
 
 ## Current Runtime Diagram
 
 ~~~mermaid
 flowchart LR
+    Caller["Container-local API caller"]
     Web[Web placeholder]
-    Go["`Go Control Plane
-operational HTTP only`"]
+    Go["Go Control Plane<br/>health + Monitoring HTTP"]
     Checker[Checker placeholder]
     DB[(PostgreSQL)]
 
+    Caller -->|POST /monitors + GET /monitors/{monitorId}| Go
     Go -->|owned persistence| DB
     DB -->|service health prerequisite| Go
-    Go -->|service health prerequisite| Checker
+    Go -->|schema-aware service health prerequisite| Checker
 ~~~
 
 ## Committed Cross-Runtime Relationships
@@ -103,14 +107,15 @@ operational HTTP only`"]
 Current contract/transport state:
 
 - Public contract: defined (`contracts/openapi/public.yaml`).
-- Go public transport adapter: deferred.
+- Go public transport adapter: implemented.
 - Internal checker contract: deferred.
+- Public network exposure: deferred; Compose publishes no application host ports.
 
 The following architectural relationships remain committed but are not all implemented yet:
 
 | Relationship | Current state |
 |---|---|
-| Web -> Go: Public product API | Contract defined; Go transport deferred and no product endpoint exists. |
+| Web -> Go: Public product API | Contract and Go transport implemented; Web caller and public network exposure remain deferred. |
 | Rust -> Go: Internal control API | Deferred; Rust is still a placeholder. |
 | Go -> PostgreSQL: Owned persistence | Implemented for Monitoring create/read state. |
 | Rust -> Target: Bounded probe execution | Deferred; no probe execution runtime exists. |
@@ -121,12 +126,14 @@ PostgreSQL is never used as a cross-runtime integration bus.
 
 ## Operational Health
 
-The implemented Go HTTP surface is operational only:
+The implemented Go HTTP surface contains operational health plus the two contracted Monitoring operations.
 
-- GET /livez proves the process HTTP server is alive and does not touch PostgreSQL.
-- GET /readyz performs a bounded PostgreSQL connectivity check.
+- `GET /livez` proves the process HTTP server is alive and does not touch PostgreSQL.
+- `GET /readyz` performs a bounded PostgreSQL check and a read-only exact compatibility check against repository-owned embedded migration versions.
+- `POST /monitors` creates a Monitor through the Monitoring application boundary.
+- `GET /monitors/{monitorId}` reads a Monitor through the same boundary.
 
-Readiness does **not** claim migration/schema compatibility yet. The public contract is defined, but product endpoints remain absent; schema-compatible readiness must be decided and implemented before the future Go transport adapter is activated.
+Readiness is false for an unreachable database, absent/invalid migration metadata, missing required versions, or unknown/ahead versions. The readiness path does not apply migrations or mutate schema.
 
 ## Ownership Rules
 
@@ -144,7 +151,7 @@ The committed system has three trust transitions:
 2. internal work/result data crossing a future Go/Rust contract;
 3. untrusted target/DNS/network behavior entering the future Rust execution boundary.
 
-Only the Go operational runtime and PostgreSQL persistence boundary are implemented in the current foundation.
+The Go public Monitoring handler and PostgreSQL persistence boundary are implemented, but Compose does not expose an application host port. Authentication, CORS, rate limiting, ingress/TLS, Web, Rust execution, and the internal Checker contract remain outside this milestone.
 
 ## Related Decisions
 

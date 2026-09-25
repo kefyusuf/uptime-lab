@@ -19,7 +19,10 @@ REQUIRED_FILES=(
   docs/adr/0002-control-plane-and-execution-plane.md
   docs/adr/0003-contract-and-data-ownership.md
   docs/backend/go-control-plane.md
+  docs/devops/local-development.md
+  docs/testing/go-monitoring-foundation.md
   docs/testing/public-monitoring-contract.md
+  docs/testing/go-public-transport-adapter.md
 )
 
 fail() {
@@ -50,6 +53,7 @@ done
 
 require_text docs/README.md 'architecture/README.md'
 require_text docs/README.md 'testing/public-monitoring-contract.md'
+require_text docs/README.md 'testing/go-public-transport-adapter.md'
 
 for link in \
   'system-context.md' \
@@ -87,17 +91,29 @@ require_text docs/architecture/container-view.md 'Rust never accesses PostgreSQL
 require_text docs/architecture/container-view.md 'The browser never accesses PostgreSQL directly.'
 require_text docs/architecture/container-view.md 'Cross-runtime communication is contract-driven.'
 require_text docs/architecture/container-view.md 'Public contract: defined (`contracts/openapi/public.yaml`).'
-require_text docs/architecture/container-view.md 'Go public transport adapter: deferred.'
+require_text docs/architecture/container-view.md 'Go public transport adapter: implemented.'
+require_text docs/architecture/container-view.md 'No application host ports are published.'
 require_text docs/architecture/container-view.md 'Internal checker contract: deferred.'
 require_text docs/architecture/dependency-rules.md 'Rust Checker -> PostgreSQL is forbidden.'
 require_text docs/architecture/dependency-rules.md 'Cross-runtime implementation-code sharing is forbidden.'
 require_text docs/architecture/data-ownership.md 'Go exclusively owns durable product state in PostgreSQL.'
 require_text docs/backend/go-control-plane.md 'Go Control Plane'
 require_text docs/backend/go-control-plane.md 'contracts/openapi/public.yaml'
+require_text docs/backend/go-control-plane.md 'POST /monitors'
+require_text docs/backend/go-control-plane.md 'read-only migration compatibility checker'
+require_text docs/devops/local-development.md 'docker compose up -d db api'
+require_text docs/devops/local-development.md 'docker compose exec -T api /usr/local/bin/uptime-lab-migrate up'
+require_text docs/devops/local-development.md 'docker compose up -d --wait --wait-timeout 60'
+require_text docs/testing/go-monitoring-foundation.md 'Go architecture tests: 19 passed, 0 failed'
 require_text docs/testing/public-monitoring-contract.md 'contracts/openapi/public.yaml'
 require_text docs/testing/public-monitoring-contract.md 'OpenAPI 3.1.2'
 require_text docs/testing/public-monitoring-contract.md '@redocly/cli@2.53.3'
 require_text docs/testing/public-monitoring-contract.md 'Go transport conformance'
+require_text docs/testing/go-public-transport-adapter.md 'POST /monitors'
+require_text docs/testing/go-public-transport-adapter.md 'GET  /monitors/{monitorId}'
+require_text docs/testing/go-public-transport-adapter.md 'No application host ports are published'
+require_text docs/testing/go-public-transport-adapter.md 'The readiness path is read-only.'
+require_text docs/testing/go-public-transport-adapter.md 'The internal Checker contract remains deferred.'
 
 sequence_count="$(grep -c '^sequenceDiagram$' "$ROOT/docs/architecture/runtime-flows.md" || true)"
 [[ "$sequence_count" -eq 4 ]] || fail "runtime-flows.md must contain exactly four sequenceDiagram blocks (found $sequence_count)"

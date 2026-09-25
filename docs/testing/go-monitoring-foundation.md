@@ -14,12 +14,16 @@ This document maps each implemented foundation responsibility to its cheapest me
 | Migration schema/up-down-up | real PostgreSQL integration |
 | pgx repository mapping/errors | real PostgreSQL integration |
 | Runtime config/logging/pool | Go unit tests |
-| /livez and /readyz semantics | httptest unit tests |
+| /livez and schema-aware /readyz semantics | httptest + real PostgreSQL integration |
+| public Monitoring HTTP request/response/error behavior | adapter unit tests |
+| production Monitoring composition | real PostgreSQL cmd/api integration |
+| landed migration immutability | Git-history repository fitness |
 | graceful HTTP lifecycle | loopback lifecycle test |
 | race safety | go test -count=1 -race ./... |
 | API Docker image/topology | local-dev fitness cases |
-| real API readiness/start ordering | canonical Docker Compose smoke |
-| PostgreSQL persistence/reset | canonical Docker Compose smoke |
+| fresh live-before-ready + explicit migration bootstrap | canonical Docker Compose smoke |
+| real container-local Monitoring POST/GET | canonical Docker Compose smoke |
+| PostgreSQL/product persistence/reset | canonical Docker Compose smoke |
 | known Go vulnerabilities | pinned govulncheck |
 | full branch aggregation | path-aware go-api/local-dev/public-contract jobs + CI / gate |
 
@@ -75,10 +79,10 @@ Negative fixtures prove that:
 The canonical harness currently reports:
 
 ~~~text
-Go architecture tests: 11 passed, 0 failed
+Go architecture tests: 19 passed, 0 failed
 ~~~
 
-## Migration Integration
+## Migration and Schema-Compatibility Integration
 
 Migration integration uses a real PostgreSQL service and forces fresh execution with -count=1.
 
@@ -90,9 +94,13 @@ It verifies:
 - mutable lifecycle/version columns are absent;
 - goose metadata is not stored in the monitoring schema;
 - Down removes the application schema/table;
-- Up succeeds again after Down.
+- Up succeeds again after Down;
+- compatibility fails without creating Goose metadata on a fresh database;
+- compatibility succeeds only for the exact repository-owned applied migration set;
+- missing/rolled-back, duplicate, false/unapplied, invalid-zero, and unknown/ahead metadata remain unready;
+- compatibility checks leave migration metadata unchanged.
 
-This is database-side evidence and must never be accepted from Go's test cache.
+This is database-side evidence and must never be accepted from Go's test cache. A separate Git-history fitness check also rejects modification, rename, or deletion of already-landed SQL migrations.
 
 ## PostgreSQL Adapter Integration
 
@@ -131,13 +139,17 @@ Tests verify invalid configuration fails, pool construction does not require liv
 
 httptest and loopback tests verify:
 
-- /livez is DB-independent;
-- /readyz pings DB with a bounded timeout;
-- readiness failure returns sanitized 503;
-- non-GET behavior is deterministic;
+- `/livez` is DB-independent;
+- `/readyz` delegates to a bounded generic readiness checker and returns sanitized 503 on failure;
+- platform routing gives `/livez` and `/readyz` precedence over the generic product handler;
+- a nil product handler fails safely with 404;
 - explicit HTTP resource/time bounds exist;
 - context cancellation drives graceful shutdown;
 - repeated/cancelled shutdown paths do not panic.
+
+### Public Monitoring HTTP Adapter
+
+The dedicated adapter suite verifies the exact two-operation contract, explicit method/path handling including HEAD rejection, media/syntax/shape classification, sanitized RFC 9457 Problem Details, success DTO shape, target text preservation, and application-error mapping. See [go-public-transport-adapter.md](go-public-transport-adapter.md) for the complete evidence map.
 
 ## Race Verification
 
@@ -154,7 +166,7 @@ go test -count=1 -race ./...
 
 scripts/ci/test-check-local-dev.sh pins the canonical topology and negative cases.
 
-The current Task 7+ contract verifies 37 cases, including:
+The current local-dev topology contract verifies 37 cases, including:
 
 - exactly four services;
 - no host application ports;
@@ -174,15 +186,16 @@ scripts/ci/smoke-local-dev.sh uses real Docker/Compose.
 
 It explicitly verifies:
 
-- compose config;
-- explicit API image build;
-- healthy PostgreSQL;
-- healthy real API;
-- container-local /livez=ok;
-- container-local /readyz=ok;
-- Checker healthy after API;
-- PostgreSQL state survives normal down/up;
-- PostgreSQL state is reset by down -v;
+- compose config and explicit image builds;
+- a fresh database starts `db` + `api` with `/livez` available and `/readyz` unavailable;
+- Goose metadata is absent before explicit migration;
+- `uptime-lab-migrate up` is the explicit schema transition;
+- the full stack becomes healthy afterward;
+- real container-local `POST /monitors` creates a Monitor;
+- real `GET /monitors/{monitorId}` returns the same id, targetUrl, and exact createdAt text;
+- normal down/up preserves schema, probe state, and Monitor state without rerunning migration;
+- down -v removes schema/product state and returns the API to live-but-unready;
+- explicit migration restores readiness after reset;
 - cleanup.
 
 The fake-Docker harness validates smoke control flow but does not replace the real Docker smoke.
@@ -258,12 +271,11 @@ docker compose config --quiet
 
 ## Deferred Verification
 
-Public OpenAPI artifact verification is no longer deferred; it is owned by [public-monitoring-contract.md](public-monitoring-contract.md). Go transport conformance remains deferred because no public handler is implemented.
+Public OpenAPI artifact verification is no longer deferred; it is owned by [public-monitoring-contract.md](public-monitoring-contract.md). Go transport conformance is now implemented and documented in [go-public-transport-adapter.md](go-public-transport-adapter.md).
 
 There are intentionally no tests yet for:
 
-- public product HTTP handler/transport conformance;
-- internal checker API;
+- internal Checker API;
 - mutable monitor lifecycle;
 - scheduling/due work;
 - result ingestion/history;
