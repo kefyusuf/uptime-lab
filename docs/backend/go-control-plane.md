@@ -4,7 +4,7 @@
 
 The Go Control Plane foundation is implemented.
 
-The current runtime is intentionally narrow: it owns Monitoring domain/application/persistence foundations and operational health. The repository now defines the public Monitoring OpenAPI source contract, but no public product transport or internal checker transport is exposed yet.
+The current runtime is intentionally narrow: it owns Monitoring domain/application/persistence, operational health, schema-aware readiness, and the public Monitoring HTTP transport. The internal Checker transport remains absent, and the canonical Compose topology does not expose an application host port.
 
 Reviewed Go toolchain: Go 1.27.1.
 
@@ -16,7 +16,7 @@ The implemented Go module is rooted at:
 apps/api
 ~~~
 
-The repository-level public Monitoring contract is authoritative at `contracts/openapi/public.yaml`. It defines `POST /monitors` and `GET /monitors/{monitorId}` but is not served by `apps/api` yet.
+The repository-level public Monitoring contract is authoritative at `contracts/openapi/public.yaml`. `apps/api` serves exactly `POST /monitors` and `GET /monitors/{monitorId}` through the Monitoring HTTP adapter.
 
 The runtime currently owns:
 
@@ -29,11 +29,13 @@ The runtime currently owns:
 - structured JSON logging through log/slog;
 - PostgreSQL pool construction;
 - operational HTTP lifecycle;
-- GET /livez and GET /readyz;
+- `GET /livez` and schema-aware `GET /readyz`;
+- the public Monitoring HTTP adapter for `POST /monitors` and `GET /monitors/{monitorId}`;
+- read-only repository-migration compatibility checks;
 - explicit migration CLI;
-- architecture/race/PostgreSQL/vulnerability CI evidence.
+- architecture/race/PostgreSQL/Docker/vulnerability CI evidence.
 
-It does not currently own a public /monitors HTTP transport, internal checker transport, mutable monitor lifecycle, scheduler, due-work query, result ingestion, history, incident handling, or probe execution.
+It does not currently own an internal Checker transport, mutable monitor lifecycle, scheduler, due-work query, result ingestion, history, incident handling, probe execution, authentication/CORS/rate limiting, or public ingress.
 
 ## Module Layout
 
@@ -48,7 +50,9 @@ apps/api/
 │   │       ├── domain/
 │   │       ├── application/
 │   │       ├── ports/
-│   │       ├── adapters/postgres/
+│   │       ├── adapters/
+│   │       │   ├── http/
+│   │       │   └── postgres/
 │   │       └── module.go
 │   └── platform/
 │       ├── config/
@@ -68,7 +72,7 @@ MonitorID wraps the Go standard-library uuid.UUID type and rejects the nil UUID.
 
 Domain tests explicitly construct UUID v7 values with uuid.NewV7() and prove round-trip/equality behavior.
 
-RegisterMonitor receives identity through an injected application IDGenerator. Because the production HTTP runtime does not wire Monitoring yet, no live registration request currently invokes an ID generator. When the real product composition is introduced, its generator must supply Go-generated UUID v7 values rather than moving identity generation into persistence.
+RegisterMonitor receives identity through an injected, error-returning application IDGenerator. Production composition supplies `uuid.NewV7()` and wraps the result with `domain.NewMonitorID`. Generator failure is returned before clock or persistence work; identity generation never moves into persistence or the transport DTO.
 
 ### TargetURL
 
@@ -126,7 +130,7 @@ raw target
   -> return Monitor
 ~~~
 
-Invalid input fails before persistence.
+Invalid input fails before generated identity, clock, or persistence work. ID-generation failure also stops before clock/persistence.
 
 Repository failures map to stable application persistence errors rather than exposing PostgreSQL/pgx details.
 
@@ -201,6 +205,10 @@ The API process does not auto-migrate at startup.
 
 The migration command is packaged into the same Docker image as the API binary and must be run explicitly.
 
+Landed SQL migrations are immutable repository history: CI rejects modification, rename, or deletion of a migration present in the base revision while allowing schema evolution through new migration versions.
+
+Runtime schema compatibility is checked read-only from Goose migration metadata against the repository-owned embedded migration version set. The check does not run `Up`/`Down`, create the Goose table, or otherwise mutate schema.
+
 ## Platform Runtime
 
 ### Configuration
@@ -241,30 +249,31 @@ pgxpool.ParseConfig and pgxpool.NewWithConfig build the pool.
 
 Construction validates configuration but does not require an immediately reachable database. Live DB availability belongs to readiness.
 
-### Operational HTTP
+### Operational and Product HTTP
 
-Only:
+The runtime serves exactly:
 
 ~~~text
-GET /livez
-GET /readyz
+GET  /livez
+GET  /readyz
+POST /monitors
+GET  /monitors/{monitorId}
 ~~~
 
-The source contract defines future public `POST /monitors` and `GET /monitors/{monitorId}` operations, but those routes are not registered in the current server.
-
-/livez:
+`/livez`:
 
 - returns 200;
 - does not query PostgreSQL.
 
-/readyz:
+`/readyz`:
 
-- performs a bounded PostgreSQL Ping;
-- returns 200 on success;
-- returns 503 on DB failure/timeout;
-- does not expose DB error details.
+- uses the existing bounded readiness timeout;
+- requires PostgreSQL access plus an exact read-only match between applied Goose migration metadata and repository-owned embedded positive migration versions;
+- treats missing/invalid version-zero metadata, missing migrations, duplicate/unapplied rows, and unknown/ahead versions as unready;
+- returns 503 with sanitized output on connectivity or compatibility failure;
+- never applies migrations or creates migration metadata.
 
-Readiness does not currently verify schema/migration compatibility.
+The Monitoring adapter serves the two operations defined in `contracts/openapi/public.yaml`. It explicitly rejects undocumented methods, including implicit HEAD behavior, maps request/application failures to the contracted Problem Details statuses, and never exposes raw PostgreSQL/pgx errors.
 
 ### Shutdown
 
@@ -272,24 +281,18 @@ SIGINT/SIGTERM cancellation drives bounded graceful http.Server shutdown. The Po
 
 ## Production Composition Boundary
 
-cmd/api composes only:
+cmd/api is the composition root:
 
 ~~~text
 typed config
   -> structured logger
-  -> pgx pool
-  -> operational HTTP server
+  -> one pgx pool
+       |-> Monitoring PostgreSQL repository -> monitoring.Module -> Monitoring HTTP adapter
+       |-> pgx stdlib wrapper -> read-only migration compatibility checker -> /readyz
+  -> generic platform HTTP server
 ~~~
 
-It intentionally does **not** construct:
-
-- Monitoring PostgreSQL repository;
-- monitoring.Module;
-- RegisterMonitor;
-- GetMonitor;
-- goose migration provider.
-
-That is deliberate. The OpenAPI source artifact is not a runtime consumer; there is no product transport adapter yet, so wiring those services would be dead production composition.
+The stdlib wrapper reuses the same pgx pool; production does not open a second PostgreSQL pool for readiness. Construction validates local configuration/migration metadata but does not query live schema state. API startup never runs migrations.
 
 ## Docker
 
@@ -314,11 +317,12 @@ fmt
 tidy cleanliness
 mod verify
 vet
-architecture fitness
-unit/application/runtime tests
+architecture fitness (19 canonical cases)
+unit/application/HTTP/runtime tests
 fresh race
-real PostgreSQL migration integration
+real PostgreSQL migration + compatibility integration
 real PostgreSQL adapter integration
+real cmd/api composition integration
 govulncheck v1.8.0
 ~~~
 
@@ -330,10 +334,8 @@ See [../testing/go-monitoring-foundation.md](../testing/go-monitoring-foundation
 
 The following remain explicitly deferred:
 
-- public Monitoring Go transport adapter and handler conformance;
-- internal Go/Rust checker contract;
-- Monitoring product HTTP handlers;
-- production MonitorID generator composition;
+- internal Go/Rust Checker contract;
+- mutable public Monitoring operations beyond create/read;
 - mutable lifecycle and concurrency semantics;
 - scheduling/due work;
 - result ingestion/history;

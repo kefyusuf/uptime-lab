@@ -56,18 +56,22 @@ Responsibilities:
 - checker is a hardened non-root placeholder that waits for healthy API;
 - web is a hardened non-root placeholder with no hard startup dependency.
 
-## Start the Stack
+## Fresh Database Bootstrap
 
-From the repository root:
+A fresh PostgreSQL volume intentionally leaves the API **live but unready** until migrations are applied explicitly. The canonical sequence verified by the real Docker smoke is:
 
 ~~~bash
-docker compose up -d --build --wait
+docker compose build api
+docker compose build web checker
+docker compose up -d db api
+
+docker compose exec -T api /usr/local/bin/uptime-lab-migrate up
+
+docker compose up -d --wait --wait-timeout 60
 docker compose ps
 ~~~
 
-Startup readiness is health-based rather than sleep-based.
-
-The API waits for healthy PostgreSQL. Checker waits for healthy API.
+The important boundary is the order, not a sleep: start `db` + `api`, run the migration command explicitly inside the API container, then start/wait for the full four-service topology. Before migration, `/livez` is available while `/readyz` fails. After migration, API readiness succeeds and the Checker placeholder may become healthy.
 
 ## Follow Logs
 
@@ -89,11 +93,13 @@ API logs are structured JSON and include stable service/component/event fields.
 
 ## API Health
 
-The API exposes operational endpoints only:
+The API exposes operational health plus the live Monitoring product transport:
 
 ~~~text
-GET /livez
-GET /readyz
+GET  /livez
+GET  /readyz
+POST /monitors
+GET  /monitors/{monitorId}
 ~~~
 
 The Compose healthcheck calls the real readiness endpoint from inside the API container:
@@ -104,11 +110,12 @@ http://127.0.0.1:8080/readyz
 
 Semantics:
 
-- /livez returns 200 without a database call;
-- /readyz performs a bounded PostgreSQL connectivity check;
-- readiness does not claim migration/schema compatibility.
+- `/livez` returns 200 without a database call;
+- `/readyz` requires bounded PostgreSQL access **and** read-only compatibility with the repository-owned embedded migration set;
+- readiness fails on a fresh/unmigrated database and does not create migration metadata or apply schema changes;
+- `POST /monitors` and `GET /monitors/{monitorId}` are live inside the API container/network.
 
-The repository defines the public Monitoring source contract at `contracts/openapi/public.yaml`, but there is no live `/monitors` endpoint and no internal checker product endpoint.
+The repository-defined public Monitoring source contract remains `contracts/openapi/public.yaml`. The internal Checker product contract remains absent.
 
 Because no host application port is published, health is normally observed through Compose health or container-local commands rather than host HTTP.
 
@@ -172,13 +179,13 @@ docker compose down
 
 The project-scoped postgres-data volume remains.
 
-Restart:
+Restart the already-built stack:
 
 ~~~bash
-docker compose up -d --build --wait
+docker compose up -d --wait --wait-timeout 60
 ~~~
 
-The existing volume is reused.
+The existing migrated volume is reused, so no migration rerun is required for an unchanged migration set. Task 5 smoke also verifies that previously created Monitor state survives this normal down/up cycle.
 
 ## Destructive Reset
 
@@ -208,12 +215,7 @@ A developer may create an untracked root .env with different local values.
 
 The official PostgreSQL image applies initialization variables only when the data directory is empty. Changing them after initialization does not rewrite an existing cluster.
 
-To intentionally apply new initialization values:
-
-~~~bash
-docker compose down -v
-docker compose up -d --build --wait
-~~~
+To intentionally apply new initialization values, run `docker compose down -v` and then repeat the [Fresh Database Bootstrap](#fresh-database-bootstrap). A destructive reset removes both product data and migration metadata, so a one-step `docker compose up --wait` is intentionally insufficient on the fresh volume.
 
 The root .env is gitignored. Never place production/shared secrets in .env.example.
 
@@ -221,13 +223,13 @@ The root .env is gitignored. Never place production/shared secrets in .env.examp
 
 The repository defines no fixed Compose project name, container names, globally named networks, or globally named volumes.
 
-For parallel worktrees, assign a unique project name:
+For parallel worktrees, assign a unique project name before running the canonical bootstrap:
 
 ~~~bash
-COMPOSE_PROJECT_NAME=uptime-lab-my-branch docker compose up -d --build --wait
+export COMPOSE_PROJECT_NAME=uptime-lab-my-branch
 ~~~
 
-Use the same project name for ps, logs, down, and down -v in that worktree.
+Use the same project name for build, up, exec, ps, logs, down, and down -v in that worktree.
 
 The repository smoke script automatically selects an isolated project name when one is not supplied.
 
@@ -270,10 +272,13 @@ The checks cover:
 - four-service topology invariants;
 - exact/pinned API Docker stages;
 - non-root/read-only API runtime;
-- real /readyz health;
+- real schema-aware `/readyz` health;
+- live-before-ready behavior on a fresh database;
+- explicit migration bootstrap with no startup auto-migration;
+- real container-local `POST /monitors` -> `GET /monitors/{monitorId}` with exact `createdAt` round trip;
 - Checker-after-API startup ordering;
-- PostgreSQL persistence across normal down/up;
-- PostgreSQL reset across down -v;
+- PostgreSQL/product persistence across normal down/up;
+- PostgreSQL/product reset across down -v;
 - deterministic cleanup.
 
 The fake-Docker harness validates smoke control flow only. The real smoke is authoritative runtime evidence.
@@ -292,7 +297,7 @@ docker compose logs api
 docker compose logs db
 ~~~
 
-Remember that /readyz tests database connectivity. Apply migrations explicitly when product schema state is required; current readiness itself does not verify schema compatibility.
+Remember that `/readyz` tests both database reachability and repository migration compatibility. On a fresh volume, keep the API running and apply migrations explicitly; do not weaken readiness or expect API startup to migrate.
 
 ### Migration status is unexpected
 
@@ -310,8 +315,9 @@ Use the documented destructive reset only if you intentionally want a fresh loca
 
 ~~~bash
 docker compose down -v
-docker compose up -d --build --wait
 ~~~
+
+Then repeat the [Fresh Database Bootstrap](#fresh-database-bootstrap), including the explicit migration step.
 
 ### Parallel worktrees interfere
 
@@ -321,10 +327,9 @@ Use a distinct COMPOSE_PROJECT_NAME for each worktree.
 
 - Web is a placeholder, not React.
 - Checker is a placeholder, not Rust.
-- API exposes only /livez and /readyz.
-- The public Monitoring OpenAPI contract is defined as a source artifact, but no public product HTTP handler/endpoint is wired.
-- No internal checker API exists.
-- Monitoring Register/Get code is not wired into the production HTTP runtime yet.
+- The Go runtime serves only the current create/read Monitoring product surface; list/update/delete/lifecycle operations remain absent.
+- No application host port is exposed by Compose, so a live product transport is not the same as public network deployment.
+- No internal Checker API exists.
 - No mutable monitor lifecycle exists.
 - No scheduler/due-work/result history exists.
 - No probe execution occurs.

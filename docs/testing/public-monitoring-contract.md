@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document is the canonical verification guide for the public Monitoring OpenAPI source artifact. It verifies the contract as a repository artifact; it does not claim that the Go runtime serves the contract.
+This document is the canonical verification guide for the public Monitoring OpenAPI source artifact. It verifies the contract as a repository artifact. The Go runtime now serves the contract, but runtime transport conformance is verified separately in [go-public-transport-adapter.md](go-public-transport-adapter.md).
 
 ## Authoritative Source
 
@@ -19,7 +19,7 @@ POST /monitors
 GET  /monitors/{monitorId}
 ~~~
 
-The Go runtime still exposes only `GET /livez` and `GET /readyz`. No public Monitoring handler is wired yet. The internal Checker contract remains undefined and unimplemented.
+The Go runtime serves these two operations through the Monitoring HTTP adapter in addition to `GET /livez` and schema-aware `GET /readyz`. Canonical Compose publishes no application host ports, so this does not imply public network deployment. The internal Checker contract remains undefined and unimplemented.
 
 ## Verification Layers
 
@@ -103,8 +103,8 @@ The negative harness is intentionally network-independent and uses Node standard
 
 Contract verification intentionally does not validate:
 
-- Go transport conformance or handler routing;
-- runtime request/response serialization;
+- Go transport conformance or handler routing (owned by the runtime adapter test layer);
+- runtime request/response serialization (owned by the runtime adapter/integration layer);
 - production MonitorID generator composition;
 - migration/schema compatibility at readiness;
 - authentication, authorization, or CORS;
@@ -117,11 +117,11 @@ Those concerns require separate runtime/product gates.
 
 ## Contract Verification vs Go Transport Conformance
 
-The public contract is **defined**, but the Go public transport adapter is **deferred**.
+The public contract is **defined and served**, but the evidence layers remain intentionally separate.
 
-A green `public-contract` job means the source artifact is valid and matches repository-owned semantic invariants. It does not mean `POST /monitors` or `GET /monitors/{monitorId}` can be called against the running Go API.
+A green `public-contract` job means the source artifact is valid and matches repository-owned semantic invariants. Runtime conformance is proven by Monitoring HTTP adapter tests, real PostgreSQL production-composition integration, schema-aware readiness evidence, and canonical Docker POST/GET smoke.
 
-Go transport conformance begins only after a later gate implements handlers, composition, serialization/error mapping, and schema-compatible readiness.
+This separation keeps `contracts/openapi/public.yaml` authoritative without making the OpenAPI parser responsible for Go routing or persistence behavior.
 
 ## Change Detection
 
@@ -146,3 +146,5 @@ The `public-contract` GitHub Actions job:
 The stable aggregate job remains `CI / gate`.
 
 When public-contract detection is true, `public-contract` must succeed. When detection is false, the job may be skipped and the aggregate gate accepts that skipped result. Documentation fitness remains owned by the repository/documentation checks rather than by the OpenAPI parser.
+
+For live runtime evidence, see [go-public-transport-adapter.md](go-public-transport-adapter.md).

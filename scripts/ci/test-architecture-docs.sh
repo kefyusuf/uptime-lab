@@ -16,13 +16,14 @@ expect_failure() { local n="$1"; shift; if "$@" >/dev/null 2>&1; then fail "$n";
 
 make_fixture() {
   rm -rf "$TMP/repo"
-  mkdir -p "$TMP/repo/docs/architecture" "$TMP/repo/docs/adr" "$TMP/repo/docs/backend" "$TMP/repo/docs/testing"
+  mkdir -p "$TMP/repo/docs/architecture" "$TMP/repo/docs/adr" "$TMP/repo/docs/backend" "$TMP/repo/docs/devops" "$TMP/repo/docs/testing"
 
   cat > "$TMP/repo/docs/README.md" <<'DOC'
 # Documentation
 
 See [Architecture](architecture/README.md).
 See [Public Monitoring Contract](testing/public-monitoring-contract.md).
+See [Go Public Transport](testing/go-public-transport-adapter.md).
 DOC
 
   cat > "$TMP/repo/docs/backend/go-control-plane.md" <<'DOC'
@@ -30,6 +31,8 @@ DOC
 
 The Go Control Plane foundation is implemented.
 The public source contract is contracts/openapi/public.yaml.
+The runtime serves POST /monitors and GET /monitors/{monitorId}.
+Production uses a read-only migration compatibility checker.
 DOC
 
   cat > "$TMP/repo/docs/testing/public-monitoring-contract.md" <<'DOC'
@@ -38,6 +41,30 @@ DOC
 Authoritative source: contracts/openapi/public.yaml.
 OpenAPI 3.1.2 is validated with @redocly/cli@2.53.3.
 Contract verification is separate from Go transport conformance.
+DOC
+
+  cat > "$TMP/repo/docs/testing/go-monitoring-foundation.md" <<'DOC'
+# Go Monitoring Foundation Testing
+
+Go architecture tests: 19 passed, 0 failed.
+DOC
+
+  cat > "$TMP/repo/docs/testing/go-public-transport-adapter.md" <<'DOC'
+# Go Public Monitoring Transport Testing
+
+POST /monitors
+GET  /monitors/{monitorId}
+No application host ports are published.
+The readiness path is read-only.
+The internal Checker contract remains deferred.
+DOC
+
+  cat > "$TMP/repo/docs/devops/local-development.md" <<'DOC'
+# Local Development
+
+docker compose up -d db api
+docker compose exec -T api /usr/local/bin/uptime-lab-migrate up
+docker compose up -d --wait --wait-timeout 60
 DOC
 
   cat > "$TMP/repo/docs/glossary.md" <<'DOC'
@@ -91,7 +118,8 @@ The browser never accesses PostgreSQL directly.
 Cross-runtime communication is contract-driven.
 
 Public contract: defined (`contracts/openapi/public.yaml`).
-Go public transport adapter: deferred.
+Go public transport adapter: implemented.
+No application host ports are published.
 Internal checker contract: deferred.
 
 ```mermaid
@@ -248,8 +276,24 @@ sed -i '/testing\/public-monitoring-contract\.md/d' "$TMP/repo/docs/README.md"
 expect_failure "missing public contract testing navigation fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
-sed -i '/Go public transport adapter: deferred\./d' "$TMP/repo/docs/architecture/container-view.md"
-expect_failure "missing public transport deferral fails" "$CHECKER" "$TMP/repo"
+rm "$TMP/repo/docs/testing/go-public-transport-adapter.md"
+expect_failure "missing public transport implementation guide fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+sed -i '/Go public transport adapter: implemented\./d' "$TMP/repo/docs/architecture/container-view.md"
+expect_failure "missing implemented public transport marker fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+sed -i '/No application host ports are published\./d' "$TMP/repo/docs/architecture/container-view.md"
+expect_failure "missing transport-vs-exposure distinction fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+sed -i '/read-only migration compatibility checker/d' "$TMP/repo/docs/backend/go-control-plane.md"
+expect_failure "missing schema-aware readiness documentation fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+sed -i '/uptime-lab-migrate up/d' "$TMP/repo/docs/devops/local-development.md"
+expect_failure "missing explicit migration bootstrap fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
 mkdir -p "$TMP/repo/docs/frontend"

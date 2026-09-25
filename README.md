@@ -8,12 +8,12 @@ uptime-lab is still in the foundation phase and is not a production-ready monito
 
 The **Go Monitoring Foundation is implemented**: the repository contains the Go Control Plane runtime, immutable Monitoring registration/read application behavior, PostgreSQL persistence and migrations, operational health endpoints, Docker integration, and CI verification.
 
-The public Monitoring OpenAPI contract is now defined as a source artifact at `contracts/openapi/public.yaml`, covering exactly `POST /monitors` and `GET /monitors/{monitorId}`. The Go runtime still exposes only `/livez` and `/readyz`; no public product handler or transport adapter is wired. The internal checker contract, mutable monitor lifecycle, scheduling/results, Rust checker runtime, React web runtime, authentication/CORS, and public exposure remain deferred. Web and Checker are still process-level placeholders in the canonical Docker Compose topology.
+The public Monitoring OpenAPI contract at `contracts/openapi/public.yaml` is now executable inside the Go runtime: `POST /monitors` and `GET /monitors/{monitorId}` are served by the Monitoring HTTP adapter. `/livez` remains database-independent, while `/readyz` requires PostgreSQL connectivity plus exact read-only compatibility with the repository-owned migration set. Docker Compose still publishes no application host ports; the internal Checker contract, mutable monitor lifecycle, scheduling/results, Rust checker runtime, React web runtime, authentication/CORS, and public network exposure remain deferred. Web and Checker are still process-level placeholders in the canonical Docker Compose topology.
 
 ## Architecture
 
 - **React + TypeScript** owns presentation and browser interaction. Its runtime is not implemented yet.
-- **Go** owns the modular-monolith control plane, domain/application rules, PostgreSQL persistence ownership, migrations, and API semantics. The current runtime exposes operational health only.
+- **Go** owns the modular-monolith control plane, domain/application rules, PostgreSQL persistence ownership, explicit migrations, schema-aware readiness, and the live public Monitoring HTTP transport.
 - **Rust** owns bounded concurrent network probe execution through Ports and Adapters. Its runtime is not implemented yet.
 - **PostgreSQL** holds durable application state owned exclusively by the Go Control Plane. The implemented Monitoring namespace currently contains only monitoring.monitors.
 - **Docker Compose** is the canonical local-development substrate. It runs PostgreSQL, the real Go API, and placeholder Web/Checker processes without publishing application host ports.
@@ -30,7 +30,9 @@ See [docs/devops/local-development.md](docs/devops/local-development.md) for pre
 
 See [docs/testing/go-monitoring-foundation.md](docs/testing/go-monitoring-foundation.md) for the evidence model covering domain/application tests, architecture fitness functions, PostgreSQL integration, runtime lifecycle tests, Docker smoke, race detection, and vulnerability scanning.
 
-See [docs/testing/public-monitoring-contract.md](docs/testing/public-monitoring-contract.md) for the public Monitoring OpenAPI source contract, semantic fitness checks, and CI behavior. Contract verification does not imply Go transport conformance.
+See [docs/testing/go-public-transport-adapter.md](docs/testing/go-public-transport-adapter.md) for the live Monitoring HTTP transport, schema-aware readiness, migration immutability, production composition, and real Docker POST/GET evidence.
+
+See [docs/testing/public-monitoring-contract.md](docs/testing/public-monitoring-contract.md) for the public Monitoring OpenAPI source contract, semantic fitness checks, and CI behavior. Contract-artifact verification and runtime transport verification remain separate evidence layers.
 
 ## Engineering Principles
 
