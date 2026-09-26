@@ -1,9 +1,9 @@
 # Next Product Scope Reassessment
 
-**Status:** Review candidate  
-**Date:** 2026-09-26  
-**Repository:** `kefyusuf/uptime-lab`  
-**Base:** `main@8cee60c128830bf173e47e70516cbb70a4ad1a3e`  
+**Status:** Review candidate
+**Date:** 2026-09-26
+**Repository:** `kefyusuf/uptime-lab`
+**Base:** `main@8cee60c128830bf173e47e70516cbb70a4ad1a3e`
 **Purpose:** Select the next product milestone after the Go Public Transport Adapter phase without beginning implementation.
 
 ---
