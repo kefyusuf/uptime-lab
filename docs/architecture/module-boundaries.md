@@ -84,7 +84,7 @@ monitoring.Module groups RegisterMonitor and GetMonitor when supplied with:
 
 It does not create platform resources or read environment variables.
 
-The production cmd/api binary intentionally does not construct this module yet because no product HTTP/internal transport consumes it. This avoids dead service wiring.
+The production `cmd/api` binary now constructs the Monitoring module with the PostgreSQL repository and server-owned identity/time dependencies, then composes the Monitoring HTTP adapter outside the module. The module itself still creates no platform resources and reads no environment configuration.
 
 ## Deferred Monitoring Responsibilities
 
