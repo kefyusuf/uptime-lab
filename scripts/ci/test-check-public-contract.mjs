@@ -142,13 +142,10 @@ function fixtureRoot(name) {
   return root;
 }
 
-function runChecker(name, document, { internal = false } = {}) {
+function runChecker(name, document) {
   const root = fixtureRoot(name);
   const bundle = path.join(root, 'bundle.json');
   fs.writeFileSync(bundle, JSON.stringify(document));
-  if (internal) {
-    fs.writeFileSync(path.join(root, 'contracts', 'openapi', 'internal.yaml'), 'openapi: 3.1.2\n');
-  }
   return spawnSync(process.execPath, [checkerPath, bundle, root], {
     encoding: 'utf8',
   });
@@ -239,12 +236,5 @@ expectReject('monitorId format mismatch fails', (d) => { d.paths['/monitors/{mon
 expectReject('Problem type format mismatch fails', (d) => { d.components.schemas.Problem.properties.type.format = 'uri'; }, 'Problem.type.format must be uri-reference');
 expectReject('Problem instance format mismatch fails', (d) => { d.components.schemas.Problem.properties.instance.format = 'uri'; }, 'Problem.instance.format must be uri-reference');
 expectReject('Problem status range mismatch fails', (d) => { d.components.schemas.Problem.properties.status.maximum = 999; }, 'Problem.status.maximum must be 599');
-expectReject(
-  'speculative internal contract file fails',
-  () => {},
-  'contracts/openapi/internal.yaml must not exist',
-  { internal: true },
-);
-
 console.log(`\nPublic contract semantic tests: ${passed} passed, ${failed} failed`);
 if (failed !== 0) process.exit(1);

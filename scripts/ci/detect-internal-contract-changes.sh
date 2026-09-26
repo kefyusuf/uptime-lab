@@ -25,17 +25,18 @@ if ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
   exit 0
 fi
 
-PUBLIC_CONTRACT=false
+INTERNAL_CONTRACT=false
 while IFS= read -r path; do
   case "$path" in
-    contracts/openapi/public.yaml|\
-    scripts/ci/detect-public-contract-changes.sh|scripts/ci/test-detect-public-contract-changes.sh|\
-    scripts/ci/check-public-contract.mjs|scripts/ci/test-check-public-contract.mjs|\
+    contracts/openapi/internal.yaml|\
+    scripts/ci/detect-internal-contract-changes.sh|scripts/ci/test-detect-internal-contract-changes.sh|\
+    scripts/ci/check-internal-contract.mjs|scripts/ci/test-check-internal-contract.mjs|\
+    scripts/ci/fixtures/internal-contract/*|\
     .github/workflows/ci.yml)
-      PUBLIC_CONTRACT=true
+      INTERNAL_CONTRACT=true
       break
       ;;
   esac
 done < <(git diff --name-only "$BASE_SHA" "$HEAD_SHA" --)
 
-printf '%s\n' "$PUBLIC_CONTRACT"
+printf '%s\n' "$INTERNAL_CONTRACT"

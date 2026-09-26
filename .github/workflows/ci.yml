@@ -97,6 +97,7 @@ jobs:
       local_dev: ${{ steps.detect.outputs.local_dev }}
       go_api: ${{ steps.detect.outputs.go_api }}
       public_contract: ${{ steps.detect.outputs.public_contract }}
+      internal_contract: ${{ steps.detect.outputs.internal_contract }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -119,7 +120,10 @@ jobs:
       - name: Test public-contract change detection
         run: ./scripts/ci/test-detect-public-contract-changes.sh
 
-      - name: Detect local-dev, Go API, and public contract changes
+      - name: Test internal-contract change detection
+        run: ./scripts/ci/test-detect-internal-contract-changes.sh
+
+      - name: Detect local-dev, Go API, public contract, and internal contract changes
         id: detect
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -128,9 +132,11 @@ jobs:
           local_dev="$(./scripts/ci/detect-local-dev-changes.sh "$BASE_SHA" "$HEAD_SHA")"
           go_api="$(./scripts/ci/detect-go-api-changes.sh "$BASE_SHA" "$HEAD_SHA")"
           public_contract="$(./scripts/ci/detect-public-contract-changes.sh "$BASE_SHA" "$HEAD_SHA")"
+          internal_contract="$(./scripts/ci/detect-internal-contract-changes.sh "$BASE_SHA" "$HEAD_SHA")"
           printf 'local_dev=%s\n' "$local_dev" >> "$GITHUB_OUTPUT"
           printf 'go_api=%s\n' "$go_api" >> "$GITHUB_OUTPUT"
           printf 'public_contract=%s\n' "$public_contract" >> "$GITHUB_OUTPUT"
+          printf 'internal_contract=%s\n' "$internal_contract" >> "$GITHUB_OUTPUT"
 
   local-dev:
     name: local-dev
@@ -288,13 +294,52 @@ jobs:
           test "$(node --version)" = "v24.21.0"
           redocly_version="$(npx --yes @redocly/cli@2.53.3 --version)"
           test "$redocly_version" = "2.53.3"
-          test ! -e contracts/openapi/internal.yaml
-          test "$(find contracts/openapi -maxdepth 1 -type f -print | sort)" = "contracts/openapi/public.yaml"
           npx --yes @redocly/cli@2.53.3 lint --extends=spec contracts/openapi/public.yaml
           npx --yes @redocly/cli@2.53.3 bundle contracts/openapi/public.yaml --output "$RUNNER_TEMP/public-openapi.json" --ext json
           test -s "$RUNNER_TEMP/public-openapi.json"
           node scripts/ci/test-check-public-contract.mjs
           node scripts/ci/check-public-contract.mjs "$RUNNER_TEMP/public-openapi.json" .
+
+  internal-contract:
+    name: internal-contract
+    needs:
+      - changes
+    if: ${{ needs.changes.outputs.internal_contract == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify checked-out revision
+        env:
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.21.0'
+          package-manager-cache: false
+
+      - name: Verify internal OpenAPI contract
+        env:
+          REDOCLY_TELEMETRY: 'off'
+          REDOCLY_SUPPRESS_UPDATE_NOTICE: 'true'
+        run: |
+          set -euo pipefail
+          test "$(node --version)" = "v24.21.0"
+          redocly_version="$(npx --yes @redocly/cli@2.53.3 --version)"
+          test "$redocly_version" = "2.53.3"
+          npx --yes @redocly/cli@2.53.3 lint --extends=spec contracts/openapi/internal.yaml
+          npx --yes @redocly/cli@2.53.3 bundle contracts/openapi/internal.yaml --output "$RUNNER_TEMP/internal-openapi.json" --ext json
+          test -s "$RUNNER_TEMP/internal-openapi.json"
+          node scripts/ci/test-check-internal-contract.mjs
+          node scripts/ci/check-internal-contract.mjs "$RUNNER_TEMP/internal-openapi.json"
 
   gate:
     name: CI / gate
@@ -306,6 +351,7 @@ jobs:
       - local-dev
       - go-api
       - public-contract
+      - internal-contract
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
@@ -317,6 +363,7 @@ jobs:
           LOCAL_DEV_RESULT: ${{ needs.local-dev.result }}
           GO_API_RESULT: ${{ needs.go-api.result }}
           PUBLIC_CONTRACT_RESULT: ${{ needs.public-contract.result }}
+          INTERNAL_CONTRACT_RESULT: ${{ needs.internal-contract.result }}
         run: |
           set -euo pipefail
           test "$POLICY_RESULT" = "success"
@@ -331,6 +378,10 @@ jobs:
             *) exit 1 ;;
           esac
           case "$PUBLIC_CONTRACT_RESULT" in
+            success|skipped) ;;
+            *) exit 1 ;;
+          esac
+          case "$INTERNAL_CONTRACT_RESULT" in
             success|skipped) ;;
             *) exit 1 ;;
           esac

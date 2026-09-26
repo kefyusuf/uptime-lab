@@ -42,6 +42,26 @@ func TestCompatibilityCheckerAgainstPostgreSQL(t *testing.T) {
 		}
 	})
 
+	t.Run("version one only is incompatible when repository expects version two", func(t *testing.T) {
+		resetMigrationState(t, db)
+
+		provider, err := NewProvider(db)
+		if err != nil {
+			t.Fatalf("NewProvider() error = %v", err)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		if _, err := provider.UpTo(ctx, 1); err != nil {
+			t.Fatalf("UpTo(1) error = %v", err)
+		}
+
+		checker := mustCompatibilityChecker(t, db)
+		if err := checker.Check(ctx); !errors.Is(err, ErrSchemaIncompatible) {
+			t.Fatalf("Check() error = %v, want ErrSchemaIncompatible", err)
+		}
+	})
+
 	t.Run("explicit migration makes schema compatible", func(t *testing.T) {
 		resetMigrationState(t, db)
 		applyMigrationsUp(t, db)
