@@ -411,7 +411,7 @@ httpStatus?   # only for http_response
 
 Rules:
 
-- durationMs is non-negative;
+- durationMs is an integer in the inclusive range `0..20000`; the 20-second maximum matches the server-side execution acceptance window and fits the planned PostgreSQL `integer` storage;
 - httpStatus is present only for `http_response`;
 - httpStatus is an integer in the HTTP status-code range;
 - non-response result kinds have no HTTP status;
@@ -507,6 +507,8 @@ http_status   integer NULL
 duration_ms   integer NULL
 ~~~
 
+The `duration_ms` column remains PostgreSQL `integer`; contract/application validation and row constraints cap Rust-owned durations at 20,000 ms, so the storage type and wire contract are mechanically compatible.
+
 A new additive SQL migration is required later.
 
 The existing landed migration remains byte-identical.
@@ -530,7 +532,7 @@ Terminal HTTP response:
 completed_at IS NOT NULL
 result_kind  = 'http_response'
 http_status  BETWEEN 100 AND 599
-duration_ms  >= 0
+duration_ms  BETWEEN 0 AND 20000
 ~~~
 
 Terminal Rust failure:
@@ -547,7 +549,7 @@ result_kind IN (
   'internal_error'
 )
 http_status IS NULL
-duration_ms >= 0
+duration_ms BETWEEN 0 AND 20000
 ~~~
 
 Go coordination timeout:
@@ -1567,34 +1569,35 @@ The design gate is GREEN only if review agrees that:
 13. result PUT is idempotent for exact duplicates;
 14. conflicting/late results are rejected;
 15. result vocabulary contains normalized facts only;
-16. HTTP status is not yet converted into public up/down policy;
-17. exactly one new check_runs table is required;
-18. no schedule/state/incidents table is introduced;
-19. public OpenAPI remains byte-identical;
-20. internal OpenAPI later contains exactly claim + result operations;
-21. production SSRF policy rejects private/non-global destinations;
-22. validated DNS addresses are bound to connection behavior;
-23. redirects are fully revalidated;
-24. only scheme-default ports are initially executable;
-25. HTTPS verification cannot be disabled;
-26. response bodies are not consumed;
-27. response-header processing is bounded;
-28. successful local probe mechanics use test-only policy injection;
-29. production binary has no private-network test bypass;
-30. IPv4-mapped IPv6 and IP-literal targets follow the same destination policy;
-31. validated-IP connections preserve Host/SNI/certificate authority semantics;
-32. HTTPS -> HTTP redirect downgrade is rejected;
-33. production probing ignores ambient proxy configuration;
-34. ambiguous claim transport failure pauses new claims for 20 seconds;
-35. real Docker smoke proves Go -> Rust -> policy decision -> Go persistence;
-36. no external internet dependency is required by CI;
-37. canonical Compose remains four services with no host application ports;
-38. API readiness remains schema-aware and non-migrating;
-39. never-checked Monitor ordering uses Monitor created_at as its scheduling point;
-40. duplicate-result equality compares only the canonical Rust-owned result fields;
-41. multi-address TCP fallback uses only the already-validated DNS set, without re-resolution or post-connect fallback;
-42. no broker/multi-worker/public-status/UI scope is introduced;
-43. a separate implementation plan is required after this design lands.
+16. durationMs is bounded to 0..20000 in the contract, application validation, and durable row constraints;
+17. HTTP status is not yet converted into public up/down policy;
+18. exactly one new check_runs table is required;
+19. no schedule/state/incidents table is introduced;
+20. public OpenAPI remains byte-identical;
+21. internal OpenAPI later contains exactly claim + result operations;
+22. production SSRF policy rejects private/non-global destinations;
+23. validated DNS addresses are bound to connection behavior;
+24. redirects are fully revalidated;
+25. only scheme-default ports are initially executable;
+26. HTTPS verification cannot be disabled;
+27. response bodies are not consumed;
+28. response-header processing is bounded;
+29. successful local probe mechanics use test-only policy injection;
+30. production binary has no private-network test bypass;
+31. IPv4-mapped IPv6 and IP-literal targets follow the same destination policy;
+32. validated-IP connections preserve Host/SNI/certificate authority semantics;
+33. HTTPS -> HTTP redirect downgrade is rejected;
+34. production probing ignores ambient proxy configuration;
+35. ambiguous claim transport failure pauses new claims for 20 seconds;
+36. real Docker smoke proves Go -> Rust -> policy decision -> Go persistence;
+37. no external internet dependency is required by CI;
+38. canonical Compose remains four services with no host application ports;
+39. API readiness remains schema-aware and non-migrating;
+40. never-checked Monitor ordering uses Monitor created_at as its scheduling point;
+41. duplicate-result equality compares only the canonical Rust-owned result fields;
+42. multi-address TCP fallback uses only the already-validated DNS set, without re-resolution or post-connect fallback;
+43. no broker/multi-worker/public-status/UI scope is introduced;
+44. a separate implementation plan is required after this design lands.
 
 ---
 
