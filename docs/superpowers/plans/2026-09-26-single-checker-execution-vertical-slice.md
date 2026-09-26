@@ -1929,7 +1929,33 @@ Continue requiring web to remain placeholder.
 
 Require exact Rust builder/runtime pins and non-root runtime.
 
-## Step 4 — Change detection
+## Step 4 — Make the existing smoke target safe before real Checker CI
+
+The current pre-Checker smoke uses:
+
+~~~text
+https://example.com/local-smoke
+~~~
+
+That target becomes unsafe once every Monitor is automatically due and the real Checker starts.
+
+In the SAME Task 12 commit that replaces the Checker placeholder, change the existing Monitor smoke target to a deterministic default-port private Compose target such as:
+
+~~~text
+http://web/
+~~~
+
+Requirements:
+
+- it must remain a valid public Monitoring registration value;
+- POST/GET preservation assertions still use the exact target text;
+- it must use the default HTTP port so production execution reaches private-address policy rather than non-default-port rejection;
+- it must not depend on public internet;
+- no pushed head may contain real Checker Compose wiring while the smoke still registers example.com or another external target.
+
+Task 12 does not yet need to assert the resulting CheckRun details; Task 13 adds those complete cross-runtime assertions.
+
+## Step 5 — Change detection
 
 After real runtime exists, checker source/Dockerfile changes should trigger:
 
@@ -1938,9 +1964,11 @@ After real runtime exists, checker source/Dockerfile changes should trigger:
 
 Update detectors/tests accordingly.
 
-## Step 5 — Verification / self-review / commit
+## Step 6 — Verification / self-review / commit
 
-At this point the real Checker may start and poll the API, but Task 13 owns complete product smoke assertions.
+The real Checker may now poll the API safely because every Monitor created by canonical smoke uses a deterministic private Compose target.
+
+Self-review must explicitly search the smoke harness for example.com and other external HTTP targets and require none.
 
 Suggested commit:
 
@@ -1974,11 +2002,19 @@ api + checker healthy
 
 No API or Checker auto-migration.
 
-## Step 2 — Register deterministic private Compose target
+## Step 2 — Reuse and assert the deterministic private Compose target
 
-Use a valid default-port target that resolves inside the Compose private network, for example a web service hostname with implicit HTTP port 80.
+Task 12 has already replaced the historical external smoke target with a valid default-port private Compose target such as:
+
+~~~text
+http://web/
+~~~
+
+Task 13 now treats that target as authoritative cross-runtime evidence.
 
 The purpose is to prove strict production rejection, not successful probing.
+
+Do not reintroduce example.com or any public internet endpoint.
 
 Do not use a non-default port because that would exercise port rejection before private-address rejection.
 
