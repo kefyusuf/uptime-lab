@@ -105,9 +105,10 @@ mutate_service_line() {
 
 make_fixture() {
   rm -rf "$TMP/repo"
-  mkdir -p "$TMP/repo/deploy/docker/placeholder" "$TMP/repo/apps/api" "$TMP/repo/contracts/openapi"
+  mkdir -p "$TMP/repo/deploy/docker/placeholder" "$TMP/repo/apps/api" "$TMP/repo/apps/checker" "$TMP/repo/contracts/openapi"
   printf 'module github.com/kefyusuf/uptime-lab/apps/api\n\ngo 1.27.1\n' > "$TMP/repo/apps/api/go.mod"
   : > "$TMP/repo/apps/api/go.sum"
+  printf '[workspace]\n' > "$TMP/repo/apps/checker/Cargo.toml"
   printf 'openapi: 3.1.2\n' > "$TMP/repo/contracts/openapi/public.yaml"
 
   cat > "$TMP/repo/compose.yaml" <<'YAML'
@@ -361,9 +362,11 @@ replace_literal_once "$TMP/repo/apps/api/Dockerfile" "USER 10001:10001" "# USER 
 expect_failure "API Dockerfile missing non-root USER fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
-mkdir -p "$TMP/repo/apps/checker"
-printf 'module example.invalid/checker\n' > "$TMP/repo/apps/checker/go.mod"
-expect_failure "future checker runtime scaffold fails" "$CHECKER" "$TMP/repo"
+expect_success "Checker Rust source presence is allowed while Compose remains placeholder" "$CHECKER" "$TMP/repo"
+
+make_fixture
+mutate_service_line "$TMP/repo/compose.yaml" checker "    build: ./deploy/docker/placeholder" "    build: ./apps/checker"
+expect_failure "premature real Checker Compose wiring fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
 printf 'module example.invalid/root\n' > "$TMP/repo/go.mod"
@@ -382,5 +385,5 @@ replace_literal_once "$TMP/repo/apps/api/Dockerfile" "apk add --no-cache ca-cert
 expect_failure "API runtime missing CA certificates fails" "$CHECKER" "$TMP/repo"
 
 printf '\nLocal development tests: %d passed, %d failed\n' "$PASS" "$FAIL"
-test "$PASS" -eq 37
+test "$PASS" -eq 38
 test "$FAIL" -eq 0

@@ -98,6 +98,7 @@ jobs:
       go_api: ${{ steps.detect.outputs.go_api }}
       public_contract: ${{ steps.detect.outputs.public_contract }}
       internal_contract: ${{ steps.detect.outputs.internal_contract }}
+      checker: ${{ steps.detect.outputs.checker }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -123,7 +124,10 @@ jobs:
       - name: Test internal-contract change detection
         run: ./scripts/ci/test-detect-internal-contract-changes.sh
 
-      - name: Detect local-dev, Go API, public contract, and internal contract changes
+      - name: Test Checker change detection
+        run: ./scripts/ci/test-detect-checker-changes.sh
+
+      - name: Detect local-dev, Go API, public contract, internal contract, and Checker changes
         id: detect
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -133,10 +137,12 @@ jobs:
           go_api="$(./scripts/ci/detect-go-api-changes.sh "$BASE_SHA" "$HEAD_SHA")"
           public_contract="$(./scripts/ci/detect-public-contract-changes.sh "$BASE_SHA" "$HEAD_SHA")"
           internal_contract="$(./scripts/ci/detect-internal-contract-changes.sh "$BASE_SHA" "$HEAD_SHA")"
+          checker="$(./scripts/ci/detect-checker-changes.sh "$BASE_SHA" "$HEAD_SHA")"
           printf 'local_dev=%s\n' "$local_dev" >> "$GITHUB_OUTPUT"
           printf 'go_api=%s\n' "$go_api" >> "$GITHUB_OUTPUT"
           printf 'public_contract=%s\n' "$public_contract" >> "$GITHUB_OUTPUT"
           printf 'internal_contract=%s\n' "$internal_contract" >> "$GITHUB_OUTPUT"
+          printf 'checker=%s\n' "$checker" >> "$GITHUB_OUTPUT"
 
   local-dev:
     name: local-dev
@@ -341,6 +347,58 @@ jobs:
           node scripts/ci/test-check-internal-contract.mjs
           node scripts/ci/check-internal-contract.mjs "$RUNNER_TEMP/internal-openapi.json"
 
+  checker:
+    name: checker
+    needs:
+      - changes
+    if: ${{ needs.changes.outputs.checker == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify checked-out revision
+        env:
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
+
+      - name: Set up pinned Rust
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.98.1 --profile minimal --component rustfmt,clippy
+          rustup override set 1.98.1
+          rustc --version | grep -Eq '^rustc 1\.98\.1 '
+          cargo --version
+
+      - name: Verify Checker change detection
+        run: ./scripts/ci/test-detect-checker-changes.sh
+
+      - name: Verify Rust architecture
+        run: |
+          ./scripts/ci/test-check-rust-architecture.sh
+          python3 ./scripts/ci/check-rust-architecture.py .
+
+      - name: Verify Rust workspace
+        working-directory: apps/checker
+        run: |
+          set -euo pipefail
+          cargo fmt --all --check
+          cargo check --workspace --all-targets --locked
+          cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+          cargo test --workspace --all-targets --locked
+
+      - name: Verify Rust dependency audit
+        working-directory: apps/checker
+        run: |
+          set -euo pipefail
+          cargo install cargo-audit --version 0.22.2 --locked
+          cargo audit --file Cargo.lock
+
   gate:
     name: CI / gate
     if: ${{ always() }}
@@ -352,6 +410,7 @@ jobs:
       - go-api
       - public-contract
       - internal-contract
+      - checker
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
@@ -364,6 +423,7 @@ jobs:
           GO_API_RESULT: ${{ needs.go-api.result }}
           PUBLIC_CONTRACT_RESULT: ${{ needs.public-contract.result }}
           INTERNAL_CONTRACT_RESULT: ${{ needs.internal-contract.result }}
+          CHECKER_RESULT: ${{ needs.checker.result }}
         run: |
           set -euo pipefail
           test "$POLICY_RESULT" = "success"
@@ -382,6 +442,10 @@ jobs:
             *) exit 1 ;;
           esac
           case "$INTERNAL_CONTRACT_RESULT" in
+            success|skipped) ;;
+            *) exit 1 ;;
+          esac
+          case "$CHECKER_RESULT" in
             success|skipped) ;;
             *) exit 1 ;;
           esac

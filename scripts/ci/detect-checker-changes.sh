@@ -25,18 +25,18 @@ if ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
   exit 0
 fi
 
-LOCAL_DEV=false
+CHECKER=false
 while IFS= read -r path; do
   case "$path" in
-    compose.yaml|.env.example|apps/api/*|apps/checker/*|deploy/docker/*|\
-    scripts/ci/detect-local-dev-changes.sh|scripts/ci/test-detect-local-dev-changes.sh|\
-    scripts/ci/check-local-dev.sh|scripts/ci/test-check-local-dev.sh|\
-    scripts/ci/smoke-local-dev.sh|scripts/ci/test-smoke-local-dev.sh|\
-    docs/devops/local-development.md|.github/workflows/ci.yml)
-      LOCAL_DEV=true
+    apps/checker/*|\
+    scripts/ci/check-rust-architecture.py|scripts/ci/test-check-rust-architecture.sh|\
+    scripts/ci/detect-checker-changes.sh|scripts/ci/test-detect-checker-changes.sh|\
+    scripts/ci/fixtures/internal-contract/*|\
+    .github/workflows/ci.yml)
+      CHECKER=true
       break
       ;;
   esac
 done < <(git diff --name-only "$BASE_SHA" "$HEAD_SHA" --)
 
-printf '%s\n' "$LOCAL_DEV"
+printf '%s\n' "$CHECKER"
