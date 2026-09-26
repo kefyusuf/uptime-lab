@@ -1669,24 +1669,55 @@ Prove:
 
 Prefer constructing/serializing the canonical result payload once and reusing it for retries.
 
-## Step 4 — Transport ambiguity classification
+## Step 4 — Bound every control-plane HTTP operation
+
+Every claim and result HTTP operation has one fixed overall client deadline:
+
+~~~text
+5 seconds
+~~~
+
+The deadline covers the complete HTTP operation, not only TCP connect.
+
+This is separate from:
+
+- the 10-second target probe timeout;
+- the 20-second server-side CheckRun acceptance window.
+
+Every in-flight control-plane HTTP operation must also observe Checker shutdown cancellation.
+
+Required behavior:
+
+- claim deadline expiry is an ambiguous claim transport failure unless a definite HTTP response was received;
+- result deadline expiry is a result-delivery transport failure eligible only for the bounded same-payload retry policy;
+- shutdown cancellation aborts in-flight claim/result HTTP operations promptly;
+- shutdown cancellation does not start the 20-second ambiguous-claim recovery pause because the process is terminating;
+- shutdown cancellation stops any further result-delivery retry;
+- no control-plane HTTP operation may wait indefinitely.
+
+The 5-second deadline is a fixed implementation constant for this milestone and is not user/environment configuration.
+
+## Step 5 — Transport ambiguity classification
 
 The client must let checker-core distinguish:
 
 - no work;
 - definite control-plane rejection;
 - transport failure before a known response;
-- ambiguous claim transport failure.
+- ambiguous claim transport failure;
+- operation deadline/cancellation without exposing library-specific error text.
 
 Do not reconstruct or guess an unknown CheckID after ambiguous claim failure.
 
-## Step 5 — Cross-runtime fixture verification
+## Step 6 — Cross-runtime fixture verification
 
 Go tests and Rust tests both consume/validate representative fixtures.
 
 Generated code remains optional.
 
-## Step 6 — Verification / self-review / commit
+## Step 7 — Verification / self-review / commit
+
+Self-review must prove the client has the fixed 5-second operation deadline and that shutdown cancellation reaches both claim and result transports.
 
 Suggested commit:
 
@@ -1730,7 +1761,12 @@ Prove:
 - result transport retry never re-runs probe;
 - identical result payload reused;
 - completed slot is released;
-- cancellation/shutdown stops new claims and bounded work exits.
+- cancellation/shutdown stops new claims and bounded work exits;
+- cancellation/shutdown cancels an in-flight claim request;
+- cancellation/shutdown cancels an in-flight result request;
+- cancellation/shutdown stops result retries;
+- a timed-out claim enters the 20-second ambiguous-claim pause only when the Checker remains running;
+- shutdown cancellation itself does not enter that recovery pause.
 
 ## Step 2 — Result delivery policy
 
@@ -1741,7 +1777,9 @@ They must:
 - preserve same CheckID;
 - preserve same canonical payload;
 - remain bounded;
+- each individual HTTP attempt remains subject to the Task 9 five-second overall request deadline;
 - stop when delivery becomes impossible/terminal;
+- stop immediately when Checker shutdown is cancelled;
 - never initiate a second probe.
 
 Do not invent user-configurable retry policy.
@@ -2479,9 +2517,11 @@ The implementation phase is complete only if all are true:
 34. canonical Compose remains four services;
 35. no application host ports exist;
 36. no broker/multi-worker/public-status/Web scope is added;
-37. canonical docs match implementation truth;
-38. external review is closed;
-39. post-merge main CI is GREEN.
+37. claim and result control-plane HTTP operations have a fixed five-second overall deadline;
+38. Checker shutdown cancels in-flight claim/result operations and terminates result retries;
+39. canonical docs match implementation truth;
+40. external review is closed;
+41. post-merge main CI is GREEN.
 
 ---
 
@@ -2515,7 +2555,7 @@ The migration and persistence tasks precede runtime composition. SQL constraints
 
 PASS.
 
-Claim ambiguity, pending timeout, exact duplicate PUT, conflicting result, and result-delivery ambiguity are verified before Docker composition.
+Claim ambiguity, pending timeout, exact duplicate PUT, conflicting result, and result-delivery ambiguity are verified before Docker composition. Control-plane HTTP calls are independently bounded to five seconds, and shutdown cancellation is required to terminate in-flight claim/result operations and stop result retries.
 
 ### Security
 
