@@ -99,7 +99,16 @@ API_DELETE_HEAD="$(git -C "$TMP" rev-parse HEAD)"
 expect_value "API source deletion triggers local-dev" "true"   bash -c "cd '$TMP' && '$DETECT' '$API_DELETE_BASE' '$API_DELETE_HEAD'"
 reset_base
 
-# Case 6: unrelated architecture documentation remains irrelevant.
+# Case 6: Checker source changes are local-dev relevant while placeholder Compose remains.
+mkdir -p "$TMP/apps/checker/crates/checker/src"
+printf 'fn main() {}\n' > "$TMP/apps/checker/crates/checker/src/main.rs"
+git -C "$TMP" add apps/checker/crates/checker/src/main.rs
+git -C "$TMP" commit -q -m "build(checker): add source fixture"
+HEAD="$(git -C "$TMP" rev-parse HEAD)"
+expect_value "Checker source addition triggers local-dev" "true"   bash -c "cd '$TMP' && '$DETECT' '$BASE' '$HEAD'"
+reset_base
+
+# Case 7: unrelated architecture documentation remains irrelevant.
 mkdir -p "$TMP/docs/architecture"
 printf '# Unrelated\n' > "$TMP/docs/architecture/unrelated.md"
 git -C "$TMP" add docs/architecture/unrelated.md
@@ -107,11 +116,11 @@ git -C "$TMP" commit -q -m "docs: add unrelated fixture"
 HEAD="$(git -C "$TMP" rev-parse HEAD)"
 expect_value "unrelated docs skip local-dev" "false"   bash -c "cd '$TMP' && '$DETECT' '$BASE' '$HEAD'"
 
-# Cases 7-8 reuse the unrelated HEAD because only base-resolution behavior changes.
+# Cases 8-9 reuse the unrelated HEAD because only base-resolution behavior changes.
 ZERO_SHA="0000000000000000000000000000000000000000"
 expect_value "zero base is conservative" "true"   bash -c "cd '$TMP' && '$DETECT' '$ZERO_SHA' '$HEAD'"
 expect_value "unavailable base is conservative" "true"   bash -c "cd '$TMP' && '$DETECT' '1111111111111111111111111111111111111111' '$HEAD'"
 
 printf '\nLocal-dev change detection tests: %d passed, %d failed\n' "$PASS" "$FAIL"
-test "$PASS" -eq 8
+test "$PASS" -eq 9
 test "$FAIL" -eq 0
