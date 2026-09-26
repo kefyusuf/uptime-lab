@@ -704,11 +704,15 @@ Production policy rejects at least:
 
 An IP-literal target is validated directly by the same address policy without DNS resolution.
 
+IPv4-mapped IPv6 addresses must be normalized/classified according to their effective IPv4 destination before allow/deny evaluation.
+
 A hostname is rejected if its validated resolution set contains any forbidden address.
 
 A permitted connection must use only the exact validated resolution set rather than silently re-resolving the hostname during connect.
 
-This binds validation to the actual connection decision and reduces DNS rebinding risk.
+When connecting to a validated IP for a hostname, the original URL authority must still be preserved for the HTTP Host header, TLS SNI, and certificate-hostname verification.
+
+This binds validation to the actual connection decision without weakening protocol identity and reduces DNS rebinding risk.
 
 ### SCX-028 — Redirects are revalidated as new trust decisions
 
@@ -721,10 +725,12 @@ Redirect following is allowed up to:
 Every redirect target must independently pass:
 
 1. supported scheme validation;
-2. port policy;
-3. DNS resolution;
-4. address-range policy;
+2. userinfo rejection;
+3. port policy;
+4. DNS/IP-literal resolution and address validation;
 5. connection-time validated-address binding.
+
+An HTTPS target may not redirect to HTTP. HTTPS -> HTTP downgrade is rejected as a policy violation. HTTP -> HTTPS upgrade remains allowed.
 
 A forbidden redirect produces:
 
@@ -876,7 +882,8 @@ The Checker execution loop:
 2. claims work serially;
 3. starts probes until the four-slot bound is full;
 4. when Go returns 204, waits a fixed one second;
-5. after a control-plane transport failure, uses bounded backoff rather than a tight loop.
+5. after a non-claim control-plane transport failure, uses bounded backoff rather than a tight loop;
+6. after an ambiguous claim transport failure, applies the SCX-041 20-second recovery pause before any new claim.
 
 The initial control-plane retry/backoff policy may remain fixed implementation configuration, but it must be bounded and tested.
 
@@ -952,6 +959,40 @@ The first Go/Rust loop uses the internal HTTP contract directly.
 No broker, event stream, queue service, or outbox is added.
 
 If later requirements demand multi-checker reliable delivery, that decision must be justified by observed workload and a separate architecture gate.
+
+### SCX-041 — Ambiguous claim transport failure pauses new claims
+
+A claim transport failure is treated as ambiguous because Go may have committed a pending CheckRun even when Rust did not receive the response.
+
+After any ambiguous claim transport failure, the single Checker does not issue another claim for:
+
+~~~text
+20 seconds
+~~~
+
+This matches the maximum server-side acceptance window.
+
+The pause prevents repeated lost claim responses from creating many orphan pending CheckRuns across different Monitors and accidentally exceeding the intended execution-pressure bound.
+
+The Checker does not attempt to guess or reconstruct the unknown CheckID.
+
+### SCX-042 — Probe transport is direct and ignores ambient proxies
+
+The production probe client must not inherit ambient proxy behavior from:
+
+- HTTP_PROXY;
+- HTTPS_PROXY;
+- ALL_PROXY;
+- NO_PROXY;
+- platform/global proxy configuration.
+
+Initial probes use direct connections only.
+
+Otherwise a proxy could bypass validated-destination binding and invalidate the SSRF model.
+
+A future proxy-capable execution mode requires a separate security design.
+
+---
 
 ---
 
@@ -1342,7 +1383,7 @@ A later claim can issue new work according to the fixed cadence.
 
 The persisted pending CheckRun eventually becomes `worker_timeout`.
 
-The Checker does not attempt to reconstruct unknown work identity.
+The Checker does not attempt to reconstruct unknown work identity and applies the 20-second ambiguous-claim recovery pause before attempting another claim.
 
 ### Probe succeeds but result response is lost
 
@@ -1502,12 +1543,17 @@ The design gate is GREEN only if review agrees that:
 27. response-header processing is bounded;
 28. successful local probe mechanics use test-only policy injection;
 29. production binary has no private-network test bypass;
-30. real Docker smoke proves Go -> Rust -> policy decision -> Go persistence;
-31. no external internet dependency is required by CI;
-32. canonical Compose remains four services with no host application ports;
-33. API readiness remains schema-aware and non-migrating;
-34. no broker/multi-worker/public-status/UI scope is introduced;
-35. a separate implementation plan is required after this design lands.
+30. IPv4-mapped IPv6 and IP-literal targets follow the same destination policy;
+31. validated-IP connections preserve Host/SNI/certificate authority semantics;
+32. HTTPS -> HTTP redirect downgrade is rejected;
+33. production probing ignores ambient proxy configuration;
+34. ambiguous claim transport failure pauses new claims for 20 seconds;
+35. real Docker smoke proves Go -> Rust -> policy decision -> Go persistence;
+36. no external internet dependency is required by CI;
+37. canonical Compose remains four services with no host application ports;
+38. API readiness remains schema-aware and non-migrating;
+39. no broker/multi-worker/public-status/UI scope is introduced;
+40. a separate implementation plan is required after this design lands.
 
 ---
 
