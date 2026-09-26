@@ -366,6 +366,16 @@ For one CheckID:
 - a result after worker_timeout is a conflict;
 - an unknown CheckID is not found.
 
+For idempotency comparison, the canonical Rust-owned result payload is exactly:
+
+~~~text
+kind
+durationMs
+httpStatus presence/value
+~~~
+
+Server-owned fields such as CheckID identity, issued_at, deadline_at, and completed_at are not part of duplicate-payload equality.
+
 The Checker may retry the identical PUT payload after an ambiguous transport failure without creating a second durable result.
 
 ### SCX-014 — Rust submits normalized facts, not raw errors
@@ -586,6 +596,15 @@ A Monitor is due when:
 - its latest terminal CheckRun completed at or before dueBefore;
 
 and it has no pending CheckRun.
+
+The scheduling point used for ordering is explicitly:
+
+~~~text
+Monitor has no terminal CheckRun -> monitoring.monitors.created_at
+Monitor has terminal CheckRuns   -> latest terminal completed_at
+~~~
+
+A pending CheckRun does not create a scheduling point because that Monitor is excluded from due selection until the pending run is terminalized.
 
 When multiple Monitors are due, selection orders by the oldest scheduling point first, with MonitorID as a deterministic tie-breaker.
 
@@ -991,6 +1010,27 @@ Initial probes use direct connections only.
 Otherwise a proxy could bypass validated-destination binding and invalidate the SSRF model.
 
 A future proxy-capable execution mode requires a separate security design.
+
+### SCX-043 — Multi-address connection fallback stays inside one validated probe
+
+A hostname may resolve to multiple permitted A/AAAA addresses.
+
+For each original request or redirect hop:
+
+1. resolve the hostname once;
+2. reject the entire hop if any returned address violates SCX-027;
+3. deduplicate the permitted address set while preserving resolver order;
+4. attempt TCP connection establishment serially against addresses from that exact validated set;
+5. never perform a fresh DNS lookup during those connection attempts;
+6. keep all address attempts inside the same overall 10-second probe timeout.
+
+Trying another already-validated address after a TCP connection failure is part of connection establishment for the same probe. It does **not** create a new CheckRun and is not the automatic probe retry forbidden by SCX-016.
+
+Once a TCP connection is established for a candidate address, a TLS failure, protocol failure, received HTTP response, or other post-connect terminal outcome ends that hop. The Checker does not switch to another address after such an outcome.
+
+Parallel Happy-Eyeballs-style address racing is deferred in this milestone; candidate connections are attempted serially to keep socket/resource behavior simple and bounded.
+
+This rule preserves DNS-rebinding protection while avoiding a first-address-only failure mode for ordinary multi-address and dual-stack targets.
 
 ---
 
@@ -1550,8 +1590,11 @@ The design gate is GREEN only if review agrees that:
 36. no external internet dependency is required by CI;
 37. canonical Compose remains four services with no host application ports;
 38. API readiness remains schema-aware and non-migrating;
-39. no broker/multi-worker/public-status/UI scope is introduced;
-40. a separate implementation plan is required after this design lands.
+39. never-checked Monitor ordering uses Monitor created_at as its scheduling point;
+40. duplicate-result equality compares only the canonical Rust-owned result fields;
+41. multi-address TCP fallback uses only the already-validated DNS set, without re-resolution or post-connect fallback;
+42. no broker/multi-worker/public-status/UI scope is introduced;
+43. a separate implementation plan is required after this design lands.
 
 ---
 
@@ -1597,7 +1640,7 @@ One additive check_runs table is sufficient. Historical migrations remain immuta
 
 PASS at design level.
 
-Network access is deny-by-default, redirect-aware, DNS-rebinding-aware, port-bounded, timeout-bounded, concurrency-bounded, and does not read response bodies.
+Network access is deny-by-default, redirect-aware, DNS-rebinding-aware, port-bounded, timeout-bounded, concurrency-bounded, and does not read response bodies. Multi-address fallback is restricted to the already-validated resolution set and stops after any post-connect terminal outcome.
 
 ### Testability
 
