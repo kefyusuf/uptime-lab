@@ -994,8 +994,6 @@ A future proxy-capable execution mode requires a separate security design.
 
 ---
 
----
-
 ## 5. Expected Go application shape
 
 The design expects two new application capabilities inside Monitoring:
