@@ -281,7 +281,7 @@ The Checker fills available concurrency slots by claiming serially until:
 - four probes are active; or
 - Go reports no due work.
 
-When no work exists, Go returns a one-second retry hint.
+When no work exists, Go returns 204 and the Checker waits a fixed one second before the next claim attempt.
 
 ### SCX-010 — Internal contract has exactly two product operations
 
@@ -318,11 +318,7 @@ The operation has no request body.
 
 A 200 response contains one CheckWork.
 
-A 204 response means no work is currently due and includes:
-
-~~~text
-Retry-After: 1
-~~~
+A 204 response means no work is currently due. It carries no product payload; the Checker applies the fixed one-second poll delay locally.
 
 ### SCX-012 — CheckWork contains only execution-relevant data
 
@@ -873,7 +869,7 @@ The Checker execution loop:
 1. checks available concurrency slots;
 2. claims work serially;
 3. starts probes until the four-slot bound is full;
-4. when Go returns 204, waits according to `Retry-After: 1`;
+4. when Go returns 204, waits a fixed one second;
 5. after a control-plane transport failure, uses bounded backoff rather than a tight loop.
 
 The initial control-plane retry/backoff policy may remain fixed implementation configuration, but it must be bounded and tested.
