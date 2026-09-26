@@ -468,6 +468,8 @@ Result semantics:
 500  unexpected internal failure
 ~~~
 
+Successful JSON responses use `application/json`. Structured internal error responses use sanitized `application/problem+json`. Result submission accepts `application/json` only.
+
 No PostgreSQL, pgx, DNS-library, TLS-library, filesystem, or credential details may cross the internal HTTP boundary.
 
 ### SCX-018 — Minimal durable execution model is one new check_runs table
@@ -479,6 +481,8 @@ monitoring.check_runs
 ~~~
 
 No separate monitor_states, schedules, leases, incidents, or history aggregate table is introduced.
+
+The table does not duplicate target_url in this milestone because Monitor targets are immutable. Any future target-mutation capability must revisit CheckRun target snapshot/history semantics before that mutation can land.
 
 Conceptual columns:
 
@@ -697,6 +701,8 @@ Production policy rejects at least:
 - reserved/non-global address ranges;
 - documentation/benchmark ranges;
 - cloud metadata/link-local endpoints.
+
+An IP-literal target is validated directly by the same address policy without DNS resolution.
 
 A hostname is rejected if its validated resolution set contains any forbidden address.
 
