@@ -277,6 +277,84 @@ GO
 expect_success "Monitoring HTTP adapter may import application and domain" "$CHECKER" "$TMP/repo"
 
 make_fixture
+make_simple_package "internal/modules/monitoring/adapters/postgres" "postgres"
+make_simple_package "internal/modules/monitoring/adapters/checkerhttp" "checkerhttp"
+cat > "$TMP/repo/apps/api/internal/modules/monitoring/adapters/checkerhttp/bad.go" <<'GO'
+package checkerhttp
+
+import _ "github.com/kefyusuf/uptime-lab/apps/api/internal/modules/monitoring/adapters/postgres"
+GO
+expect_failure "Checker HTTP adapter importing postgres adapter fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+make_simple_package "internal/platform/example" "example"
+make_simple_package "internal/modules/monitoring/adapters/checkerhttp" "checkerhttp"
+cat > "$TMP/repo/apps/api/internal/modules/monitoring/adapters/checkerhttp/bad.go" <<'GO'
+package checkerhttp
+
+import _ "github.com/kefyusuf/uptime-lab/apps/api/internal/platform/example"
+GO
+expect_failure "Checker HTTP adapter importing platform fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+mkdir -p "$TMP/repo/fakes/pgx"
+cat >> "$TMP/repo/apps/api/go.mod" <<'MOD'
+
+require github.com/jackc/pgx/v5 v5.0.0
+replace github.com/jackc/pgx/v5 => ../../fakes/pgx
+MOD
+cat > "$TMP/repo/fakes/pgx/go.mod" <<'MOD'
+module github.com/jackc/pgx/v5
+
+go 1.27.1
+MOD
+cat > "$TMP/repo/fakes/pgx/pgx.go" <<'GO'
+package pgx
+GO
+make_simple_package "internal/modules/monitoring/adapters/checkerhttp" "checkerhttp"
+cat > "$TMP/repo/apps/api/internal/modules/monitoring/adapters/checkerhttp/bad.go" <<'GO'
+package checkerhttp
+
+import _ "github.com/jackc/pgx/v5"
+GO
+expect_failure "Checker HTTP adapter importing pgx fails without network" "$CHECKER" "$TMP/repo"
+
+make_fixture
+mkdir -p "$TMP/repo/fakes/goose"
+cat >> "$TMP/repo/apps/api/go.mod" <<'MOD'
+
+require github.com/pressly/goose/v3 v3.0.0
+replace github.com/pressly/goose/v3 => ../../fakes/goose
+MOD
+cat > "$TMP/repo/fakes/goose/go.mod" <<'MOD'
+module github.com/pressly/goose/v3
+
+go 1.27.1
+MOD
+cat > "$TMP/repo/fakes/goose/goose.go" <<'GO'
+package goose
+GO
+make_simple_package "internal/modules/monitoring/adapters/checkerhttp" "checkerhttp"
+cat > "$TMP/repo/apps/api/internal/modules/monitoring/adapters/checkerhttp/bad.go" <<'GO'
+package checkerhttp
+
+import _ "github.com/pressly/goose/v3"
+GO
+expect_failure "Checker HTTP adapter importing goose fails without network" "$CHECKER" "$TMP/repo"
+
+make_fixture
+make_simple_package "internal/modules/monitoring/adapters/checkerhttp" "checkerhttp"
+cat > "$TMP/repo/apps/api/internal/modules/monitoring/adapters/checkerhttp/inward.go" <<'GO'
+package checkerhttp
+
+import (
+	_ "github.com/kefyusuf/uptime-lab/apps/api/internal/modules/monitoring/application"
+	_ "github.com/kefyusuf/uptime-lab/apps/api/internal/modules/monitoring/domain"
+)
+GO
+expect_success "Checker HTTP adapter may import application and domain" "$CHECKER" "$TMP/repo"
+
+make_fixture
 make_simple_package "internal/platform/httpserver" "httpserver"
 make_simple_package "internal/modules/monitoring/adapters/http" "monitoringhttp"
 mkdir -p "$TMP/repo/apps/api/cmd/api"
