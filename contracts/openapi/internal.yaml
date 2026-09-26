@@ -1,0 +1,200 @@
+openapi: 3.1.2
+info:
+  title: uptime-lab Internal Checker API
+  version: 0.1.0
+  description: >
+    Internal container-network contract between the Go Control Plane and the
+    single Rust Checker execution runtime. This contract is not browser-facing
+    and does not authorize public network exposure.
+paths:
+  /internal/checks/claim:
+    post:
+      summary: Claim one due check
+      description: >
+        Atomically claims at most one due Monitor and returns one bounded work
+        description. The request carries no worker identity and has no body.
+      responses:
+        '200':
+          description: One due check was claimed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckWork'
+        '204':
+          description: No work is currently due.
+        '405':
+          description: Method not allowed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          description: Unexpected internal failure.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /internal/checks/{checkId}/result:
+    put:
+      summary: Submit one normalized check result
+      description: >
+        Idempotently terminalizes the pending CheckRun identified by checkId.
+        Exact duplicate submissions are successful no-ops; conflicting or late
+        submissions are rejected.
+      parameters:
+        - name: checkId
+          in: path
+          required: true
+          description: Go-assigned durable CheckRun UUID.
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckResult'
+      responses:
+        '204':
+          description: Result accepted or exact duplicate already persisted.
+        '400':
+          description: Malformed checkId or malformed request syntax.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: CheckRun not found.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: CheckRun expired or already has a conflicting terminal result.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '415':
+          description: Unsupported request media type.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Result structure is valid JSON but violates execution-result semantics.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '405':
+          description: Method not allowed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          description: Unexpected internal failure.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+components:
+  schemas:
+    CheckWork:
+      type: object
+      additionalProperties: false
+      required:
+        - checkId
+        - monitorId
+        - targetUrl
+        - timeoutMs
+        - maxRedirects
+      properties:
+        checkId:
+          type: string
+          format: uuid
+          description: Go-assigned UUID identifying this durable CheckRun.
+        monitorId:
+          type: string
+          format: uuid
+          description: Monitor whose immutable target should be probed.
+        targetUrl:
+          type: string
+          description: >
+            Exact registered target text. No RFC 3986 format constraint is
+            applied here; execution safety is enforced by the Checker policy.
+        timeoutMs:
+          type: integer
+          const: 10000
+          description: Fixed overall probe timeout in milliseconds.
+        maxRedirects:
+          type: integer
+          const: 3
+          description: Fixed maximum number of followed redirects.
+    CheckResult:
+      oneOf:
+        - $ref: '#/components/schemas/HttpResponseResult'
+        - $ref: '#/components/schemas/FailureResult'
+    HttpResponseResult:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - durationMs
+        - httpStatus
+      properties:
+        kind:
+          type: string
+          const: http_response
+        durationMs:
+          type: integer
+          minimum: 0
+          maximum: 20000
+          description: Monotonic probe duration in milliseconds.
+        httpStatus:
+          type: integer
+          minimum: 100
+          maximum: 599
+          description: Final HTTP response status after safe redirect handling.
+    FailureResult:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - durationMs
+      properties:
+        kind:
+          type: string
+          enum:
+            - dns_error
+            - policy_rejected
+            - timeout
+            - connect_error
+            - tls_error
+            - protocol_error
+            - internal_error
+        durationMs:
+          type: integer
+          minimum: 0
+          maximum: 20000
+          description: Monotonic duration until terminal failure classification.
+    Problem:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 100
+          maximum: 599
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri-reference

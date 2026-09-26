@@ -259,9 +259,6 @@ export function validatePublicContract(document, repositoryRoot = '.') {
   assert(problemSchema.properties.detail?.type === 'string', 'Problem.detail.type must be string');
   assertStringFormat(problemSchema.properties.instance, 'uri-reference', 'Problem.instance');
 
-  const root = path.resolve(repositoryRoot);
-  const internalContract = path.join(root, 'contracts', 'openapi', 'internal.yaml');
-  assert(!fs.existsSync(internalContract), 'contracts/openapi/internal.yaml must not exist');
 }
 
 function main() {
