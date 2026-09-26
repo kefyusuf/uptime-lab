@@ -24,7 +24,7 @@ The Rust runtime is not implemented yet. The future checker obtains work and sub
 
 Go owns schema access, persistence mapping, migrations, and interpretation of durable product state.
 
-The implemented production API runtime creates a PostgreSQL pool but exposes no product data endpoints yet.
+The implemented production API runtime creates one PostgreSQL pool, composes the Monitoring repository/module/HTTP adapter, and serves `POST /monitors` plus `GET /monitors/{monitorId}`. PostgreSQL remains behind Go-owned application boundaries.
 
 ## Monitoring Schema
 
