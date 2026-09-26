@@ -138,11 +138,17 @@ fi
 if [[ -d "$ROOT/apps" ]]; then
   while IFS= read -r app_path; do
     app_name="$(basename "$app_path")"
-    [[ "$app_name" == "api" ]] || fail "phase-forbidden app path exists: apps/$app_name"
+    case "$app_name" in
+      api|checker) ;;
+      *) fail "phase-forbidden app path exists: apps/$app_name" ;;
+    esac
   done < <(find "$ROOT/apps" -mindepth 1 -maxdepth 1 -print)
 
   if [[ -e "$ROOT/apps/api" && ! -d "$ROOT/apps/api" ]]; then
     fail "apps/api must be a directory"
+  fi
+  if [[ -e "$ROOT/apps/checker" && ! -d "$ROOT/apps/checker" ]]; then
+    fail "apps/checker must be a directory"
   fi
 fi
 
