@@ -1,5 +1,11 @@
 #![forbid(unsafe_code)]
 
+mod destination;
+
+pub use destination::{
+    DestinationError, DestinationPolicy, ResolveError, Resolver, ValidatedDestination,
+};
+
 /// HTTP probe adapter shell.
 ///
 /// Network execution is intentionally deferred to a later task.

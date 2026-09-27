@@ -118,9 +118,29 @@ printf 'pub const ALLOW_PRIVATE_NETWORK: bool = true;\n' >> "$TMP/repo/apps/chec
 expect_failure "private-network bypass token fails" python3 "$CHECKER" "$TMP/repo"
 
 make_fixture
+printf 'pub const INSECURE_TEST_MODE: bool = false;\n' >> "$TMP/repo/apps/checker/crates/probe-http/src/lib.rs"
+expect_failure "insecure-test bypass token fails" python3 "$CHECKER" "$TMP/repo"
+
+make_fixture
+printf 'pub const SKIP_DNS_VALIDATION: bool = false;\n' >> "$TMP/repo/apps/checker/crates/probe-http/src/lib.rs"
+expect_failure "DNS-validation bypass token fails" python3 "$CHECKER" "$TMP/repo"
+
+make_fixture
+printf 'pub const CIDR_ALLOWLIST: &str = "";\n' >> "$TMP/repo/apps/checker/crates/probe-http/src/lib.rs"
+expect_failure "CIDR allowlist token fails" python3 "$CHECKER" "$TMP/repo"
+
+make_fixture
+printf 'pub const PROXY_URL: &str = "";\n' >> "$TMP/repo/apps/checker/crates/probe-http/src/lib.rs"
+expect_failure "proxy URL configuration token fails" python3 "$CHECKER" "$TMP/repo"
+
+make_fixture
+printf 'pub const ALLOW_PRIVATE: bool = false;\n' >> "$TMP/repo/apps/checker/crates/probe-http/src/lib.rs"
+expect_failure "generic private-address bypass token fails" python3 "$CHECKER" "$TMP/repo"
+
+make_fixture
 sed -i 's/channel = "1.98.1"/channel = "stable"/' "$TMP/repo/apps/checker/rust-toolchain.toml"
 expect_failure "floating Rust toolchain fails" python3 "$CHECKER" "$TMP/repo"
 
 printf '\nRust architecture tests: %d passed, %d failed\n' "$PASS" "$FAIL"
-test "$PASS" -eq 8
+test "$PASS" -eq 13
 test "$FAIL" -eq 0
