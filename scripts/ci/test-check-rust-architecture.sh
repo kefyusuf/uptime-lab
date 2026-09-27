@@ -138,9 +138,17 @@ printf 'pub const ALLOW_PRIVATE: bool = false;\n' >> "$TMP/repo/apps/checker/cra
 expect_failure "generic private-address bypass token fails" python3 "$CHECKER" "$TMP/repo"
 
 make_fixture
+printf 'pub const SKIP_TLS_VERIFY: bool = false;\n' >> "$TMP/repo/apps/checker/crates/probe-http/src/lib.rs"
+expect_failure "TLS verification bypass token fails" python3 "$CHECKER" "$TMP/repo"
+
+make_fixture
+printf 'fn verifier() { let _ = "with_custom_certificate_verifier"; }\n' >> "$TMP/repo/apps/checker/crates/probe-http/src/lib.rs"
+expect_failure "custom TLS verifier bypass token fails" python3 "$CHECKER" "$TMP/repo"
+
+make_fixture
 sed -i 's/channel = "1.98.1"/channel = "stable"/' "$TMP/repo/apps/checker/rust-toolchain.toml"
 expect_failure "floating Rust toolchain fails" python3 "$CHECKER" "$TMP/repo"
 
 printf '\nRust architecture tests: %d passed, %d failed\n' "$PASS" "$FAIL"
-test "$PASS" -eq 13
+test "$PASS" -eq 15
 test "$FAIL" -eq 0

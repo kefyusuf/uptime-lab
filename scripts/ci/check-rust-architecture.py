@@ -37,6 +37,16 @@ FORBIDDEN_CONFIG_TOKENS = {
     "proxy_url",
     "proxyurl",
     "proxy-url",
+    "skip_tls_verify",
+    "skiptlsverify",
+    "skip-tls-verify",
+    "disable_certificate_verification",
+    "disablecertificateverification",
+    "disable-certificate-verification",
+    "accept_invalid_certs",
+    "acceptinvalidcerts",
+    "accept-invalid-certs",
+    "with_custom_certificate_verifier",
 }
 
 class InvariantError(Exception):

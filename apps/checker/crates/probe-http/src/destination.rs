@@ -58,6 +58,55 @@ impl ValidatedDestination {
     pub fn addresses(&self) -> &[IpAddr] {
         &self.addresses
     }
+
+    pub(crate) fn authority(&self) -> &str {
+        &self.parsed.authority
+    }
+
+    pub(crate) fn server_name(&self) -> String {
+        match &self.parsed.host {
+            Host::Domain(host) => host.clone(),
+            Host::Ip(address) => address.to_string(),
+        }
+    }
+
+    pub(crate) fn request_target(&self) -> String {
+        match &self.parsed.query {
+            Some(query) => format!("{}?{query}", self.parsed.path),
+            None => self.parsed.path.clone(),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn test_validate<R>(target: &str, resolver: &R) -> Result<Self, DestinationError>
+    where
+        R: Resolver,
+    {
+        let parsed = parse_absolute_url_with_port_policy(target, false, true)?;
+        validate_test_parsed(parsed, resolver)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn test_redirect<R>(
+        &self,
+        location: &str,
+        redirects_followed: u8,
+        resolver: &R,
+    ) -> Result<Self, DestinationError>
+    where
+        R: Resolver,
+    {
+        if redirects_followed >= MAX_REDIRECTS {
+            return Err(DestinationError::PolicyRejected);
+        }
+
+        let parsed = resolve_reference_with_port_policy(&self.parsed, location, true)?;
+        if self.parsed.scheme == "https" && parsed.scheme == "http" {
+            return Err(DestinationError::PolicyRejected);
+        }
+
+        validate_test_parsed(parsed, resolver)
+    }
 }
 
 pub struct DestinationPolicy<R> {
@@ -123,6 +172,14 @@ where
 }
 
 fn parse_absolute_url(raw: &str, allow_fragment: bool) -> Result<ParsedUrl, DestinationError> {
+    parse_absolute_url_with_port_policy(raw, allow_fragment, false)
+}
+
+fn parse_absolute_url_with_port_policy(
+    raw: &str,
+    allow_fragment: bool,
+    allow_non_default_port: bool,
+) -> Result<ParsedUrl, DestinationError> {
     if raw.is_empty() || raw.chars().any(|ch| ch.is_control()) {
         return Err(DestinationError::InvalidUrl);
     }
@@ -167,7 +224,7 @@ fn parse_absolute_url(raw: &str, allow_fragment: bool) -> Result<ParsedUrl, Dest
 
     let (host, canonical_host, explicit_port) = parse_authority(authority)?;
     let port = explicit_port.unwrap_or(expected_port);
-    if port != expected_port {
+    if port != expected_port && !allow_non_default_port {
         return Err(DestinationError::PolicyRejected);
     }
 
@@ -277,6 +334,14 @@ fn split_path_query(value: &str) -> (&str, Option<String>) {
 }
 
 fn resolve_reference(base: &ParsedUrl, location: &str) -> Result<ParsedUrl, DestinationError> {
+    resolve_reference_with_port_policy(base, location, false)
+}
+
+fn resolve_reference_with_port_policy(
+    base: &ParsedUrl,
+    location: &str,
+    allow_non_default_port: bool,
+) -> Result<ParsedUrl, DestinationError> {
     if location.chars().any(|ch| ch.is_control()) {
         return Err(DestinationError::InvalidUrl);
     }
@@ -286,11 +351,11 @@ fn resolve_reference(base: &ParsedUrl, location: &str) -> Result<ParsedUrl, Dest
         .map_or(location, |(before, _)| before);
 
     if has_uri_scheme(reference) {
-        return parse_absolute_url(reference, true);
+        return parse_absolute_url_with_port_policy(reference, true, allow_non_default_port);
     }
     if reference.starts_with("//") {
         let absolute = format!("{}:{reference}", base.scheme);
-        return parse_absolute_url(&absolute, true);
+        return parse_absolute_url_with_port_policy(&absolute, true, allow_non_default_port);
     }
 
     let query_marker = reference.find('?');
@@ -383,6 +448,30 @@ fn serialize_url(scheme: &str, authority: &str, path: &str, query: Option<&str>)
         value.push_str(query);
     }
     value
+}
+
+#[cfg(test)]
+fn validate_test_parsed<R>(
+    parsed: ParsedUrl,
+    resolver: &R,
+) -> Result<ValidatedDestination, DestinationError>
+where
+    R: Resolver,
+{
+    let addresses = match &parsed.host {
+        Host::Ip(address) => vec![normalize_address(*address)],
+        Host::Domain(host) => {
+            let resolved = resolver
+                .resolve(host)
+                .map_err(|_| DestinationError::DnsFailure)?;
+            if resolved.is_empty() {
+                return Err(DestinationError::DnsFailure);
+            }
+            deduplicate_addresses(resolved)
+        }
+    };
+
+    Ok(ValidatedDestination { parsed, addresses })
 }
 
 fn deduplicate_addresses(addresses: Vec<IpAddr>) -> Vec<IpAddr> {
