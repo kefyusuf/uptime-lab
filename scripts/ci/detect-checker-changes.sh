@@ -31,7 +31,7 @@ while IFS= read -r path; do
     apps/checker/*|\
     scripts/ci/check-rust-architecture.py|scripts/ci/test-check-rust-architecture.sh|\
     scripts/ci/detect-checker-changes.sh|scripts/ci/test-detect-checker-changes.sh|\
-    scripts/ci/fixtures/internal-contract/*|\
+    scripts/ci/fixtures/internal-contract/*|contracts/fixtures/internal/*|\
     .github/workflows/ci.yml)
       CHECKER=true
       break

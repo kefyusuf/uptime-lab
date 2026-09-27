@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 DETECT="$SCRIPT_DIR/detect-internal-contract-changes.sh"
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+trap 'rm -rf "$TMP" >/dev/null 2>&1 || true' EXIT
 
 PASS=0
 FAIL=0
@@ -74,7 +74,11 @@ expect_value "semantic checker test change triggers internal-contract" "true" ba
 reset_base
 
 HEAD="$(commit_file "scripts/ci/fixtures/internal-contract/example.json" '{}\n')"
-expect_value "internal fixture change triggers internal-contract" "true" bash -c "cd '$TMP' && '$DETECT' '$BASE' '$HEAD'"
+expect_value "legacy internal fixture change triggers internal-contract" "true" bash -c "cd '$TMP' && '$DETECT' '$BASE' '$HEAD'"
+reset_base
+
+HEAD="$(commit_file "contracts/fixtures/internal/check_work.json" '{}\n')"
+expect_value "cross-runtime fixture change triggers internal-contract" "true" bash -c "cd '$TMP' && '$DETECT' '$BASE' '$HEAD'"
 reset_base
 
 HEAD="$(commit_file ".github/workflows/ci.yml" 'name: CI\n')"
@@ -110,5 +114,5 @@ expect_value "unavailable base is conservative" "true" bash -c "cd '$TMP' && '$D
 expect_failure "unavailable head fails closed" bash -c "cd '$TMP' && '$DETECT' '$DELETE_BASE' '2222222222222222222222222222222222222222'"
 
 printf '\nInternal contract change detection tests: %d passed, %d failed\n' "$PASS" "$FAIL"
-test "$PASS" -eq 15
+test "$PASS" -eq 16
 test "$FAIL" -eq 0

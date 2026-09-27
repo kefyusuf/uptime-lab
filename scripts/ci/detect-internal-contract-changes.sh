@@ -31,7 +31,7 @@ while IFS= read -r path; do
     contracts/openapi/internal.yaml|\
     scripts/ci/detect-internal-contract-changes.sh|scripts/ci/test-detect-internal-contract-changes.sh|\
     scripts/ci/check-internal-contract.mjs|scripts/ci/test-check-internal-contract.mjs|\
-    scripts/ci/fixtures/internal-contract/*|\
+    scripts/ci/fixtures/internal-contract/*|contracts/fixtures/internal/*|\
     .github/workflows/ci.yml)
       INTERNAL_CONTRACT=true
       break
