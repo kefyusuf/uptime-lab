@@ -1,5 +1,9 @@
 #![forbid(unsafe_code)]
 
+mod worker;
+
+pub use worker::{EventSink, NoopEventSink, Sleeper, ThreadSleeper, Worker, WorkerEvent};
+
 use std::{
     error::Error,
     fmt,
