@@ -19,8 +19,10 @@ REQUIRED_FILES=(
   docs/adr/0002-control-plane-and-execution-plane.md
   docs/adr/0003-contract-and-data-ownership.md
   docs/backend/go-control-plane.md
+  docs/checker/rust-checker.md
   docs/devops/local-development.md
   docs/testing/go-monitoring-foundation.md
+  docs/testing/single-checker-execution-slice.md
   docs/testing/public-monitoring-contract.md
   docs/testing/go-public-transport-adapter.md
 )
@@ -54,6 +56,8 @@ done
 require_text docs/README.md 'architecture/README.md'
 require_text docs/README.md 'testing/public-monitoring-contract.md'
 require_text docs/README.md 'testing/go-public-transport-adapter.md'
+require_text docs/README.md 'checker/rust-checker.md'
+require_text docs/README.md 'testing/single-checker-execution-slice.md'
 
 for link in \
   'system-context.md' \
@@ -92,19 +96,33 @@ require_text docs/architecture/container-view.md 'The browser never accesses Pos
 require_text docs/architecture/container-view.md 'Cross-runtime communication is contract-driven.'
 require_text docs/architecture/container-view.md 'Public contract: defined (`contracts/openapi/public.yaml`).'
 require_text docs/architecture/container-view.md 'Go public transport adapter: implemented.'
+require_text docs/architecture/container-view.md 'Rust Checker: implemented.'
+require_text docs/architecture/container-view.md 'Internal checker contract: implemented (`contracts/openapi/internal.yaml`).'
 require_text docs/architecture/container-view.md 'No application host ports are published.'
-require_text docs/architecture/container-view.md 'Internal checker contract: deferred.'
 require_text docs/architecture/dependency-rules.md 'Rust Checker -> PostgreSQL is forbidden.'
 require_text docs/architecture/dependency-rules.md 'Cross-runtime implementation-code sharing is forbidden.'
 require_text docs/architecture/data-ownership.md 'Go exclusively owns durable product state in PostgreSQL.'
 require_text docs/backend/go-control-plane.md 'Go Control Plane'
 require_text docs/backend/go-control-plane.md 'contracts/openapi/public.yaml'
 require_text docs/backend/go-control-plane.md 'POST /monitors'
+require_text docs/backend/go-control-plane.md 'POST /internal/checks/claim'
+require_text docs/backend/go-control-plane.md 'PUT /internal/checks/{checkId}/result'
+require_text docs/backend/go-control-plane.md 'monitoring.check_runs'
 require_text docs/backend/go-control-plane.md 'read-only migration compatibility checker'
+require_text docs/checker/rust-checker.md 'Rust Checker: implemented.'
+require_text docs/checker/rust-checker.md 'Rust never accesses PostgreSQL directly.'
+require_text docs/checker/rust-checker.md 'POST /internal/checks/claim'
+require_text docs/checker/rust-checker.md 'PUT /internal/checks/{checkId}/result'
+require_text docs/checker/rust-checker.md 'Production destination policy rejects private and non-public addresses.'
+require_text docs/checker/rust-checker.md 'No application host ports are published.'
+require_text docs/checker/rust-checker.md 'No public CheckRun/status/history API exists.'
 require_text docs/devops/local-development.md 'docker compose up -d db api'
 require_text docs/devops/local-development.md 'docker compose exec -T api /usr/local/bin/uptime-lab-migrate up'
 require_text docs/devops/local-development.md 'docker compose up -d --wait --wait-timeout 60'
-require_text docs/testing/go-monitoring-foundation.md 'Go architecture tests: 19 passed, 0 failed'
+require_text docs/testing/go-monitoring-foundation.md 'Go architecture tests: 24 passed, 0 failed'
+require_text docs/testing/single-checker-execution-slice.md 'Go -> Rust -> policy_rejected -> Go -> PostgreSQL'
+require_text docs/testing/single-checker-execution-slice.md 'Canonical Docker smoke'
+require_text docs/testing/single-checker-execution-slice.md 'cargo audit'
 require_text docs/testing/public-monitoring-contract.md 'contracts/openapi/public.yaml'
 require_text docs/testing/public-monitoring-contract.md 'OpenAPI 3.1.2'
 require_text docs/testing/public-monitoring-contract.md '@redocly/cli@2.53.3'
@@ -113,7 +131,7 @@ require_text docs/testing/go-public-transport-adapter.md 'POST /monitors'
 require_text docs/testing/go-public-transport-adapter.md 'GET  /monitors/{monitorId}'
 require_text docs/testing/go-public-transport-adapter.md 'No application host ports are published'
 require_text docs/testing/go-public-transport-adapter.md 'The readiness path is read-only.'
-require_text docs/testing/go-public-transport-adapter.md 'The internal Checker contract remains deferred.'
+require_text docs/testing/go-public-transport-adapter.md 'The internal Checker contract is implemented.'
 
 sequence_count="$(grep -c '^sequenceDiagram$' "$ROOT/docs/architecture/runtime-flows.md" || true)"
 [[ "$sequence_count" -eq 4 ]] || fail "runtime-flows.md must contain exactly four sequenceDiagram blocks (found $sequence_count)"
@@ -122,7 +140,6 @@ require_text docs/architecture/change-flow.md 'Configure HTTP Request Timeout'
 
 FORBIDDEN_DIRS=(
   docs/frontend
-  docs/checker
 )
 for path in "${FORBIDDEN_DIRS[@]}"; do
   [[ ! -e "$ROOT/$path" ]] || fail "speculative documentation path exists: $path"

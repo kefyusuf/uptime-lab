@@ -2,33 +2,32 @@
 
 **Architecture state:** Committed
 
-**Implementation state:** The public Monitoring contract and Go transport adapter are implemented and executable inside the Go runtime. Monitoring application/persistence behavior and schema-aware readiness are live; Web, Rust, and internal-Checker flows remain conceptual.
+**Implementation state:** Public Monitor create/read and the internal Go/Rust execution loop are implemented. React/public network exposure and public CheckRun/status/history remain deferred.
 
 ## Purpose
 
-This document defines the canonical collaboration patterns between the Web Client, Go Control Plane, Rust Execution Plane, PostgreSQL, and external targets. Where a contract is already defined, the flow names that operation; undefined internal-contract flows remain conceptual.
+This document defines the current collaboration patterns between Go, Rust, PostgreSQL, and external targets while retaining the committed Web boundary.
 
 ## Create Monitor
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant Web as Web Client
+    participant Web as Future Web / container-local caller
     participant Go as Go Control Plane
-    participant Monitoring as Monitoring Application/Domain
+    participant Monitoring as Monitoring Application
     participant DB as PostgreSQL
 
     User->>Web: Configure HTTP/HTTPS monitor
-    Web->>Go: POST /monitors (Go transport implemented)
-    Go->>Monitoring: Execute monitor registration use case
-    Monitoring->>DB: Persist through owned persistence boundary
-    DB-->>Monitoring: Persisted
-    Monitoring-->>Go: Monitor accepted
-    Go-->>Web: Stable product response
-    Web-->>User: Show configured monitor
+    Web->>Go: POST /monitors
+    Go->>Monitoring: RegisterMonitor
+    Monitoring->>DB: INSERT monitoring.monitors
+    DB-->>Monitoring: persisted
+    Monitoring-->>Go: Monitor
+    Go-->>Web: 201 Monitor
 ```
 
-The browser never persists monitor state directly. The Go Control Plane is the durable-state owner and the Monitoring capability mediates product semantics before persistence. `POST /monitors` is live in the Go runtime and conforms to `contracts/openapi/public.yaml`; the complete browser-to-Go flow remains deferred because the Web runtime and public network exposure do not exist yet.
+`POST /monitors` is implemented. React and public host exposure are not.
 
 ## Execute Due Check
 
@@ -36,42 +35,50 @@ The browser never persists monitor state directly. The Go Control Plane is the d
 sequenceDiagram
     participant Rust as Rust Checker
     participant Go as Go Control Plane
-    participant Target as External Target
-    participant Monitoring as Monitoring Application/Domain
+    participant Monitoring as Monitoring Execution Application
     participant DB as PostgreSQL
+    participant Target as External Target
 
-    Rust->>Go: Request due work through future internal contract
-    Go-->>Rust: Work description
-    Rust->>Target: Execute bounded probe
-    Target-->>Rust: Protocol result
-    Rust->>Go: Submit normalized result
-    Go->>Monitoring: Apply result to product semantics
-    Monitoring->>DB: Persist result/state
+    Rust->>Go: POST /internal/checks/claim
+    Go->>Monitoring: ClaimDueCheck
+    Monitoring->>DB: reconcile expired + atomically claim due Monitor
+    DB-->>Monitoring: Monitor + durable pending CheckRun
+    Monitoring-->>Go: CheckWork
+    Go-->>Rust: 200 CheckWork
+    Rust->>Rust: validate destination / resolve / bind addresses
+    Rust->>Target: bounded HTTP/HTTPS probe
+    Target-->>Rust: response or transport outcome
+    Rust->>Go: PUT /internal/checks/{checkId}/result
+    Go->>Monitoring: SubmitCheckResult
+    Monitoring->>DB: terminalize CheckRun
+    DB-->>Monitoring: committed
+    Go-->>Rust: 204
 ```
 
-Rust owns bounded execution, not scheduling truth or product persistence. Work descriptions and normalized results will cross the process boundary through an internal contract that remains undefined and unimplemented.
+Go owns due-work and durable identity. Rust probes a claimed CheckID once and submits only a normalized result. Rust never accesses PostgreSQL directly.
 
-## Read Current State
+The canonical Docker smoke proves the private `http://web/` target is rejected by production destination policy as `policy_rejected` and persisted as a terminal CheckRun.
+
+## Read Monitor
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant Web as Web Client
+    participant Web as Future Web / container-local caller
     participant Go as Go Control Plane
-    participant Monitoring as Monitoring Application/Domain
+    participant Monitoring as Monitoring Application
     participant DB as PostgreSQL
 
-    User->>Web: Open monitor
-    Web->>Go: GET /monitors/{monitorId} (Go transport implemented)
-    Go->>Monitoring: Execute GetMonitor use case
-    Monitoring->>DB: Read owned monitor
-    DB-->>Monitoring: Durable monitor
+    User->>Web: Open Monitor
+    Web->>Go: GET /monitors/{monitorId}
+    Go->>Monitoring: GetMonitor
+    Monitoring->>DB: SELECT monitoring.monitors
+    DB-->>Monitoring: Monitor
     Monitoring-->>Go: Monitor
-    Go-->>Web: Contract-shaped Monitor response
-    Web-->>User: Render monitor
+    Go-->>Web: 200 Monitor
 ```
 
-Read ownership follows the same rule as writes: browser access remains contract-driven and PostgreSQL is never a browser-facing integration surface. `GET /monitors/{monitorId}` is a live Go HTTP route, while a real browser caller remains deferred.
+The public route returns Monitor registration state only. No public CheckRun/status/history API exists.
 
 ## Failure Boundary
 
@@ -80,29 +87,30 @@ sequenceDiagram
     participant Target as External Target
     participant Rust as Rust Checker
     participant Go as Go Control Plane
-    participant Monitoring as Monitoring Application/Domain
-    participant Web as Web Client
+    participant Monitoring as Monitoring Execution Application
+    participant DB as PostgreSQL
 
-    Target--xRust: Raw transport/protocol failure
-    Rust->>Rust: Classify and normalize probe failure
-    Rust->>Go: Submit normalized probe failure
-    Go->>Monitoring: Interpret within product semantics
-    Monitoring-->>Go: Stable monitor state/error classification
-    Go-->>Web: Stable product state/error
+    Target--xRust: raw DNS/TCP/TLS/protocol/policy outcome
+    Rust->>Rust: normalize to closed result vocabulary
+    Rust->>Go: PUT normalized result
+    Go->>Monitoring: validate/apply completion semantics
+    Monitoring->>DB: persist terminal CheckRun
 ```
 
-A raw transport error is an Execution Plane implementation detail. It terminates at the Rust boundary. Only a normalized probe failure crosses into Go, where it is mapped into stable product semantics before anything becomes browser-visible or persistence-worthy.
+Raw library errors, response bodies, headers, resolved addresses, stack traces, and credentials do not cross the internal contract.
+
+A late result is rejected and Go owns the durable `worker_timeout` transition.
 
 ## Correlation Context
 
-Correlation/request context is a committed cross-runtime design intent. When observability implementation is introduced, the public request, internal work/result exchange, and persisted check result should be attributable to the same logical operation where appropriate.
-
-No tracing backend, OpenTelemetry Collector, trace exporter, or concrete propagation header is implemented or selected by this documentation phase.
+CheckID and MonitorID are stable cross-runtime correlation identifiers for the implemented execution path. No tracing backend or concrete distributed-tracing propagation contract is introduced by this milestone.
 
 ## Related Decisions
 
 - [Container View](container-view.md)
+- [Module Boundaries](module-boundaries.md)
 - [Dependency Rules](dependency-rules.md)
 - [Data Ownership](data-ownership.md)
-- [ADR-0002 — Control Plane and Execution Plane](../adr/0002-control-plane-and-execution-plane.md)
-- [ADR-0003 — Contract and Data Ownership](../adr/0003-contract-and-data-ownership.md)
+- [Rust Checker](../checker/rust-checker.md)
+- [ADR-0002](../adr/0002-control-plane-and-execution-plane.md)
+- [ADR-0003](../adr/0003-contract-and-data-ownership.md)

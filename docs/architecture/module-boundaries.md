@@ -2,134 +2,128 @@
 
 **Architecture state:** Committed
 
-**Implementation state:** Partial. The initial Go Monitoring module and platform runtime are implemented. Rust and React runtime boundaries remain architectural commitments only.
+**Implementation state:** The Go Monitoring execution boundary and Rust Checker runtime are implemented. React remains deferred.
 
 ## Purpose
 
-This document defines ownership boundaries inside each runtime while distinguishing implemented code from deferred responsibilities.
+This document defines ownership boundaries inside each runtime and the seam between Go and Rust.
 
 ## Go Control Plane
 
-The Go Control Plane is a modular monolith. Business capability code lives under module-owned boundaries; platform runtime concerns remain separate.
+The Go Control Plane remains a modular monolith.
 
-The implemented Monitoring source tree contains:
+Current Monitoring source owns:
 
 ~~~text
 internal/modules/monitoring/
 ├── domain/
 ├── application/
 ├── ports/
-├── adapters/postgres/
+├── adapters/
+│   ├── http/          public Monitor transport
+│   ├── checkerhttp/   internal Checker transport
+│   └── postgres/
 └── module.go
-
-internal/platform/
-├── config/
-├── database/
-├── httpserver/
-└── observability/
 ~~~
 
-The dependency direction is enforced by repository-owned Go architecture fitness checks.
+Platform runtime remains under `internal/platform` and stays business-module independent.
 
 ### Domain
 
-Monitoring domain code currently owns:
+Monitoring domain owns:
 
 - MonitorID;
+- CheckID;
 - TargetURL;
 - immutable Monitor;
-- creation-time validation;
-- UTC creation-time normalization.
+- normalized CheckResult vocabulary and invariants.
 
-TargetURL validation is syntactic only. It accepts absolute HTTP/HTTPS targets without userinfo or fragments and preserves the accepted original string. It performs no DNS/network resolution and makes no execution-safety claim.
+Go registration-time TargetURL validation remains syntactic. Execution-time destination safety is Rust-owned.
 
 ### Application
 
-Monitoring currently exposes exactly two use cases:
+Implemented capabilities include:
 
 1. RegisterMonitor
 2. GetMonitor
+3. ClaimDueCheck
+4. SubmitCheckResult
 
-RegisterMonitor validates the target, receives a MonitorID from an injected ID generator, receives time from an injected clock, constructs one immutable Monitor, and calls repository Create.
+Go application policy owns the fixed cadence, CheckRun deadline window, timeout/redirect work values, server-time decisions, no-work semantics, and completion/conflict mapping.
 
-GetMonitor retrieves one monitor by identity and maps persistence failures into stable application errors.
-
-There is no enable/disable, update, delete, list, scheduling, due-work, result submission, history, or incident transition use case.
+No public list/update/delete/enable/disable/status/history use case exists.
 
 ### Ports
 
-The implemented persistence capability is intentionally narrow:
+Monitoring defines narrow persistence contracts rather than a generic repository abstraction.
 
-~~~text
-MonitorRepository
-├── Create(ctx, monitor)
-└── ByID(ctx, id)
-~~~
-
-There is no generic Repository[T], Save method, Unit of Work, transaction manager, or global persistence base abstraction.
+The execution port exposes only atomic claim/completion capabilities needed by the application layer.
 
 ### PostgreSQL Adapter
 
-The PostgreSQL adapter depends inward on Monitoring domain and ports and uses pgx only at the infrastructure boundary.
+The adapter owns hand-written SQL for `monitoring.monitors` and `monitoring.check_runs`.
 
-It owns hand-written SQL for monitoring.monitors and maps pgx.ErrNoRows into the module-owned not-found signal. Other database failures remain infrastructure errors and do not become application contracts.
+Claim is transactionally bounded, uses row locking/`SKIP LOCKED`, reconciles expired pending work, and inserts one pending CheckRun. Completion terminalizes one pending run or validates an exact idempotent duplicate.
 
-### Module Composition
+### HTTP Adapters
 
-monitoring.Module groups RegisterMonitor and GetMonitor when supplied with:
+The public adapter serves `POST /monitors` and `GET /monitors/{monitorId}`.
 
-- MonitorRepository;
-- application ID generator;
-- Clock.
+The internal Checker adapter serves:
 
-It does not create platform resources or read environment variables.
+~~~text
+POST /internal/checks/claim
+PUT /internal/checks/{checkId}/result
+~~~
 
-The production `cmd/api` binary now constructs the Monitoring module with the PostgreSQL repository and server-owned identity/time dependencies, then composes the Monitoring HTTP adapter outside the module. The module itself still creates no platform resources and reads no environment configuration.
-
-## Deferred Monitoring Responsibilities
-
-The broader committed Monitoring capability will eventually include lifecycle, scheduling/due-work coordination, normalized result interpretation, and additional persistence behavior.
-
-Those responsibilities are **not implemented** in the current foundation.
-
-Before mutable lifecycle is added, concurrency, idempotency/no-op behavior, and persistence semantics must be designed explicitly.
+Both adapters depend inward on application behavior and never own persistence/business rules.
 
 ## Rust Checker
 
-The Rust Checker is not implemented yet. The future execution runtime remains organized around Ports and Adapters and will own bounded network execution.
+The Rust runtime is implemented as a workspace with explicit crate boundaries:
 
-Rust adapters must not own product/domain decisions and must never access PostgreSQL directly.
+~~~text
+checker-core
+probe-http
+control-plane-client
+checker
+~~~
+
+- `checker-core` owns worker abstractions/orchestration.
+- `probe-http` owns execution-time destination policy and HTTP/HTTPS probing.
+- `control-plane-client` owns internal HTTP mapping/transport.
+- `checker` owns production composition, readiness marker, and stable event formatting.
+
+Rust adapters do not own product scheduling or persistence decisions.
+
+Rust never accesses PostgreSQL directly.
+
+See [Rust Checker](../checker/rust-checker.md).
 
 ## Frontend
 
-The React/TypeScript runtime is not implemented yet.
+The React/TypeScript runtime is not implemented.
 
-The committed frontend dependency direction remains:
+The committed dependency direction remains:
 
 ~~~text
 app -> pages -> widgets -> features -> entities -> shared
 ~~~
 
-No frontend package tree is created merely to mirror this architecture before the runtime exists.
-
 ## Cross-Boundary Rules
 
-The following rules are normative:
-
 - business logic does not live in Go HTTP handlers;
-- Go modules do not read another module's persistence tables directly;
-- there is no global shared business model package;
+- Go modules do not bypass another module's application boundary through SQL;
 - generic cross-domain repositories are forbidden;
-- circular business-module dependencies are forbidden;
-- Rust adapters do not own product/domain decisions;
-- frontend components do not become persistence or network-probe owners;
-- cross-runtime implementation source is not shared as an integration mechanism.
+- Rust core does not depend on concrete control-plane/probe transports;
+- Rust adapters do not own durable product semantics;
+- Rust never accesses PostgreSQL;
+- cross-runtime implementation source is not shared as an integration mechanism;
+- Go/Rust exchange is contract-driven.
 
 ## Extension Without Premature Distribution
 
-The modular monolith preserves a future extraction path, but service extraction is not a current goal.
-
-Strong in-process module boundaries are preferred over premature distribution.
+One logical Checker process is supported in this milestone. Multi-worker coordination, broker/outbox infrastructure, and service extraction are not current goals.
 
 ## Related Decisions
 
@@ -137,5 +131,6 @@ Strong in-process module boundaries are preferred over premature distribution.
 - [Dependency Rules](dependency-rules.md)
 - [Data Ownership](data-ownership.md)
 - [Go Control Plane](../backend/go-control-plane.md)
-- [ADR-0001: Multi-runtime monorepo](../adr/0001-multi-runtime-monorepo.md)
-- [ADR-0002: Control plane and execution plane](../adr/0002-control-plane-and-execution-plane.md)
+- [Rust Checker](../checker/rust-checker.md)
+- [ADR-0001](../adr/0001-multi-runtime-monorepo.md)
+- [ADR-0002](../adr/0002-control-plane-and-execution-plane.md)

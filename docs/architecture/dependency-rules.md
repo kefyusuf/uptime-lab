@@ -2,28 +2,26 @@
 
 **Architecture state:** Committed
 
-**Implementation state:** Normative rules with Go dependency fitness, public-contract semantic fitness, and public Monitoring transport boundary fitness implemented. Frontend and Rust enforcement remain deferred until those runtimes exist.
+**Implementation state:** Go and Rust dependency fitness is implemented. Frontend enforcement remains deferred until React source exists.
 
 ## Purpose
 
-This document is the canonical source for dependency direction across `uptime-lab`. It distinguishes architectural dependencies from transport choices so future code can change internally without weakening ownership boundaries.
+This is the canonical source for dependency direction across `uptime-lab`.
 
 ## Allowed and Forbidden Dependencies
 
 | Consumer | Allowed dependency | Forbidden dependency |
 |---|---|---|
-| Web Client | Public contract, frontend-owned lower layers | PostgreSQL, Rust checker internals, Go persistence adapters |
-| Go Domain | Domain concepts and domain-owned value types | HTTP framework, PostgreSQL driver, Rust implementation, React implementation |
-| Go Application | Domain + declared ports + module application boundaries | Concrete persistence/network infrastructure implementation |
-| Go Adapters | Application/domain contracts they implement or invoke | Owning product rules only inside transport/infrastructure code |
-| Rust Core | Checker execution abstractions and normalized probe concepts | HTTP client implementation types, PostgreSQL, Go internals |
-| Rust Probe Adapter | Rust core probe ports | PostgreSQL, browser concerns, Go persistence |
-| Rust Control Client | Internal contract + mapping to/from core concepts | Database implementation, browser implementation |
-| PostgreSQL Adapter | Go-owned persistence ports and schema responsibility | Direct calls from browser or Rust |
+| Web Client | Public contract, frontend lower layers | PostgreSQL, Checker internals, Go persistence adapters |
+| Go Domain | Domain concepts/value types | HTTP framework, PostgreSQL driver, Rust implementation |
+| Go Application | Domain + declared ports | Concrete adapters/platform/database drivers |
+| Go HTTP Adapters | Application/domain contracts | PostgreSQL adapters, platform business shortcuts |
+| Rust Core | Checker execution abstractions | Concrete HTTP transport, PostgreSQL, Go internals |
+| Rust Probe Adapter | Rust core probe contracts | PostgreSQL, Go persistence, browser concerns |
+| Rust Control Client | Internal contract mapping + core concepts | PostgreSQL, Go implementation code |
+| PostgreSQL Adapter | Go-owned persistence ports/schema | Direct browser/Rust calls |
 
 ## Global Forbidden Edges
-
-These statements are deliberately phrased as machine-checkable invariants:
 
 ```text
 Browser -> PostgreSQL is forbidden.
@@ -36,7 +34,7 @@ Cross-runtime implementation-code sharing is forbidden.
 
 ## Go Dependency Direction
 
-The intended direction inside a Go business module is:
+Inside Monitoring:
 
 ```text
 HTTP / infrastructure adapters
@@ -44,54 +42,63 @@ HTTP / infrastructure adapters
         -> domain
 ```
 
-Ports are declared inward and implemented outward. Domain code must not depend on HTTP framework types, environment variables, database-driver types, loggers, or Rust/React implementation details.
+Ports are declared inward and implemented outward. Domain/application code does not depend on HTTP or PostgreSQL implementation types.
 
-Cross-module behavior is invoked through an application-level interface or an explicit event boundary. Persistence adapters are never treated as module APIs.
+The generic platform HTTP server remains Monitoring-independent; `cmd/api` owns production composition.
 
 ## Rust Dependency Direction
 
-Checker core defines execution abstractions. Protocol and control-plane adapters depend inward on those abstractions. Core must not import concrete HTTP client concerns, database drivers, or Go implementation code.
+`checker-core` defines execution abstractions. `probe-http` and `control-plane-client` depend inward on core concepts. The `checker` crate composes them.
 
-The checker is allowed to know internal contract representations only at the control-plane adapter boundary, where mapping isolates core execution concepts from transport schema changes.
+Rust has no PostgreSQL dependency and no database ownership.
 
 ## Frontend Dependency Direction
 
-The committed frontend direction is:
+The committed frontend direction remains:
 
 ```text
 shared <- entities <- features <- widgets <- pages <- app
 ```
 
-Imports flow toward lower layers. This rule is conceptual until the React foundation creates real source paths and an enforceable lint configuration.
+This remains conceptual until React exists.
 
 ## Cross-Runtime Boundary
 
-Cross-runtime communication is contract-driven. Contracts describe data exchanged between processes; they do not authorize sharing implementation packages across TypeScript, Go, and Rust.
+Cross-runtime communication is contract-driven.
 
-Current boundary state:
+Current sources:
 
-- the public Monitoring contract is defined at `contracts/openapi/public.yaml`;
-- the Go public transport adapter is implemented for exactly `POST /monitors` and `GET /monitors/{monitorId}`;
-- the internal Go/Rust Checker contract remains deferred;
-- public network exposure remains deferred even though the Go transport exists.
+- public: `contracts/openapi/public.yaml`;
+- internal: `contracts/openapi/internal.yaml`.
 
-Database tables, generated ORM types, Rust structs, and Go domain structs are not cross-runtime contracts by default.
+The public Go adapter implements exactly Monitor create/read.
+
+The internal Go/Rust contract implements exactly:
+
+~~~text
+POST /internal/checks/claim
+PUT /internal/checks/{checkId}/result
+~~~
+
+Database tables, Go structs, and Rust structs are not cross-runtime contracts by default.
 
 ## Enforcement State
 
-The repository applies the cheapest available fitness functions as each boundary becomes real:
+Repository fitness currently enforces:
 
-- Go import/dependency tests enforce domain/application/adapter direction and module isolation, including platform -> Monitoring and Monitoring HTTP -> PostgreSQL/platform prohibitions;
-- public Monitoring contract semantics are enforced by repository-owned contract fitness checks over Redocly-bundled JSON;
-- frontend lint/import-boundary rules remain deferred until React source exists;
-- Rust crate/module dependency checks remain deferred until Rust source exists;
-- internal-contract compatibility checks remain deferred because that contract does not exist yet.
+- Go import/dependency direction;
+- Rust crate/module direction and no-database ownership;
+- public contract semantics;
+- internal contract semantics and fixtures;
+- local Compose topology;
+- documentation current-state markers.
 
-This document does not preselect tools for deferred runtime structures.
+Frontend lint/import-boundary enforcement remains deferred with the frontend runtime.
 
 ## Related Decisions
 
 - [Module Boundaries](module-boundaries.md)
 - [Data Ownership](data-ownership.md)
-- [ADR-0002: Control plane and execution plane](../adr/0002-control-plane-and-execution-plane.md)
-- [ADR-0003: Contract and data ownership](../adr/0003-contract-and-data-ownership.md)
+- [Rust Checker](../checker/rust-checker.md)
+- [ADR-0002](../adr/0002-control-plane-and-execution-plane.md)
+- [ADR-0003](../adr/0003-contract-and-data-ownership.md)

@@ -16,7 +16,7 @@ expect_failure() { local n="$1"; shift; if "$@" >/dev/null 2>&1; then fail "$n";
 
 make_fixture() {
   rm -rf "$TMP/repo"
-  mkdir -p "$TMP/repo/docs/architecture" "$TMP/repo/docs/adr" "$TMP/repo/docs/backend" "$TMP/repo/docs/devops" "$TMP/repo/docs/testing"
+  mkdir -p "$TMP/repo/docs/architecture" "$TMP/repo/docs/adr" "$TMP/repo/docs/backend" "$TMP/repo/docs/checker" "$TMP/repo/docs/devops" "$TMP/repo/docs/testing"
 
   cat > "$TMP/repo/docs/README.md" <<'DOC'
 # Documentation
@@ -24,6 +24,8 @@ make_fixture() {
 See [Architecture](architecture/README.md).
 See [Public Monitoring Contract](testing/public-monitoring-contract.md).
 See [Go Public Transport](testing/go-public-transport-adapter.md).
+See [Rust Checker](checker/rust-checker.md).
+See [Single-Checker Execution](testing/single-checker-execution-slice.md).
 DOC
 
   cat > "$TMP/repo/docs/backend/go-control-plane.md" <<'DOC'
@@ -32,6 +34,8 @@ DOC
 The Go Control Plane foundation is implemented.
 The public source contract is contracts/openapi/public.yaml.
 The runtime serves POST /monitors and GET /monitors/{monitorId}.
+The internal runtime serves POST /internal/checks/claim and PUT /internal/checks/{checkId}/result.
+Durable execution state is stored in monitoring.check_runs.
 Production uses a read-only migration compatibility checker.
 DOC
 
@@ -46,7 +50,28 @@ DOC
   cat > "$TMP/repo/docs/testing/go-monitoring-foundation.md" <<'DOC'
 # Go Monitoring Foundation Testing
 
-Go architecture tests: 19 passed, 0 failed.
+Go architecture tests: 24 passed, 0 failed.
+DOC
+
+  cat > "$TMP/repo/docs/checker/rust-checker.md" <<'DOC'
+# Rust Checker
+
+Rust Checker: implemented.
+Rust never accesses PostgreSQL directly.
+POST /internal/checks/claim
+PUT /internal/checks/{checkId}/result
+Production destination policy rejects private and non-public addresses.
+No application host ports are published.
+No public CheckRun/status/history API exists.
+DOC
+
+  cat > "$TMP/repo/docs/testing/single-checker-execution-slice.md" <<'DOC'
+# Single-Checker Execution Slice Testing
+
+Go -> Rust -> policy_rejected -> Go -> PostgreSQL
+Internal contract verification is separate from runtime execution evidence.
+Canonical Docker smoke proves the cross-runtime path.
+Rust vulnerability audit uses cargo audit.
 DOC
 
   cat > "$TMP/repo/docs/testing/go-public-transport-adapter.md" <<'DOC'
@@ -56,7 +81,7 @@ POST /monitors
 GET  /monitors/{monitorId}
 No application host ports are published.
 The readiness path is read-only.
-The internal Checker contract remains deferred.
+The internal Checker contract is implemented.
 DOC
 
   cat > "$TMP/repo/docs/devops/local-development.md" <<'DOC'
@@ -119,8 +144,9 @@ Cross-runtime communication is contract-driven.
 
 Public contract: defined (`contracts/openapi/public.yaml`).
 Go public transport adapter: implemented.
+Rust Checker: implemented.
+Internal checker contract: implemented (`contracts/openapi/internal.yaml`).
 No application host ports are published.
-Internal checker contract: deferred.
 
 ```mermaid
 flowchart LR
@@ -280,8 +306,32 @@ rm "$TMP/repo/docs/testing/go-public-transport-adapter.md"
 expect_failure "missing public transport implementation guide fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
+rm "$TMP/repo/docs/checker/rust-checker.md"
+expect_failure "missing Rust Checker guide fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+rm "$TMP/repo/docs/testing/single-checker-execution-slice.md"
+expect_failure "missing execution-slice testing guide fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+sed -i '/checker\/rust-checker\.md/d' "$TMP/repo/docs/README.md"
+expect_failure "missing Rust Checker navigation fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+sed -i '/testing\/single-checker-execution-slice\.md/d' "$TMP/repo/docs/README.md"
+expect_failure "missing execution testing navigation fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
 sed -i '/Go public transport adapter: implemented\./d' "$TMP/repo/docs/architecture/container-view.md"
 expect_failure "missing implemented public transport marker fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+sed -i '/Rust Checker: implemented\./d' "$TMP/repo/docs/architecture/container-view.md"
+expect_failure "missing implemented Checker marker fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+sed -i '/Internal checker contract: implemented/d' "$TMP/repo/docs/architecture/container-view.md"
+expect_failure "missing internal contract current-state marker fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
 sed -i '/No application host ports are published\./d' "$TMP/repo/docs/architecture/container-view.md"
@@ -294,6 +344,18 @@ expect_failure "missing schema-aware readiness documentation fails" "$CHECKER" "
 make_fixture
 sed -i '/uptime-lab-migrate up/d' "$TMP/repo/docs/devops/local-development.md"
 expect_failure "missing explicit migration bootstrap fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+sed -i '/Production destination policy rejects private and non-public addresses\./d' "$TMP/repo/docs/checker/rust-checker.md"
+expect_failure "missing production destination-policy marker fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+sed -i '/No public CheckRun\/status\/history API exists\./d' "$TMP/repo/docs/checker/rust-checker.md"
+expect_failure "missing public status deferral marker fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+sed -i '/Go -> Rust -> policy_rejected -> Go -> PostgreSQL/d' "$TMP/repo/docs/testing/single-checker-execution-slice.md"
+expect_failure "missing Docker execution evidence marker fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
 mkdir -p "$TMP/repo/docs/frontend"

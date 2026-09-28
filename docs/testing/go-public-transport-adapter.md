@@ -2,216 +2,102 @@
 
 ## Purpose
 
-This document is the canonical implementation and verification guide for the live Go public Monitoring transport. It records the runtime behavior that now exists without implying that the service is publicly reachable from the host or internet.
+This guide owns verification of the live public Monitor create/read transport. It does not treat the public adapter as the owner of Checker execution semantics.
 
-The authoritative product contract remains `contracts/openapi/public.yaml`.
+The authoritative public contract is `contracts/openapi/public.yaml`.
 
-## Live Runtime Surface
-
-The Go API serves exactly these product operations:
+## Live Public Runtime Surface
 
 ~~~text
 POST /monitors
 GET  /monitors/{monitorId}
 ~~~
 
-Operational health remains separate:
+Operational health is separate:
 
 ~~~text
 GET /livez
 GET /readyz
 ~~~
 
-No application host ports are published by the canonical Compose topology. A live Go product handler is therefore not a public-deployment decision. Authentication, authorization, CORS, rate limiting, ingress/TLS, and internet exposure remain deferred.
+No application host ports are published. A live public-contract handler inside the Compose network is not a public-deployment decision.
 
-The internal Checker contract remains deferred. Web and Checker remain placeholders, and no target probe execution occurs in this milestone.
+The internal Checker contract is implemented. It is a separate contract and adapter surface documented in [single-checker-execution-slice.md](single-checker-execution-slice.md). The Rust Checker is also implemented; neither expands the public OpenAPI surface.
 
 ## Transport Boundary
 
-The Monitoring HTTP adapter is an outward adapter under:
+The public Monitoring adapter depends on application behavior, not PostgreSQL or generic platform implementation details.
+
+Architecture fitness protects public HTTP adapter -> PostgreSQL/platform prohibitions and domain/application -> `net/http` prohibitions.
+
+Current Go architecture fitness:
 
 ~~~text
-apps/api/internal/modules/monitoring/adapters/http
-~~~
-
-It depends on narrow application behavior, not on the concrete PostgreSQL adapter or platform package.
-
-The generic platform HTTP server owns operational routes and delegates product traffic to the composed product handler. Platform code remains Monitoring-independent; `cmd/api` is the composition root that may depend on both.
-
-Architecture fitness mechanically protects the relevant directions, including:
-
-- platform -> Monitoring module/adapters is forbidden;
-- Monitoring HTTP adapter -> PostgreSQL adapter is forbidden;
-- Monitoring HTTP adapter -> pgx/goose is forbidden;
-- Monitoring HTTP adapter -> platform is forbidden;
-- domain/application -> net/http is forbidden.
-
-The canonical architecture harness reports:
-
-~~~text
-Go architecture tests: 19 passed, 0 failed
+Go architecture tests: 24 passed, 0 failed
 ~~~
 
 ## Request and Error Verification
 
-Adapter tests protect exact routing and classification rather than relying on a framework default.
-
 ### POST /monitors
 
-Success proves:
+Success protects 201, JSON response, `Location`, exact response fields, target text preservation, and canonical UTC creation time.
 
-- 201 Created;
-- `Content-Type: application/json`;
-- `Location: /monitors/{id}`;
-- response fields are exactly `id`, `targetUrl`, and `createdAt`;
-- accepted target text is preserved;
-- creation time is the application-supplied canonical UTC value.
-
-Request classification proves:
-
-| Condition | Result |
-|---|---:|
-| missing, malformed, or unsupported Content-Type | 415 |
-| empty body, malformed JSON, or multiple JSON documents | 400 |
-| valid JSON with wrong root/member/type shape | 422 |
-| domain-invalid targetUrl | 422 |
-| stable persistence failure | 500 |
-| unexpected internal failure | 500 |
-
-Problem responses use `application/problem+json` and do not expose raw internal/database error text.
+Malformed media/syntax/shape/domain input is classified deterministically. Persistence/internal errors are sanitized Problem Details.
 
 ### GET /monitors/{monitorId}
 
-Tests prove:
-
-- valid existing id -> 200 with the exact Monitor response shape;
-- invalid textual UUID -> 400 before the use case executes;
-- missing Monitor -> 404;
-- persistence failure -> sanitized 500.
-
-Known resource paths reject unsupported methods with 405 and the exact `Allow` header. HEAD does not implicitly execute GET. Unknown/trailing/nested paths remain 404.
+Tests protect existing/malformed/missing/error cases, explicit method handling, and unknown/trailing/nested paths.
 
 ## Production Identity and Time
 
-Production composition owns identity and creation time:
+Production Monitor IDs are UUID v7 generated above persistence.
 
-- UUID v7 is generated with `uuid.NewV7()` and wrapped as a domain `MonitorID`;
-- ID generation is error-returning and failure stops before clock/persistence work;
-- creation time is normalized to UTC microsecond precision before Monitor construction.
-
-This keeps POST and a later PostgreSQL-backed GET on the same externally observed `createdAt` instant.
+Creation time is normalized to UTC microsecond precision before Monitor construction.
 
 ## Schema-Aware Readiness
 
-`/livez` remains database-independent.
+`/livez` is database-independent.
 
-`/readyz` is now a bounded **database + schema compatibility** signal. Compatibility is derived from repository-owned embedded migration sources and checked against existing Goose migration metadata.
+`/readyz` is a bounded database + migration-compatibility signal.
 
-The readiness path is read-only. It does not call migration `Up`/`Down`, create the Goose metadata table, or otherwise mutate schema.
+The readiness path is read-only.
 
-Readiness requires:
-
-- exactly one valid applied version-zero bootstrap row;
-- every positive retained migration row is applied and unique;
-- the applied positive DB version set exactly equals the embedded positive migration version set.
-
-Readiness fails for:
-
-- unreachable PostgreSQL;
-- absent Goose metadata on a fresh database;
-- invalid/missing/duplicate version-zero metadata;
-- missing or rolled-back required migrations;
-- duplicate or unapplied positive rows;
-- unknown/ahead applied versions;
-- read failures.
-
-This is repository migration-state compatibility, not arbitrary manual-DDL drift detection.
+It never applies migrations or creates migration metadata. Applied migration versions must exactly match repository-owned embedded versions, including both Monitor and CheckRun migrations.
 
 ## Migration Immutability
 
-The version-based readiness model depends on landed SQL versions remaining stable.
-
-The always-running repository gate therefore compares base -> head and rejects modification, rename, or deletion of any SQL migration already present in the base revision under:
-
-~~~text
-apps/api/migrations/*.sql
-~~~
-
-Adding a new migration version remains mechanically possible for a future schema-evolution phase. This milestone does not add one.
+CI rejects modification, rename, or deletion of landed SQL migration files present in the base revision. Schema evolution uses a new migration version.
 
 ## Production Composition
 
-`cmd/api` composes:
+`cmd/api` creates one shared pgx pool and composes:
 
-~~~text
-PG environment
-   |
-   v
-one pgxpool.Pool
-   |-------------------------------|
-   |                               |
-   v                               v
-Monitoring PostgreSQL repo     pgx stdlib wrapper
-   |                               |
-   v                               v
-Monitoring Module             read-only migration compatibility
-   |                               |
-   v                               v
-Monitoring HTTP adapter          /readyz
-   |                               |
-   +--------------+----------------+
-                  v
-        generic platform HTTP server
-~~~
+- public Monitoring adapter;
+- internal Checker adapter;
+- read-only migration compatibility;
+- generic platform HTTP server.
 
-The database/sql wrapper reuses the shared pgx pool. Closing the wrapper does not close the underlying pool.
-
-API startup does not apply migrations and does not perform a live schema query. The process can therefore be live while readiness is false.
+The public transport remains isolated from execution-specific persistence details.
 
 ## Explicit Local Bootstrap
-
-A fresh database intentionally requires an explicit migration step. The real Docker smoke verifies this sequence:
 
 ~~~bash
 docker compose build api
 docker compose build web checker
 docker compose up -d db api
-
 docker compose exec -T api /usr/local/bin/uptime-lab-migrate up
-
 docker compose up -d --wait --wait-timeout 60
-docker compose ps
 ~~~
 
-Before the migration command:
+Before migration, API is live but unready and Goose metadata is absent. After migration the full stack becomes healthy.
 
-- API `/livez` becomes available;
-- `/readyz` remains unavailable;
-- Goose migration metadata is absent.
+## Real Docker Public-Transport Evidence
 
-After the explicit migration, the full stack can become healthy. See [../devops/local-development.md](../devops/local-development.md) for operational usage.
+The canonical smoke still proves explicit migration bootstrap, real container-local Monitor POST/GET, normal restart persistence, destructive reset, and re-migration.
 
-## Real Docker Product Evidence
-
-The canonical real Docker smoke proves:
-
-1. fresh DB -> API live but unready;
-2. migration metadata absent before migration;
-3. explicit `uptime-lab-migrate up`;
-4. full stack healthy;
-5. real container-local POST creates a Monitor;
-6. real GET returns the same id, targetUrl, and exact createdAt text;
-7. normal `down` -> `up` preserves schema and Monitor state without rerunning migration;
-8. `down -v` removes schema and product state;
-9. fresh runtime returns to live-but-unready;
-10. explicit migration restores readiness;
-11. the Monitor created before destructive reset is absent afterward.
-
-No host application port is required for this evidence.
+The same smoke continues into real Checker execution, but CheckRun assertions are owned by [single-checker-execution-slice.md](single-checker-execution-slice.md).
 
 ## Verification Commands
-
-Repository/documentation and architecture fitness:
 
 ~~~bash
 ./scripts/ci/test-architecture-docs.sh
@@ -220,8 +106,6 @@ Repository/documentation and architecture fitness:
 ./scripts/ci/check-go-architecture.sh .
 ./scripts/ci/test-check-migration-history.sh
 ~~~
-
-Go verification:
 
 ~~~bash
 cd apps/api
@@ -232,27 +116,18 @@ go test -count=1 -tags=integration ./internal/modules/monitoring/adapters/postgr
 go test -count=1 -tags=integration ./cmd/api
 ~~~
 
-Docker verification:
-
-~~~bash
-./scripts/ci/test-smoke-local-dev.sh
-./scripts/ci/smoke-local-dev.sh
-~~~
-
-The stable repository aggregate remains `CI / gate`.
+The aggregate remains `CI / gate`.
 
 ## Deferred
 
-This milestone does not add:
+This public transport still does not add:
 
-- list/search/update/delete/enable/disable Monitoring operations;
-- mutable monitor lifecycle or scheduler/result history;
-- internal Checker HTTP/API contract;
-- Rust probe execution;
-- React Web runtime;
+- public CheckRun/status/history;
+- list/search/update/delete/enable/disable Monitor operations;
+- mutable Monitor lifecycle;
+- React;
 - authentication/authorization;
-- CORS or rate limiting;
-- public host ports, ingress, or TLS;
-- execution-time SSRF protections.
+- CORS/rate limiting;
+- public host ports, ingress, or TLS.
 
-Those require separate gates rather than being inferred from the existence of a live public-product transport adapter.
+Execution-time destination security exists in Rust and must not be mistaken for public deployment security.
