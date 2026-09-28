@@ -94,7 +94,6 @@ The repository-owned checker mechanically protects the landed contract decisions
 - exact request, Monitor, and Problem schema surfaces;
 - explicit absence of an RFC 3986 `uri` format on `targetUrl`, plus locked UUID, date-time, and URI-reference formats;
 - absence of servers and security schemes;
-- absence of speculative `contracts/openapi/internal.yaml`;
 - absence of a public UUID-version guarantee.
 
 The negative harness is intentionally network-independent and uses Node standard-library modules only.
@@ -125,7 +124,7 @@ This separation keeps `contracts/openapi/public.yaml` authoritative without maki
 
 ## Change Detection
 
-The public-contract detector returns `true` for changes under `contracts/openapi/`, its detector/checker scripts, and the shared CI workflow. It returns `false` for unrelated docs-only, Go-only, and Compose-only changes.
+The public-contract detector returns `true` for changes to `contracts/openapi/public.yaml`, its detector/checker scripts, and the shared CI workflow. It returns `false` for unrelated docs-only, Go-only, and Compose-only changes.
 
 A zero base SHA or unavailable base is handled conservatively as changed. An unavailable head is an error.
 

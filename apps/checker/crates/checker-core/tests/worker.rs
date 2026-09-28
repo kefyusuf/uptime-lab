@@ -5,7 +5,7 @@ use std::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use checker_core::{
@@ -254,12 +254,29 @@ fn work(index: usize) -> WorkItem {
     .with_monitor_id(format!("018f22d3-1d6a-7cc0-a37c-{index:012x}"))
 }
 
+struct CancelOnDrop(ShutdownToken);
+
+impl Drop for CancelOnDrop {
+    fn drop(&mut self) {
+        self.0.cancel();
+    }
+}
+
+struct ReleaseProbeOnDrop(Arc<FakeProbe>);
+
+impl Drop for ReleaseProbeOnDrop {
+    fn drop(&mut self) {
+        self.0.release();
+    }
+}
+
 fn wait_until(mut condition: impl FnMut() -> bool) {
-    for _ in 0..100_000 {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline {
         if condition() {
             return;
         }
-        thread::yield_now();
+        thread::sleep(Duration::from_millis(1));
     }
     panic!("condition was not reached");
 }
@@ -310,6 +327,8 @@ fn worker_never_exceeds_four_active_probes_and_claims_serially() {
     );
 
     thread::scope(|scope| {
+        let _cancel_on_drop = CancelOnDrop(shutdown.clone());
+        let _release_probe_on_drop = ReleaseProbeOnDrop(Arc::clone(&probe));
         let shutdown_for_worker = shutdown.clone();
         scope.spawn(move || worker.run(&shutdown_for_worker));
 
@@ -412,6 +431,7 @@ fn shutdown_cancels_inflight_claim_without_recovery_pause() {
     let shutdown = ShutdownToken::new();
 
     thread::scope(|scope| {
+        let _cancel_on_drop = CancelOnDrop(shutdown.clone());
         let shutdown_for_worker = shutdown.clone();
         scope.spawn(move || worker.run(&shutdown_for_worker));
 
@@ -446,6 +466,7 @@ fn result_transport_retry_reuses_payload_and_never_reprobes() {
     let shutdown = ShutdownToken::new();
 
     thread::scope(|scope| {
+        let _cancel_on_drop = CancelOnDrop(shutdown.clone());
         let shutdown_for_worker = shutdown.clone();
         scope.spawn(move || worker.run(&shutdown_for_worker));
 
@@ -484,6 +505,7 @@ fn terminal_result_failure_is_not_retried() {
     let shutdown = ShutdownToken::new();
 
     thread::scope(|scope| {
+        let _cancel_on_drop = CancelOnDrop(shutdown.clone());
         let shutdown_for_worker = shutdown.clone();
         scope.spawn(move || worker.run(&shutdown_for_worker));
 
@@ -515,6 +537,7 @@ fn shutdown_cancels_inflight_result_and_stops_retries() {
     let shutdown = ShutdownToken::new();
 
     thread::scope(|scope| {
+        let _cancel_on_drop = CancelOnDrop(shutdown.clone());
         let shutdown_for_worker = shutdown.clone();
         scope.spawn(move || worker.run(&shutdown_for_worker));
 
@@ -546,6 +569,7 @@ fn completed_slot_is_released_for_more_work() {
     let shutdown = ShutdownToken::new();
 
     thread::scope(|scope| {
+        let _cancel_on_drop = CancelOnDrop(shutdown.clone());
         let shutdown_for_worker = shutdown.clone();
         scope.spawn(move || worker.run(&shutdown_for_worker));
 

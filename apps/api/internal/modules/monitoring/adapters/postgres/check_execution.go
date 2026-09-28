@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/kefyusuf/uptime-lab/apps/api/internal/modules/monitoring/domain"
 	"github.com/kefyusuf/uptime-lab/apps/api/internal/modules/monitoring/ports"
 )
@@ -108,6 +109,9 @@ func (repository *Repository) ClaimDueCheck(
 		input.Now,
 		input.Deadline,
 	); err != nil {
+		if isPendingClaimConflict(err) {
+			return ports.ClaimedCheck{}, ports.ErrNoDueCheck
+		}
 		return ports.ClaimedCheck{}, fmt.Errorf("insert pending check run: %w", err)
 	}
 
@@ -267,4 +271,11 @@ func terminalResultMatches(
 		return storedHTTPStatus == nil
 	}
 	return storedHTTPStatus != nil && *storedHTTPStatus == httpStatus
+}
+
+func isPendingClaimConflict(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) &&
+		pgErr.Code == "23505" &&
+		pgErr.ConstraintName == "check_runs_one_pending_per_monitor_idx"
 }

@@ -85,6 +85,10 @@ HEAD="$(commit_file "contracts/fixtures/internal/check_work.json" '{}\n')"
 expect_value "cross-runtime fixture change triggers checker" "true" bash -c "cd '$TMP' && '$DETECT' '$BASE' '$HEAD'"
 reset_base
 
+HEAD="$(commit_file "contracts/openapi/internal.yaml" 'openapi: 3.1.2\n')"
+expect_value "internal contract change triggers checker" "true" bash -c "cd '$TMP' && '$DETECT' '$BASE' '$HEAD'"
+reset_base
+
 HEAD="$(commit_file ".github/workflows/ci.yml" 'name: CI\n')"
 expect_value "workflow change triggers checker" "true" bash -c "cd '$TMP' && '$DETECT' '$BASE' '$HEAD'"
 reset_base
@@ -114,5 +118,5 @@ expect_value "unavailable base is conservative" "true" bash -c "cd '$TMP' && '$D
 expect_failure "unavailable head fails closed" bash -c "cd '$TMP' && '$DETECT' '$DELETE_BASE' '2222222222222222222222222222222222222222'"
 
 printf '\nChecker change detection tests: %d passed, %d failed\n' "$PASS" "$FAIL"
-test "$PASS" -eq 16
+test "$PASS" -eq 17
 test "$FAIL" -eq 0

@@ -79,7 +79,8 @@ impl Error for ClientConfigError {}
 
 #[derive(Clone, Debug)]
 pub struct StdHttpTransport {
-    addresses: Vec<SocketAddr>,
+    host: String,
+    port: u16,
     host_header: String,
 }
 
@@ -101,21 +102,14 @@ impl StdHttpTransport {
         }
 
         let (host, port, host_header) = parse_authority(authority)?;
-        let mut addresses = Vec::new();
-        for address in (host.as_str(), port)
-            .to_socket_addrs()
-            .map_err(|_| ClientConfigError::Resolve)?
-        {
-            if !addresses.contains(&address) {
-                addresses.push(address);
-            }
-        }
+        let addresses = resolve_addresses(&host, port).map_err(|_| ClientConfigError::Resolve)?;
         if addresses.is_empty() {
             return Err(ClientConfigError::Resolve);
         }
 
         Ok(Self {
-            addresses,
+            host,
+            port,
             host_header,
         })
     }
@@ -173,10 +167,16 @@ impl StdHttpTransport {
         deadline: Instant,
         shutdown: &ShutdownToken,
     ) -> Result<TcpStream, TransportError> {
+        let addresses =
+            resolve_addresses(&self.host, self.port).map_err(|_| TransportError::BeforeSend)?;
+        if addresses.is_empty() {
+            return Err(TransportError::BeforeSend);
+        }
+
         let mut saw_timeout = false;
 
         loop {
-            for address in &self.addresses {
+            for address in &addresses {
                 if shutdown.is_cancelled() {
                     return Err(TransportError::Cancelled);
                 }
@@ -200,6 +200,16 @@ impl StdHttpTransport {
             }
         }
     }
+}
+
+fn resolve_addresses(host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
+    let mut addresses = Vec::new();
+    for address in (host, port).to_socket_addrs()? {
+        if !addresses.contains(&address) {
+            addresses.push(address);
+        }
+    }
+    Ok(addresses)
 }
 
 fn parse_authority(authority: &str) -> Result<(String, u16, String), ClientConfigError> {
