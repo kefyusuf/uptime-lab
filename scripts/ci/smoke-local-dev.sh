@@ -125,6 +125,8 @@ json_created_at() {
 MONITOR_ID=""
 MONITOR_TARGET="http://web/"
 MONITOR_CREATED_AT=""
+CHECK_RUN_ID=""
+CHECK_RUN_DURATION_MS=""
 
 create_monitor() {
   local response
@@ -191,6 +193,133 @@ assert_monitor_absent() {
   printf 'Monitor %s is absent after destructive reset\n' "$MONITOR_ID"
 }
 
+query_check_runs() {
+  local sql="$1"
+  compose exec -T db sh -lc \
+    'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"' \
+    sh "$sql"
+}
+
+wait_for_policy_rejected_check_run() {
+  local attempt
+  local row=""
+  local kind
+  local http_status
+  local terminal
+  local pending_count
+  local terminal_count
+
+  for ((attempt = 1; attempt <= 30; attempt++)); do
+    row="$(query_check_runs "
+      SELECT
+        id::text || '|' ||
+        result_kind || '|' ||
+        COALESCE(http_status::text, '') || '|' ||
+        COALESCE(duration_ms::text, '') || '|' ||
+        CASE WHEN completed_at IS NOT NULL THEN 't' ELSE 'f' END
+      FROM monitoring.check_runs
+      WHERE monitor_id = '$MONITOR_ID'::uuid
+        AND completed_at IS NOT NULL
+      ORDER BY completed_at ASC;
+    ")"
+
+    if [[ -n "$row" ]]; then
+      break
+    fi
+    sleep 1
+  done
+
+  [[ -n "$row" ]] || {
+    printf 'No terminal CheckRun appeared for Monitor %s\n' "$MONITOR_ID" >&2
+    return 1
+  }
+
+  [[ "$row" != *$'\n'* ]] || {
+    printf 'Expected exactly one terminal CheckRun row, got multiple rows: %s\n' "$row" >&2
+    return 1
+  }
+
+  IFS='|' read -r CHECK_RUN_ID kind http_status CHECK_RUN_DURATION_MS terminal <<<"$row"
+
+  [[ "$CHECK_RUN_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] || {
+    printf 'Terminal CheckRun id is not a canonical UUID: %q\n' "$CHECK_RUN_ID" >&2
+    return 1
+  }
+  [[ "$kind" == "policy_rejected" ]] || {
+    printf 'Terminal CheckRun result_kind=%q, want policy_rejected\n' "$kind" >&2
+    return 1
+  }
+  [[ -z "$http_status" ]] || {
+    printf 'policy_rejected CheckRun has unexpected http_status=%q\n' "$http_status" >&2
+    return 1
+  }
+  [[ "$CHECK_RUN_DURATION_MS" =~ ^[0-9]+$ ]] || {
+    printf 'policy_rejected CheckRun duration_ms=%q is not an integer\n' "$CHECK_RUN_DURATION_MS" >&2
+    return 1
+  }
+  (( CHECK_RUN_DURATION_MS <= 20000 )) || {
+    printf 'policy_rejected CheckRun duration_ms=%s exceeds contract maximum\n' "$CHECK_RUN_DURATION_MS" >&2
+    return 1
+  }
+  [[ "$terminal" == "t" ]] || {
+    printf 'CheckRun %s is not terminal\n' "$CHECK_RUN_ID" >&2
+    return 1
+  }
+
+  pending_count="$(query_check_runs "
+    SELECT count(*)
+    FROM monitoring.check_runs
+    WHERE monitor_id = '$MONITOR_ID'::uuid
+      AND completed_at IS NULL;
+  ")"
+  terminal_count="$(query_check_runs "
+    SELECT count(*)
+    FROM monitoring.check_runs
+    WHERE monitor_id = '$MONITOR_ID'::uuid
+      AND completed_at IS NOT NULL;
+  ")"
+
+  [[ "$pending_count" == "0" ]] || {
+    printf 'Monitor %s has %s pending CheckRun rows, want 0\n' "$MONITOR_ID" "$pending_count" >&2
+    return 1
+  }
+  [[ "$terminal_count" == "1" ]] || {
+    printf 'Monitor %s has %s terminal CheckRun rows, want 1\n' "$MONITOR_ID" "$terminal_count" >&2
+    return 1
+  }
+
+  printf 'PostgreSQL execution evidence: monitor_id=%s check_id=%s result_kind=policy_rejected duration_ms=%s\n' \
+    "$MONITOR_ID" "$CHECK_RUN_ID" "$CHECK_RUN_DURATION_MS"
+}
+
+assert_checker_execution_events() {
+  local logs
+  local claimed_line
+  local probed_line
+  local delivered_line
+
+  logs="$(compose logs --no-color checker)"
+
+  claimed_line="$(printf '%s\n' "$logs" | grep -n -F -m1 \
+    "event=check_claimed check_id=$CHECK_RUN_ID monitor_id=$MONITOR_ID" | cut -d: -f1)"
+  probed_line="$(printf '%s\n' "$logs" | grep -n -F -m1 \
+    "event=probe_completed check_id=$CHECK_RUN_ID monitor_id=$MONITOR_ID result_kind=policy_rejected duration_ms=$CHECK_RUN_DURATION_MS" | cut -d: -f1)"
+  delivered_line="$(printf '%s\n' "$logs" | grep -n -F -m1 \
+    "event=result_delivered check_id=$CHECK_RUN_ID monitor_id=$MONITOR_ID result_kind=policy_rejected duration_ms=$CHECK_RUN_DURATION_MS" | cut -d: -f1)"
+
+  [[ -n "$claimed_line" && -n "$probed_line" && -n "$delivered_line" ]] || {
+    printf 'Checker logs do not contain the complete cross-runtime execution evidence for CheckRun %s\n' "$CHECK_RUN_ID" >&2
+    return 1
+  }
+
+  (( claimed_line < probed_line && probed_line < delivered_line )) || {
+    printf 'Checker execution events are out of order for CheckRun %s\n' "$CHECK_RUN_ID" >&2
+    return 1
+  }
+
+  printf 'Checker execution evidence: check_claimed -> probe_completed(policy_rejected) -> result_delivered\n'
+}
+
 PROBE_TABLE="public.__uptime_lab_local_dev_probe"
 
 cleanup
@@ -214,6 +343,11 @@ assert_api_operational_health
 # Prove the real public product transport inside the container network.
 create_monitor
 assert_monitor_get
+
+# Prove the real cross-runtime execution path:
+# Go claim -> Rust Checker -> production private-address policy -> Go result -> PostgreSQL terminal CheckRun.
+wait_for_policy_rejected_check_run
+assert_checker_execution_events
 
 compose exec -T db sh -lc \
   'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$1"' \

@@ -36,6 +36,7 @@ mkdir -p "$state_dir"
 migrated="$state_dir/migrated"
 product="$state_dir/product"
 probe="$state_dir/probe"
+check_run_id="018f22d3-1d6a-7cc0-a37b-46fc3fafdcb3"
 
 if [[ -n "${FAIL_ON_PATTERN:-}" && "$joined" == *"$FAIL_ON_PATTERN"* ]]; then
   exit 42
@@ -91,6 +92,32 @@ fi
 
 if [[ "$joined" == *"CREATE TABLE public.__uptime_lab_local_dev_probe"* ]]; then
   : > "$probe"
+  exit 0
+fi
+
+if [[ "$joined" == *"FROM monitoring.check_runs"* && "$joined" == *"result_kind"* && "$joined" == *"duration_ms"* && "$joined" == *"completed_at IS NOT NULL"* ]]; then
+  [[ -f "$product" ]] || exit 45
+  printf '%s|policy_rejected||7|t\n' "$check_run_id"
+  exit 0
+fi
+
+if [[ "$joined" == *"FROM monitoring.check_runs"* && "$joined" == *"count(*)"* && "$joined" == *"completed_at IS NULL"* ]]; then
+  [[ -f "$product" ]] || exit 46
+  printf '0\n'
+  exit 0
+fi
+
+if [[ "$joined" == *"FROM monitoring.check_runs"* && "$joined" == *"count(*)"* && "$joined" == *"completed_at IS NOT NULL"* ]]; then
+  [[ -f "$product" ]] || exit 47
+  printf '1\n'
+  exit 0
+fi
+
+if [[ "$joined" == *"logs --no-color checker"* ]]; then
+  [[ -f "$product" ]] || exit 48
+  printf 'checker-1 | event=check_claimed check_id=%s monitor_id=018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2\n' "$check_run_id"
+  printf 'checker-1 | event=probe_completed check_id=%s monitor_id=018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2 result_kind=policy_rejected duration_ms=7\n' "$check_run_id"
+  printf 'checker-1 | event=result_delivered check_id=%s monitor_id=018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2 result_kind=policy_rejected duration_ms=7\n' "$check_run_id"
   exit 0
 fi
 
@@ -164,17 +191,25 @@ case_success_path() {
   grep -Fq -- '--post-data={"targetUrl":"http://web/"}' "$DOCKER_LOG" || return 1
   grep -Fq '/monitors/018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2' "$DOCKER_LOG" || return 1
   grep -Fq 'CREATE TABLE public.__uptime_lab_local_dev_probe' "$DOCKER_LOG" || return 1
+  grep -Fq 'FROM monitoring.check_runs' "$DOCKER_LOG" || return 1
+  grep -Fq 'completed_at IS NULL' "$DOCKER_LOG" || return 1
+  grep -Fq 'completed_at IS NOT NULL' "$DOCKER_LOG" || return 1
+  grep -Fq 'logs --no-color checker' "$DOCKER_LOG" || return 1
   grep -Fq 'down -v --remove-orphans' "$DOCKER_LOG" || return 1
 
-  local start_line migrate_line wait_line post_line
+  local start_line migrate_line wait_line post_line execution_line logs_line
   start_line="$(first_line 'up -d db api')"
   migrate_line="$(first_line 'exec -T api /usr/local/bin/uptime-lab-migrate up')"
   wait_line="$(first_line 'up -d --wait --wait-timeout 60')"
   post_line="$(first_line '--post-data={"targetUrl":"http://web/"}')"
+  execution_line="$(first_line 'FROM monitoring.check_runs')"
+  logs_line="$(first_line 'logs --no-color checker')"
 
   (( start_line < migrate_line )) || return 1
   (( migrate_line < wait_line )) || return 1
   (( wait_line < post_line )) || return 1
+  (( post_line < execution_line )) || return 1
+  (( execution_line < logs_line )) || return 1
 }
 
 case_old_compose() {
