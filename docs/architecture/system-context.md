@@ -2,35 +2,51 @@
 
 **Architecture state:** Committed
 
-**Implementation state:** Foundation only; product runtimes are not implemented yet.
+**Implementation state:** The first Go/Rust monitoring execution slice is implemented. React and public network deployment remain deferred.
 
 ## Purpose
 
-`uptime-lab` is an uptime-monitoring laboratory and reference application for designing a production-disciplined, multi-runtime system. A user/operator configures HTTP/HTTPS monitors and inspects their resulting status and history. The architecture deliberately separates product coordination from network execution so each responsibility can evolve behind an explicit boundary.
+`uptime-lab` is an uptime-monitoring laboratory and reference application for a production-disciplined multi-runtime system. A user/operator can register HTTP/HTTPS Monitor intent through the current public Go contract; Go coordinates due work and durable state; Rust executes bounded probes.
 
-This document is the C4 Level 1 view. It treats `uptime-lab` as one system and intentionally does not expose internal runtimes, packages, crates, database schemas, or CI jobs.
+This document is the C4 Level 1 view and intentionally hides package, crate, table, and CI detail.
 
 ## Actors and External Systems
 
 ### User / Operator
 
-The user/operator defines monitoring intent and inspects system state. The actor does not interact with persistence or network execution mechanisms directly.
+The user/operator defines monitoring intent and eventually consumes product state. The current runtime exposes Monitor registration/read operations but no public CheckRun/status/history surface.
 
 ### External HTTP/HTTPS Target
 
-A monitored target is outside the `uptime-lab` trust boundary. Its address, DNS behavior, redirects, protocol behavior, latency, response size, and availability must be treated as untrusted input from the perspective of the checker runtime.
+A monitored target is outside the `uptime-lab` trust boundary. Address resolution, redirects, protocol behavior, latency, response size, and availability are untrusted inputs to the Rust Checker.
 
 ## System Boundary
 
-`uptime-lab` owns the product behavior required to configure monitors, coordinate checks, store durable monitoring state, execute bounded probes, and expose monitoring results to the user.
+`uptime-lab` currently implements:
 
-External target infrastructure, DNS infrastructure, the public internet, and the operator's monitored services remain outside the system boundary.
+- Monitor registration/read through Go;
+- due-work coordination and CheckRun persistence through Go;
+- bounded HTTP/HTTPS execution through Rust;
+- normalized result delivery from Rust to Go;
+- explicit PostgreSQL migrations and schema-aware readiness.
+
+React presentation, public deployment exposure, authentication/authorization, and public status/history remain outside the current implemented surface.
 
 ## Trust Boundary
 
-User-configured outbound targets create an SSRF/egress trust boundary. A future checker implementation must validate every outbound execution against explicit network-safety constraints, including address resolution, redirect handling, request budgets, response-size limits, timeout policy, and concurrency limits.
+User-configured outbound targets create an SSRF/egress trust boundary.
 
-The architectural commitment is already normative even though the runtime controls are not implemented yet.
+The production Rust Checker now enforces execution-time controls including:
+
+- HTTP/HTTPS and default-port restrictions;
+- deny-by-default non-public address policy;
+- DNS answer validation and validated-address binding;
+- redirect revalidation and HTTPS downgrade rejection;
+- direct connections with ambient proxy settings ignored;
+- TLS certificate/hostname verification;
+- bounded timeout, redirects, concurrency, and response headers.
+
+These controls make the execution boundary materially implemented; they do not make the application safe for unauthenticated public internet exposure.
 
 ## Context Diagram
 
@@ -40,40 +56,42 @@ flowchart LR
     System[uptime-lab]
     Target[External HTTP/HTTPS Target]
 
-    User -->|Configure and inspect monitoring| System
-    System -->|Bounded outbound monitoring request| Target
+    User -->|Register/read Monitor intent| System
+    System -->|Bounded validated monitoring request| Target
 ```
 
 ## Responsibilities Inside uptime-lab
 
-The system is responsible for:
+The system owns:
 
-- accepting monitor configuration through a product-facing boundary;
-- coordinating when checks are due;
-- executing monitoring requests within explicit safety budgets;
-- normalizing execution results into product-level monitoring state;
-- owning durable monitor and check history;
-- exposing stable product state to the user;
-- producing observable operational signals as those capabilities are implemented.
+- public Monitor create/read semantics;
+- internal work/result semantics;
+- due-work scheduling truth;
+- durable Monitor and CheckRun state;
+- bounded target execution;
+- normalized execution results;
+- operational health/readiness.
 
 ## Responsibilities Outside uptime-lab
 
 The system does not own:
 
-- the availability or correctness of monitored targets;
+- monitored-target availability/correctness;
 - public DNS infrastructure;
-- external networks between the checker and a target;
-- target-side authentication, redirects, TLS configuration, or server behavior;
-- guarantees that an arbitrary external endpoint is safe to contact.
+- external networks;
+- target-side TLS/server behavior;
+- public deployment ingress or identity policy.
 
 ## Security Considerations
 
-The foundation is not suitable for arbitrary public internet exposure. Authentication is not implemented, and the checker security controls required to safely execute user-provided network targets do not yet exist.
+The current Checker execution policy is deny-by-default for non-public destinations, but the application still has no public authentication/authorization or ingress contract. Canonical Compose publishes no application host ports.
 
-The architecture therefore treats public exposure, private-network monitoring, cloud metadata access, DNS rebinding, and redirect revalidation as later security gates rather than assumptions that are already satisfied.
+Private-network monitoring is intentionally unsupported in production execution.
 
 ## Related Decisions
 
+- [Container View](container-view.md)
+- [Rust Checker](../checker/rust-checker.md)
 - [ADR-0001: Multi-runtime monorepo](../adr/0001-multi-runtime-monorepo.md)
 - [ADR-0002: Control plane and execution plane](../adr/0002-control-plane-and-execution-plane.md)
 - [ADR-0003: Contract and data ownership](../adr/0003-contract-and-data-ownership.md)

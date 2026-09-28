@@ -1,38 +1,48 @@
 # uptime-lab
 
-A production-disciplined uptime monitoring laboratory built to exercise clear boundaries between a React/TypeScript web client, a Go control plane, and a Rust checker runtime.
+A production-disciplined uptime monitoring laboratory built around explicit boundaries between a React/TypeScript web client, a Go Control Plane, a Rust Checker, and PostgreSQL.
 
 ## Status
 
-uptime-lab is still in the foundation phase and is not a production-ready monitoring service.
+uptime-lab is not a production-ready public monitoring service.
 
-The **Go Monitoring Foundation is implemented**: the repository contains the Go Control Plane runtime, immutable Monitoring registration/read application behavior, PostgreSQL persistence and migrations, operational health endpoints, Docker integration, and CI verification.
+The **Single-Checker Execution Vertical Slice is implemented**. The repository now contains:
 
-The public Monitoring OpenAPI contract at `contracts/openapi/public.yaml` is now executable inside the Go runtime: `POST /monitors` and `GET /monitors/{monitorId}` are served by the Monitoring HTTP adapter. `/livez` remains database-independent, while `/readyz` requires PostgreSQL connectivity plus exact read-only compatibility with the repository-owned migration set. Docker Compose still publishes no application host ports; the internal Checker contract, mutable monitor lifecycle, scheduling/results, Rust checker runtime, React web runtime, authentication/CORS, and public network exposure remain deferred. Web and Checker are still process-level placeholders in the canonical Docker Compose topology.
+- the real Go Control Plane runtime;
+- immutable Monitor registration/read behavior;
+- Go-owned due-work coordination and CheckRun persistence;
+- the internal Go/Rust claim/result contract;
+- the real Rust Checker with bounded HTTP/HTTPS execution;
+- deny-by-default production destination policy;
+- PostgreSQL migrations for `monitoring.monitors` and `monitoring.check_runs`;
+- schema-aware readiness;
+- a real four-service Docker Compose topology;
+- cross-runtime Docker evidence from claim through terminal CheckRun persistence.
+
+The public Monitoring contract at `contracts/openapi/public.yaml` remains intentionally small: `POST /monitors` and `GET /monitors/{monitorId}`. There is still no public CheckRun/status/history API, mutable Monitor lifecycle, React runtime, authentication/authorization, CORS/rate limiting, public ingress, or application host port.
 
 ## Architecture
 
-- **React + TypeScript** owns presentation and browser interaction. Its runtime is not implemented yet.
-- **Go** owns the modular-monolith control plane, domain/application rules, PostgreSQL persistence ownership, explicit migrations, schema-aware readiness, and the live public Monitoring HTTP transport.
-- **Rust** owns bounded concurrent network probe execution through Ports and Adapters. Its runtime is not implemented yet.
-- **PostgreSQL** holds durable application state owned exclusively by the Go Control Plane. The implemented Monitoring namespace currently contains only monitoring.monitors.
-- **Docker Compose** is the canonical local-development substrate. It runs PostgreSQL, the real Go API, and placeholder Web/Checker processes without publishing application host ports.
+- **React + TypeScript** owns presentation and browser interaction. Its runtime remains deferred.
+- **Go** owns product/domain coordination, public and internal API semantics, scheduling truth, PostgreSQL persistence, migrations, readiness, and CheckRun completion semantics.
+- **Rust** owns bounded network execution, destination validation, HTTP/HTTPS probing, transport normalization, and result delivery. Rust never accesses PostgreSQL directly.
+- **PostgreSQL** holds durable product state owned exclusively through Go. The Monitoring namespace contains `monitoring.monitors` and `monitoring.check_runs`.
+- **Docker Compose** is the canonical local-development substrate. It runs PostgreSQL, the real Go API, the real Rust Checker, and a Web placeholder without publishing application host ports.
 
-The canonical architecture specification is [docs/superpowers/specs/2026-09-17-uptime-lab-foundation-design.md](docs/superpowers/specs/2026-09-17-uptime-lab-foundation-design.md).
-
-The implemented Go foundation is documented in [docs/backend/go-control-plane.md](docs/backend/go-control-plane.md).
+Start with the [architecture index](docs/architecture/README.md), the [Go Control Plane guide](docs/backend/go-control-plane.md), and the [Rust Checker guide](docs/checker/rust-checker.md).
 
 ## Local Development
 
-See [docs/devops/local-development.md](docs/devops/local-development.md) for prerequisites, canonical Compose commands, explicit migrations, persistence/reset semantics, worktree isolation, verification, and current limitations.
+See [docs/devops/local-development.md](docs/devops/local-development.md) for the canonical four-service topology, explicit migrations, persistence/reset semantics, worktree isolation, and cross-runtime smoke commands.
 
 ## Testing
 
-See [docs/testing/go-monitoring-foundation.md](docs/testing/go-monitoring-foundation.md) for the evidence model covering domain/application tests, architecture fitness functions, PostgreSQL integration, runtime lifecycle tests, Docker smoke, race detection, and vulnerability scanning.
+- [Go Monitoring Foundation](docs/testing/go-monitoring-foundation.md)
+- [Go Public Monitoring Transport](docs/testing/go-public-transport-adapter.md)
+- [Public Monitoring Contract](docs/testing/public-monitoring-contract.md)
+- [Single-Checker Execution Slice](docs/testing/single-checker-execution-slice.md)
 
-See [docs/testing/go-public-transport-adapter.md](docs/testing/go-public-transport-adapter.md) for the live Monitoring HTTP transport, schema-aware readiness, migration immutability, production composition, and real Docker POST/GET evidence.
-
-See [docs/testing/public-monitoring-contract.md](docs/testing/public-monitoring-contract.md) for the public Monitoring OpenAPI source contract, semantic fitness checks, and CI behavior. Contract-artifact verification and runtime transport verification remain separate evidence layers.
+The execution-slice guide separates internal-contract, Go/PostgreSQL, Rust policy/probe/client/worker, Docker cross-runtime, race, and vulnerability evidence.
 
 ## Engineering Principles
 
@@ -45,7 +55,7 @@ See [docs/testing/public-monitoring-contract.md](docs/testing/public-monitoring-
 
 ## Repository Workflow
 
-main is the only long-lived branch. Changes use short-lived branches, pull requests, Conventional Commits, required CI, and squash merge.
+`main` is the only long-lived branch. Changes use short-lived branches, pull requests, Conventional Commits, required CI, and squash merge.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/devops/repository-governance.md](docs/devops/repository-governance.md).
 

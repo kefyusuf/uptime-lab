@@ -1,0 +1,11 @@
+[package]
+name = "checker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+checker-core = { path = "../checker-core" }
+control-plane-client = { path = "../control-plane-client" }
+probe-http = { path = "../probe-http" }

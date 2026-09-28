@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 	"uuid"
@@ -15,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/kefyusuf/uptime-lab/apps/api/internal/modules/monitoring"
+	checkerhttp "github.com/kefyusuf/uptime-lab/apps/api/internal/modules/monitoring/adapters/checkerhttp"
 	monitoringhttp "github.com/kefyusuf/uptime-lab/apps/api/internal/modules/monitoring/adapters/http"
 	monitoringpostgres "github.com/kefyusuf/uptime-lab/apps/api/internal/modules/monitoring/adapters/postgres"
 	"github.com/kefyusuf/uptime-lab/apps/api/internal/modules/monitoring/domain"
@@ -101,14 +103,42 @@ func composeMonitoring(pool *pgxpool.Pool) (http.Handler, *migrations.Compatibil
 	}
 
 	repository := monitoringpostgres.NewRepository(pool)
-	module := monitoring.NewModule(repository, newMonitorID, productionClock)
-	product := monitoringhttp.NewHandler(module.RegisterMonitor, module.GetMonitor)
+	publicModule := monitoring.NewModule(repository, newMonitorID, productionClock)
+	executionModule := monitoring.NewExecutionModule(repository, newCheckID, productionClock)
+
+	publicHandler := monitoringhttp.NewHandler(publicModule.RegisterMonitor, publicModule.GetMonitor)
+	internalHandler := checkerhttp.NewHandler(
+		executionModule.ClaimDueCheck,
+		executionModule.SubmitCheckResult,
+	)
+	product := newProductRouter(publicHandler, internalHandler)
 
 	return product, readiness, migrationDB, nil
 }
 
 func newMonitorID() (domain.MonitorID, error) {
 	return domain.NewMonitorID(uuid.NewV7())
+}
+
+func newCheckID() (domain.CheckID, error) {
+	return domain.NewCheckID(uuid.NewV7())
+}
+
+func newProductRouter(publicHandler, internalHandler http.Handler) http.Handler {
+	if publicHandler == nil {
+		publicHandler = http.NotFoundHandler()
+	}
+	if internalHandler == nil {
+		internalHandler = http.NotFoundHandler()
+	}
+
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if strings.HasPrefix(request.URL.Path, "/internal/checks/") {
+			internalHandler.ServeHTTP(writer, request)
+			return
+		}
+		publicHandler.ServeHTTP(writer, request)
+	})
 }
 
 func productionClock() time.Time {

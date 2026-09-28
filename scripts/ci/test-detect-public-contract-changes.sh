@@ -54,7 +54,7 @@ expect_value "public contract change triggers public-contract" "true" bash -c "c
 reset_base
 
 HEAD="$(commit_file "contracts/openapi/internal.yaml" 'openapi: 3.1.2\n')"
-expect_value "future internal contract still triggers public-contract" "true" bash -c "cd '$TMP' && '$DETECT' '$BASE' '$HEAD'"
+expect_value "internal contract alone skips public-contract" "false" bash -c "cd '$TMP' && '$DETECT' '$BASE' '$HEAD'"
 reset_base
 
 HEAD="$(commit_file "scripts/ci/detect-public-contract-changes.sh" '# detector fixture\n')"
@@ -90,15 +90,15 @@ expect_value "Compose-only change skips public-contract" "false" bash -c "cd '$T
 reset_base
 
 mkdir -p "$TMP/contracts/openapi"
-printf 'openapi: 3.1.2\n' > "$TMP/contracts/openapi/deleted.yaml"
-git -C "$TMP" add contracts/openapi/deleted.yaml
-git -C "$TMP" commit -q -m "test: add deletion fixture"
+printf 'openapi: 3.1.2\n' > "$TMP/contracts/openapi/public.yaml"
+git -C "$TMP" add contracts/openapi/public.yaml
+git -C "$TMP" commit -q -m "test: add public deletion fixture"
 DELETE_BASE="$(git -C "$TMP" rev-parse HEAD)"
-rm "$TMP/contracts/openapi/deleted.yaml"
+rm "$TMP/contracts/openapi/public.yaml"
 git -C "$TMP" add -u
-git -C "$TMP" commit -q -m "test: delete contract fixture"
+git -C "$TMP" commit -q -m "test: delete public contract fixture"
 DELETE_HEAD="$(git -C "$TMP" rev-parse HEAD)"
-expect_value "relevant deletion triggers public-contract" "true" bash -c "cd '$TMP' && '$DETECT' '$DELETE_BASE' '$DELETE_HEAD'"
+expect_value "public contract deletion triggers public-contract" "true" bash -c "cd '$TMP' && '$DETECT' '$DELETE_BASE' '$DELETE_HEAD'"
 
 ZERO_SHA="0000000000000000000000000000000000000000"
 expect_value "zero base is conservative" "true" bash -c "cd '$TMP' && '$DETECT' '$ZERO_SHA' '$DELETE_HEAD'"

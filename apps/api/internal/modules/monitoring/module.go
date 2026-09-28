@@ -22,3 +22,21 @@ func NewModule(
 		GetMonitor:      application.NewGetMonitor(repository),
 	}
 }
+
+// ExecutionModule groups the internal Checker execution use cases without owning infrastructure.
+type ExecutionModule struct {
+	ClaimDueCheck     application.ClaimDueCheck
+	SubmitCheckResult application.SubmitCheckResult
+}
+
+// NewExecutionModule composes execution use cases from their inward-facing dependencies.
+func NewExecutionModule(
+	repository ports.CheckExecutionRepository,
+	checkIDGenerator application.CheckIDGenerator,
+	clock application.Clock,
+) ExecutionModule {
+	return ExecutionModule{
+		ClaimDueCheck:     application.NewClaimDueCheck(repository, checkIDGenerator, clock),
+		SubmitCheckResult: application.NewSubmitCheckResult(repository, clock),
+	}
+}

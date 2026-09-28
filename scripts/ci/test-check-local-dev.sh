@@ -105,9 +105,11 @@ mutate_service_line() {
 
 make_fixture() {
   rm -rf "$TMP/repo"
-  mkdir -p "$TMP/repo/deploy/docker/placeholder" "$TMP/repo/apps/api" "$TMP/repo/contracts/openapi"
+  mkdir -p "$TMP/repo/deploy/docker/placeholder" "$TMP/repo/apps/api" "$TMP/repo/apps/checker" "$TMP/repo/contracts/openapi"
   printf 'module github.com/kefyusuf/uptime-lab/apps/api\n\ngo 1.27.1\n' > "$TMP/repo/apps/api/go.mod"
   : > "$TMP/repo/apps/api/go.sum"
+  printf '[workspace]\n' > "$TMP/repo/apps/checker/Cargo.toml"
+  : > "$TMP/repo/apps/checker/Cargo.lock"
   printf 'openapi: 3.1.2\n' > "$TMP/repo/contracts/openapi/public.yaml"
 
   cat > "$TMP/repo/compose.yaml" <<'YAML'
@@ -168,9 +170,11 @@ services:
         condition: service_healthy
 
   checker:
-    build: ./deploy/docker/placeholder
+    build:
+      context: .
+      dockerfile: apps/checker/Dockerfile
     environment:
-      SERVICE_NAME: checker
+      UPTIME_LAB_CONTROL_PLANE_URL: http://api:8080
     init: true
     read_only: true
     tmpfs:
@@ -229,10 +233,26 @@ RUN chmod 0555 /usr/local/bin/uptime-lab-api /usr/local/bin/uptime-lab-migrate
 USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/uptime-lab-api"]
 DOCKER
+
+  cat > "$TMP/repo/apps/checker/Dockerfile" <<'DOCKER'
+FROM rust:1.98.1-alpine3.24 AS builder
+WORKDIR /src/apps/checker
+COPY apps/checker/ ./
+RUN cargo build --release --locked -p checker
+
+FROM alpine:3.24.2
+RUN apk add --no-cache ca-certificates \
+    && addgroup -S -g 10001 uptime \
+    && adduser -S -D -H -u 10001 -G uptime uptime
+COPY --from=builder /src/apps/checker/target/release/checker /usr/local/bin/uptime-lab-checker
+RUN chmod 0555 /usr/local/bin/uptime-lab-checker
+USER 10001:10001
+ENTRYPOINT ["/usr/local/bin/uptime-lab-checker"]
+DOCKER
 }
 
 make_fixture
-expect_success "canonical real-API fixture passes" "$CHECKER" "$TMP/repo"
+expect_success "canonical real API + Checker fixture passes" "$CHECKER" "$TMP/repo"
 
 make_fixture
 remove_service_block "$TMP/repo/compose.yaml" checker
@@ -361,9 +381,55 @@ replace_literal_once "$TMP/repo/apps/api/Dockerfile" "USER 10001:10001" "# USER 
 expect_failure "API Dockerfile missing non-root USER fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
-mkdir -p "$TMP/repo/apps/checker"
-printf 'module example.invalid/checker\n' > "$TMP/repo/apps/checker/go.mod"
-expect_failure "future checker runtime scaffold fails" "$CHECKER" "$TMP/repo"
+expect_success "Checker Rust source presence is valid with real Checker Compose wiring" "$CHECKER" "$TMP/repo"
+
+make_fixture
+replace_literal_once "$TMP/repo/compose.yaml" "      dockerfile: apps/checker/Dockerfile" "      dockerfile: deploy/docker/placeholder/Dockerfile"
+expect_failure "Checker wrong Dockerfile path fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+mutate_service_line "$TMP/repo/compose.yaml" checker "      UPTIME_LAB_CONTROL_PLANE_URL: http://api:8080" ""
+expect_failure "Checker missing control-plane URL fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+mutate_service_line "$TMP/repo/compose.yaml" checker "    init: true" ""
+expect_failure "Checker missing init fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+mutate_service_line "$TMP/repo/compose.yaml" checker "    read_only: true" ""
+expect_failure "Checker missing read_only fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+mutate_service_line "$TMP/repo/compose.yaml" checker '      test: ["CMD-SHELL", "test -f /run/uptime-lab/ready"]' '      test: ["CMD-SHELL", "test -f /run/uptime-lab/not-ready"]'
+expect_failure "Checker healthcheck without readiness marker fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+rm "$TMP/repo/apps/checker/Cargo.lock"
+expect_failure "Checker missing Cargo.lock fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+replace_literal_once "$TMP/repo/apps/checker/Dockerfile" "FROM rust:1.98.1-alpine3.24 AS builder" "FROM rust:latest AS builder"
+expect_failure "Checker floating builder image fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+replace_literal_once "$TMP/repo/apps/checker/Dockerfile" "FROM alpine:3.24.2" "FROM alpine:latest"
+expect_failure "Checker floating runtime image fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+replace_literal_once "$TMP/repo/apps/checker/Dockerfile" "RUN cargo build --release --locked -p checker" "RUN cargo build --release -p checker"
+expect_failure "Checker build without locked dependency graph fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+replace_literal_once "$TMP/repo/apps/checker/Dockerfile" "apk add --no-cache ca-certificates" "apk add --no-cache busybox"
+expect_failure "Checker runtime missing CA certificates fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+replace_literal_once "$TMP/repo/apps/checker/Dockerfile" "USER 10001:10001" "# USER intentionally omitted"
+expect_failure "Checker Dockerfile missing non-root USER fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+replace_literal_once "$TMP/repo/apps/checker/Dockerfile" 'ENTRYPOINT ["/usr/local/bin/uptime-lab-checker"]' 'ENTRYPOINT ["/bin/sh"]'
+expect_failure "Checker Dockerfile wrong entrypoint fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
 printf 'module example.invalid/root\n' > "$TMP/repo/go.mod"
@@ -382,5 +448,5 @@ replace_literal_once "$TMP/repo/apps/api/Dockerfile" "apk add --no-cache ca-cert
 expect_failure "API runtime missing CA certificates fails" "$CHECKER" "$TMP/repo"
 
 printf '\nLocal development tests: %d passed, %d failed\n' "$PASS" "$FAIL"
-test "$PASS" -eq 37
+test "$PASS" -eq 49
 test "$FAIL" -eq 0

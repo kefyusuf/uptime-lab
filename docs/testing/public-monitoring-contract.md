@@ -19,7 +19,7 @@ POST /monitors
 GET  /monitors/{monitorId}
 ~~~
 
-The Go runtime serves these two operations through the Monitoring HTTP adapter in addition to `GET /livez` and schema-aware `GET /readyz`. Canonical Compose publishes no application host ports, so this does not imply public network deployment. The internal Checker contract remains undefined and unimplemented.
+The Go runtime serves these two public operations through the Monitoring HTTP adapter in addition to `GET /livez` and schema-aware `GET /readyz`. Canonical Compose publishes no application host ports, so this does not imply public network deployment. The internal Checker contract is now implemented separately at `contracts/openapi/internal.yaml`; it does not extend the public contract.
 
 ## Verification Layers
 
@@ -94,7 +94,6 @@ The repository-owned checker mechanically protects the landed contract decisions
 - exact request, Monitor, and Problem schema surfaces;
 - explicit absence of an RFC 3986 `uri` format on `targetUrl`, plus locked UUID, date-time, and URI-reference formats;
 - absence of servers and security schemes;
-- absence of speculative `contracts/openapi/internal.yaml`;
 - absence of a public UUID-version guarantee.
 
 The negative harness is intentionally network-independent and uses Node standard-library modules only.
@@ -110,7 +109,7 @@ Contract verification intentionally does not validate:
 - authentication, authorization, or CORS;
 - public host/network exposure;
 - SSRF or probe-execution safety;
-- the future internal Checker contract;
+- the independently versioned internal Checker contract;
 - generated clients or SDKs.
 
 Those concerns require separate runtime/product gates.
@@ -125,11 +124,11 @@ This separation keeps `contracts/openapi/public.yaml` authoritative without maki
 
 ## Change Detection
 
-The public-contract detector returns `true` for changes under `contracts/openapi/`, its detector/checker scripts, and the shared CI workflow. It returns `false` for unrelated docs-only, Go-only, and Compose-only changes.
+The public-contract detector returns `true` for changes to `contracts/openapi/public.yaml`, its detector/checker scripts, and the shared CI workflow. It returns `false` for unrelated docs-only, Go-only, and Compose-only changes.
 
 A zero base SHA or unavailable base is handled conservatively as changed. An unavailable head is an error.
 
-The detector intentionally includes future/forbidden files under `contracts/openapi/` so a speculative internal contract cannot bypass verification.
+The public-contract detector owns `contracts/openapi/public.yaml` and its public semantic checker/fixtures. The internal contract has a separate detector/job, so an `internal.yaml`-only change does not masquerade as a public-contract change.
 
 ## CI Semantics
 

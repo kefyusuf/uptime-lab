@@ -2,128 +2,113 @@
 
 **Architecture state:** Committed
 
-**Implementation state:** Implemented for the initial Monitoring create/read persistence surface. Broader product schemas remain deferred.
+**Implementation state:** Implemented for Monitor registration/read and single-Checker execution persistence.
 
 ## Primary Ownership Rule
 
 Go exclusively owns durable product state in PostgreSQL.
 
-PostgreSQL is a persistence mechanism behind Go-owned boundaries. It is not a shared integration surface among the Web Client, Control Plane, and Checker.
+PostgreSQL is not a shared integration surface between Web, Go, and Rust.
 
 ## Runtime Access
 
 ### Web Client
 
-The React runtime is not implemented yet. The future browser reads or changes product state through the public Go contract and never accesses PostgreSQL directly.
+React is not implemented. A future browser consumes public Go APIs and never accesses PostgreSQL directly.
 
 ### Rust Checker
 
-The Rust runtime is not implemented yet. The future checker obtains work and submits normalized results through the internal Go contract and never accesses PostgreSQL directly.
+The Rust Checker is implemented and obtains work/submits normalized results through the internal Go contract.
+
+Rust never accesses PostgreSQL directly.
 
 ### Go Control Plane
 
-Go owns schema access, persistence mapping, migrations, and interpretation of durable product state.
+Go owns schema access, migrations, scheduling truth, persistence mapping, and interpretation of durable CheckRun state.
 
-The implemented production API runtime creates one PostgreSQL pool, composes the Monitoring repository/module/HTTP adapter, and serves `POST /monitors` plus `GET /monitors/{monitorId}`. PostgreSQL remains behind Go-owned application boundaries.
+The production API uses one PostgreSQL pool for Monitoring persistence and readiness composition.
 
 ## Monitoring Schema
 
-The initial module-owned namespace is implemented:
+The module-owned namespace is:
 
 ~~~text
 monitoring
 ~~~
 
-The current application table is exactly:
+Current durable tables are:
 
-~~~sql
-CREATE TABLE monitoring.monitors (
-    id uuid PRIMARY KEY,
-    target_url text NOT NULL,
-    created_at timestamptz NOT NULL
-);
+~~~text
+monitoring.monitors
+monitoring.check_runs
 ~~~
 
-The schema intentionally does **not** include:
+`monitoring.monitors` stores immutable Monitor registration state.
 
-- enabled;
-- updated_at;
-- version/concurrency columns;
-- target_url uniqueness;
-- scheduling/due-work tables;
-- check_runs;
-- monitor_states;
-- incidents.
+`monitoring.check_runs` stores Go-owned execution identity/timing and terminal normalized results:
 
-Duplicate target URLs are allowed.
+~~~text
+id
+monitor_id
+issued_at
+deadline_at
+completed_at
+result_kind
+http_status
+duration_ms
+~~~
+
+Database constraints enforce pending/terminal shape, bounds, timestamp ordering, and at most one pending CheckRun per Monitor.
+
+There is no enabled flag, Monitor update/version column, monitor_states table, incidents table, lease owner, worker identity, or public status/history projection.
 
 ## Persistence Boundary
 
-Monitoring owns a create/read repository port and a concrete pgx adapter.
+Monitoring persistence is intentionally narrow.
 
-The adapter:
+Monitor persistence supports create/read.
 
-- inserts the application-assigned UUID;
-- reads UUID text and reconstructs MonitorID explicitly;
-- preserves TargetURL text;
-- preserves creation instants with UTC domain semantics;
-- maps no-row behavior into a Monitoring-owned not-found signal;
-- does not expose pgx errors as application contracts.
+Execution persistence supports atomic due claim and completion. Claim creates the pending CheckRun; Rust does not create or mutate database rows directly.
 
-No update/delete/list query or transaction abstraction exists yet.
+Late completion is resolved by Go into durable `worker_timeout` state using the stored deadline.
 
 ## Migrations
 
-Versioned SQL migrations live under apps/api/migrations and are executed through the separate uptime-lab-migrate binary.
-
-Supported migration commands are:
+Versioned SQL lives under `apps/api/migrations`:
 
 ~~~text
-up
-down
-status
+00001_create_monitoring_monitors.sql
+00002_create_monitoring_check_runs.sql
 ~~~
 
-API startup does **not** auto-apply migrations.
+API startup does not apply migrations.
 
-The migration command uses pgx/libpq-compatible PostgreSQL configuration and goose as a library. Migration metadata is platform infrastructure and is not Monitoring business state.
+The separate `uptime-lab-migrate` binary owns explicit `up`, `down`, and `status` operations.
 
-The current migration is real-PostgreSQL verified for up/down/up behavior.
+Readiness checks migration metadata read-only against the repository-owned embedded migration set. Landed migration files are protected as immutable history.
 
 ## Go Module Ownership
 
-Within the modular monolith, a business module's tables are implementation details of that module, not a cross-module API.
+A business module's tables are implementation details of that module, not a cross-module API.
 
-A module may not query another module's tables to bypass the owning module's application boundary.
-
-Cross-module SQL reads remain forbidden unless a future accepted architecture decision replaces this rule.
+Cross-module SQL reads remain forbidden unless a later accepted architecture decision changes that rule.
 
 ## Cross-Module Integration
 
-A future business module may interact through:
+A future module may interact through a declared application interface or an event boundary justified by a concrete requirement.
 
-1. a declared application-level interface; or
-2. a domain/integration event when asynchronous decoupling is justified by a concrete requirement.
-
-An event bus is not required merely because modules are separate. No Kafka, RabbitMQ, Redis broker, outbox, or event-sourcing infrastructure is part of this foundation.
-
-## Extraction Consequence
-
-Clear ownership preserves a future extraction path. That option is a consequence of modular boundaries, not a roadmap commitment.
+No Kafka, RabbitMQ, Redis broker, outbox, or event-sourcing infrastructure is introduced by this milestone.
 
 ## Deferred Persistence Decisions
 
-The current foundation does not define:
+Still deferred:
 
-- mutable lifecycle concurrency semantics;
-- read replicas;
-- partitioning/sharding;
-- retention/archival policy;
-- product history/check-result schemas;
+- mutable Monitor lifecycle;
+- public CheckRun/status/history projection;
+- retention/archival;
+- multi-worker leases/identity;
 - broker/outbox topology;
 - production deployment migration orchestration.
-
-Those require concrete product/workload requirements.
 
 ## Related Decisions
 
@@ -131,4 +116,5 @@ Those require concrete product/workload requirements.
 - [Module Boundaries](module-boundaries.md)
 - [Dependency Rules](dependency-rules.md)
 - [Go Control Plane](../backend/go-control-plane.md)
-- [ADR-0003: Contract and data ownership](../adr/0003-contract-and-data-ownership.md)
+- [Rust Checker](../checker/rust-checker.md)
+- [ADR-0003](../adr/0003-contract-and-data-ownership.md)

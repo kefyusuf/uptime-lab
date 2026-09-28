@@ -26,6 +26,7 @@ APPLICATION="$MONITORING/application"
 PORTS="$MONITORING/ports"
 ADAPTERS="$MONITORING/adapters"
 HTTP_ADAPTER="$ADAPTERS/http"
+CHECKER_HTTP_ADAPTER="$ADAPTERS/checkerhttp"
 POSTGRES_ADAPTER="$ADAPTERS/postgres"
 PLATFORM="$MODULE/internal/platform"
 
@@ -148,6 +149,21 @@ while IFS='|' read -r package imports; do
       fi
       if is_goose "$imported"; then
         reject_import "$package" "$imported" "Monitoring HTTP adapter must not depend on goose"
+      fi
+    fi
+
+    if is_path_or_child "$package" "$CHECKER_HTTP_ADAPTER"; then
+      if is_path_or_child "$imported" "$POSTGRES_ADAPTER"; then
+        reject_import "$package" "$imported" "Checker HTTP adapter must not depend on postgres adapter"
+      fi
+      if is_path_or_child "$imported" "$PLATFORM"; then
+        reject_import "$package" "$imported" "Checker HTTP adapter must not depend on platform"
+      fi
+      if is_pgx "$imported"; then
+        reject_import "$package" "$imported" "Checker HTTP adapter must not depend on pgx"
+      fi
+      if is_goose "$imported"; then
+        reject_import "$package" "$imported" "Checker HTTP adapter must not depend on goose"
       fi
     fi
   done

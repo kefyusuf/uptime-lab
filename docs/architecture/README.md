@@ -4,21 +4,19 @@ This directory is the canonical entry point for system-level architecture in `up
 
 ## Purpose
 
-Architecture documentation defines the stable system boundary, runtime ownership, dependency direction, data ownership, cross-runtime behavior, and the decisions that constrain later implementation.
+Architecture documentation defines the stable system boundary, runtime ownership, dependency direction, data ownership, cross-runtime behavior, and decisions that constrain later implementation.
 
-It does not replace runtime-specific documentation. Future frontend, backend, checker, testing, security, and operations documents must link back to the relevant canonical rule here rather than redefine it independently.
+Runtime-specific implementation detail belongs in area guides such as the [Go Control Plane](../backend/go-control-plane.md) and [Rust Checker](../checker/rust-checker.md).
 
 ## Architecture State Semantics
 
-- **Committed** — approved normative architecture that future implementation must follow.
+- **Committed** — approved normative architecture.
 - **Implemented** — corresponding repository/runtime behavior exists with verification evidence.
 - **Deferred** — intentionally delayed until a named requirement becomes real.
 
-A document may describe committed architecture before implementation exists, but it must not present planned behavior as current runtime fact.
+Historical design/plan documents may describe a pre-implementation state; current-state documents must describe the repository as it exists now.
 
 ## Canonical Reading Order
-
-Read the system from outside inward:
 
 1. [System Context](system-context.md)
 2. [Container View](container-view.md)
@@ -32,18 +30,24 @@ Read the system from outside inward:
 ## System Views
 
 - [System Context](system-context.md) — product boundary, actors, external targets, and trust boundary.
-- [Container View](container-view.md) — Web Client, Go Control Plane, Rust Execution Plane, PostgreSQL, and semantic relationships.
+- [Container View](container-view.md) — Web, Go Control Plane, Rust Checker, PostgreSQL, and current relationships.
 
 ## Boundaries and Ownership
 
-- [Module Boundaries](module-boundaries.md) — conceptual Go, Rust, and frontend ownership boundaries.
+- [Module Boundaries](module-boundaries.md) — Go module and Rust crate ownership.
 - [Dependency Rules](dependency-rules.md) — allowed and forbidden dependency directions.
-- [Data Ownership](data-ownership.md) — durable-state ownership and cross-module persistence rules.
+- [Data Ownership](data-ownership.md) — Go-exclusive durable-state ownership.
 
 ## Runtime and Change Flows
 
-- [Runtime Flows](runtime-flows.md) — canonical create-monitor, execute-check, read-state, and failure-boundary collaboration.
-- [Change Flow](change-flow.md) — reusable cross-area impact model using HTTP request timeout configuration as the canonical example.
+- [Runtime Flows](runtime-flows.md) — create Monitor, execute due check, read Monitor, and failure collaboration.
+- [Change Flow](change-flow.md) — reusable cross-area impact model.
+
+## Runtime-Specific Guides
+
+- [Go Control Plane](../backend/go-control-plane.md)
+- [Rust Checker](../checker/rust-checker.md)
+- [Single-Checker Execution Testing](../testing/single-checker-execution-slice.md)
 
 ## Architecture Decision Records
 
@@ -57,14 +61,14 @@ The baseline includes:
 
 ## Documentation Ownership
 
-System-level documents in this directory own cross-runtime architectural truth. Area-specific documents may explain implementation details inside one boundary but must not redefine system ownership, data ownership, or dependency direction.
+System-level documents own cross-runtime architectural truth. Area-specific guides explain implementation details without redefining ownership.
 
-Example: a future `checker/architecture.md` may explain how Rust enforces bounded concurrency, while this architecture core remains authoritative for the rule that Rust owns execution and does not own durable product persistence.
+For example, the Rust Checker guide explains bounded concurrency and destination policy while this architecture core remains authoritative that Rust owns execution and not durable product persistence.
 
 ## Architecture Change Policy
 
-A pull request must update the canonical architecture documentation when it materially changes runtime ownership, module ownership, dependency direction, data ownership, contract boundaries, security trust boundaries, process topology, or an accepted ADR.
+A pull request must update canonical architecture documentation when it materially changes runtime ownership, module ownership, dependency direction, data ownership, contract boundaries, security trust boundaries, process topology, or an accepted ADR.
 
-A new ADR is required when a decision is expensive to reverse, affects multiple boundaries, or supersedes an accepted ADR. Ordinary implementation detail does not require an ADR.
+A new ADR is required only for material, expensive-to-reverse cross-boundary decisions.
 
-Architecture documentation and code must change together when the implementation would otherwise make the canonical documents false.
+Architecture documentation and code must change together when implementation would otherwise make current-state documents false.

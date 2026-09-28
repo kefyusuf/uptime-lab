@@ -6,6 +6,8 @@ COMPOSE_FILE="$ROOT/compose.yaml"
 PLACEHOLDER_DOCKERFILE="$ROOT/deploy/docker/placeholder/Dockerfile"
 PLACEHOLDER_ENTRYPOINT="$ROOT/deploy/docker/placeholder/entrypoint.sh"
 API_DOCKERFILE="$ROOT/apps/api/Dockerfile"
+CHECKER_DOCKERFILE="$ROOT/apps/checker/Dockerfile"
+CHECKER_LOCKFILE="$ROOT/apps/checker/Cargo.lock"
 
 fail() {
   printf 'Local-dev invariant failed: %s\n' "$1" >&2
@@ -16,6 +18,8 @@ fail() {
 [[ -f "$PLACEHOLDER_DOCKERFILE" ]] || fail "placeholder Dockerfile is missing"
 [[ -f "$PLACEHOLDER_ENTRYPOINT" ]] || fail "placeholder entrypoint is missing"
 [[ -f "$API_DOCKERFILE" ]] || fail "API Dockerfile is missing"
+[[ -f "$CHECKER_DOCKERFILE" ]] || fail "Checker Dockerfile is missing"
+[[ -f "$CHECKER_LOCKFILE" ]] || fail "Checker Cargo.lock is missing"
 
 extract_service_block() {
   local service="$1"
@@ -86,9 +90,7 @@ require_placeholder_service() {
   grep -Fqx '      test: ["CMD-SHELL", "test -f /run/uptime-lab/ready"]' <<<"$block" || fail "$service healthcheck must evaluate readiness marker"
 }
 
-for service in web checker; do
-  require_placeholder_service "$service"
-done
+require_placeholder_service web
 
 WEB_BLOCK="$(extract_service_block web)"
 API_BLOCK="$(extract_service_block api)"
@@ -118,6 +120,15 @@ grep -Fqx '    depends_on:' <<<"$API_BLOCK" || fail "api dependency is missing"
 grep -Fqx '      db:' <<<"$API_BLOCK" || fail "api must depend on db"
 grep -Fqx '        condition: service_healthy' <<<"$API_BLOCK" || fail "api must wait for healthy db"
 
+grep -Fqx '    build:' <<<"$CHECKER_BLOCK" || fail "checker must use explicit build mapping"
+grep -Fqx '      context: .' <<<"$CHECKER_BLOCK" || fail "checker build context must be repository root"
+grep -Fqx '      dockerfile: apps/checker/Dockerfile' <<<"$CHECKER_BLOCK" || fail "checker must use apps/checker/Dockerfile"
+grep -Fqx '      UPTIME_LAB_CONTROL_PLANE_URL: http://api:8080' <<<"$CHECKER_BLOCK" || fail "checker control-plane URL must use the internal API service"
+grep -Fqx '    init: true' <<<"$CHECKER_BLOCK" || fail "checker must enable init"
+grep -Fqx '    read_only: true' <<<"$CHECKER_BLOCK" || fail "checker must be read-only"
+grep -Fqx '      - /run/uptime-lab:uid=10001,gid=10001,mode=0700' <<<"$CHECKER_BLOCK" || fail "checker tmpfs readiness contract is missing"
+grep -Fqx '    healthcheck:' <<<"$CHECKER_BLOCK" || fail "checker healthcheck is missing"
+grep -Fqx '      test: ["CMD-SHELL", "test -f /run/uptime-lab/ready"]' <<<"$CHECKER_BLOCK" || fail "checker healthcheck must evaluate readiness marker"
 grep -Fqx '    depends_on:' <<<"$CHECKER_BLOCK" || fail "checker dependency is missing"
 grep -Fqx '      api:' <<<"$CHECKER_BLOCK" || fail "checker must depend on api"
 grep -Fqx '        condition: service_healthy' <<<"$CHECKER_BLOCK" || fail "checker must wait for healthy api"
@@ -138,11 +149,17 @@ fi
 if [[ -d "$ROOT/apps" ]]; then
   while IFS= read -r app_path; do
     app_name="$(basename "$app_path")"
-    [[ "$app_name" == "api" ]] || fail "phase-forbidden app path exists: apps/$app_name"
+    case "$app_name" in
+      api|checker) ;;
+      *) fail "phase-forbidden app path exists: apps/$app_name" ;;
+    esac
   done < <(find "$ROOT/apps" -mindepth 1 -maxdepth 1 -print)
 
   if [[ -e "$ROOT/apps/api" && ! -d "$ROOT/apps/api" ]]; then
     fail "apps/api must be a directory"
+  fi
+  if [[ -e "$ROOT/apps/checker" && ! -d "$ROOT/apps/checker" ]]; then
+    fail "apps/checker must be a directory"
   fi
 fi
 
@@ -170,3 +187,16 @@ grep -Fqx 'COPY --from=builder /out/uptime-lab-api /usr/local/bin/uptime-lab-api
 grep -Fqx 'COPY --from=builder /out/uptime-lab-migrate /usr/local/bin/uptime-lab-migrate' "$API_DOCKERFILE" || fail "migration runtime binary copy is missing"
 grep -Fqx 'USER 10001:10001' "$API_DOCKERFILE" || fail "API runtime must run as USER 10001:10001"
 grep -Fqx 'ENTRYPOINT ["/usr/local/bin/uptime-lab-api"]' "$API_DOCKERFILE" || fail "API runtime entrypoint is invalid"
+
+mapfile -t CHECKER_FROM_LINES < <(grep -E '^FROM[[:space:]]+' "$CHECKER_DOCKERFILE")
+[[ "${#CHECKER_FROM_LINES[@]}" -eq 2 ]] || fail "Checker Dockerfile must have exactly builder and runtime stages"
+[[ "${CHECKER_FROM_LINES[0]}" == 'FROM rust:1.98.1-alpine3.24 AS builder' ]] || fail "Checker builder image must use exact reviewed Rust pin"
+[[ "${CHECKER_FROM_LINES[1]}" == 'FROM alpine:3.24.2' ]] || fail "Checker runtime image must use exact Alpine pin"
+
+grep -Fqx 'WORKDIR /src/apps/checker' "$CHECKER_DOCKERFILE" || fail "Checker builder workdir is invalid"
+grep -Fqx 'COPY apps/checker/ ./' "$CHECKER_DOCKERFILE" || fail "Checker Dockerfile source copy is missing"
+grep -Fqx 'RUN cargo build --release --locked -p checker' "$CHECKER_DOCKERFILE" || fail "Checker release build must use Cargo.lock"
+grep -Fq 'apk add --no-cache ca-certificates' "$CHECKER_DOCKERFILE" || fail "Checker runtime must install CA certificates"
+grep -Fqx 'COPY --from=builder /src/apps/checker/target/release/checker /usr/local/bin/uptime-lab-checker' "$CHECKER_DOCKERFILE" || fail "Checker runtime binary copy is missing"
+grep -Fqx 'USER 10001:10001' "$CHECKER_DOCKERFILE" || fail "Checker runtime must run as USER 10001:10001"
+grep -Fqx 'ENTRYPOINT ["/usr/local/bin/uptime-lab-checker"]' "$CHECKER_DOCKERFILE" || fail "Checker runtime entrypoint is invalid"

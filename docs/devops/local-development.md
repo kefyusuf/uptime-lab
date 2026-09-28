@@ -2,30 +2,26 @@
 
 ## Status
 
-Docker Compose is the canonical local-development substrate for uptime-lab.
+Docker Compose is the canonical local-development substrate.
 
 The current topology runs:
 
 - real PostgreSQL;
-- the real Go Control Plane API runtime;
-- placeholder Web;
-- placeholder Checker.
+- real Go Control Plane;
+- real Rust Checker;
+- placeholder Web.
 
-This is a development environment, not a production deployment topology.
+This is a development topology, not a production deployment contract.
 
 No application host ports are published.
 
 ## Prerequisites
 
-The host requires:
+- Git
+- Docker Engine or Docker Desktop
+- Docker Compose >= 2.22.0
 
-- Git;
-- Docker Engine or Docker Desktop;
-- Docker Compose >= 2.22.0.
-
-Docker is sufficient for the canonical local runtime. A host Go installation is optional.
-
-Verify Compose:
+Verify:
 
 ~~~bash
 docker compose version
@@ -33,7 +29,7 @@ docker compose version
 
 ## Canonical Topology
 
-The root compose.yaml defines exactly four services:
+The root `compose.yaml` defines exactly four services:
 
 ~~~text
 PostgreSQL (db)
@@ -44,21 +40,22 @@ Go Control Plane (api)
       |
       | service_healthy
       v
-Checker placeholder
+Rust Checker (checker)
 
 Web placeholder starts independently
 ~~~
 
-Responsibilities:
+The Checker uses the real repository image and:
 
-- db is PostgreSQL and owns the project-scoped postgres-data named volume;
-- api is the real non-root Go Control Plane runtime;
-- checker is a hardened non-root placeholder that waits for healthy API;
-- web is a hardened non-root placeholder with no hard startup dependency.
+~~~text
+UPTIME_LAB_CONTROL_PLANE_URL=http://api:8080
+~~~
+
+Both API and Checker are non-root/read-only-compatible. Checker readiness uses `/run/uptime-lab/ready`.
 
 ## Fresh Database Bootstrap
 
-A fresh PostgreSQL volume intentionally leaves the API **live but unready** until migrations are applied explicitly. The canonical sequence verified by the real Docker smoke is:
+A fresh PostgreSQL volume intentionally leaves API live but unready until migrations are explicitly applied:
 
 ~~~bash
 docker compose build api
@@ -71,89 +68,73 @@ docker compose up -d --wait --wait-timeout 60
 docker compose ps
 ~~~
 
-The important boundary is the order, not a sleep: start `db` + `api`, run the migration command explicitly inside the API container, then start/wait for the full four-service topology. Before migration, `/livez` is available while `/readyz` fails. After migration, API readiness succeeds and the Checker placeholder may become healthy.
+Before migration:
+
+- `/livez` becomes available;
+- `/readyz` remains unavailable;
+- Goose metadata is absent.
+
+After explicit migration, API becomes ready and the real Checker starts.
+
+API startup never applies migrations.
 
 ## Follow Logs
 
-Follow the Go API:
-
 ~~~bash
 docker compose logs -f api
-~~~
-
-Or inspect individual services:
-
-~~~bash
-docker compose logs -f db
 docker compose logs -f checker
+docker compose logs -f db
 docker compose logs -f web
 ~~~
 
-API logs are structured JSON and include stable service/component/event fields.
+Checker logs expose stable execution events such as `check_claimed`, `probe_completed`, and `result_delivered` with CheckID/MonitorID where relevant.
 
-## API Health
+## Runtime HTTP Surfaces
 
-The API exposes operational health plus the live Monitoring product transport:
+Public Monitor transport inside the container network:
 
 ~~~text
-GET  /livez
-GET  /readyz
 POST /monitors
 GET  /monitors/{monitorId}
 ~~~
 
-The Compose healthcheck calls the real readiness endpoint from inside the API container:
+Internal Checker transport:
 
 ~~~text
-http://127.0.0.1:8080/readyz
+POST /internal/checks/claim
+PUT  /internal/checks/{checkId}/result
 ~~~
 
-Semantics:
+Operational health:
 
-- `/livez` returns 200 without a database call;
-- `/readyz` requires bounded PostgreSQL access **and** read-only compatibility with the repository-owned embedded migration set;
-- readiness fails on a fresh/unmigrated database and does not create migration metadata or apply schema changes;
-- `POST /monitors` and `GET /monitors/{monitorId}` are live inside the API container/network.
+~~~text
+GET /livez
+GET /readyz
+~~~
 
-The repository-defined public Monitoring source contract remains `contracts/openapi/public.yaml`. The internal Checker product contract remains absent.
+The internal source contract is `contracts/openapi/internal.yaml`.
 
-Because no host application port is published, health is normally observed through Compose health or container-local commands rather than host HTTP.
+Because no application host port is published, these live transports do not imply public network deployment.
 
 ## Explicit Database Migrations
 
-Migrations are **not** applied automatically by API startup.
-
-Inspect migration status:
+Migrations are never applied automatically by API startup.
 
 ~~~bash
 docker compose exec api /usr/local/bin/uptime-lab-migrate status
-~~~
-
-Apply pending migrations explicitly:
-
-~~~bash
 docker compose exec api /usr/local/bin/uptime-lab-migrate up
-~~~
-
-Rollback one migration when deliberately testing migration behavior:
-
-~~~bash
 docker compose exec api /usr/local/bin/uptime-lab-migrate down
 ~~~
 
-The migration command is a separate binary packaged in the API image. It uses the same PostgreSQL environment mapping as the API service.
-
-Do not treat docker compose down -v as a migration workflow.
+Normal schema evolution uses migrations, not volume deletion.
 
 ## PostgreSQL Access
-
-Open psql using the service-resolved values:
 
 ~~~bash
 docker compose exec db sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 ~~~
 
-Development defaults are:
+Development defaults:
 
 ~~~text
 database: uptime_lab
@@ -161,49 +142,36 @@ user:     uptime_lab
 password: uptime_lab_local
 ~~~
 
-These defaults are development-only and must never be reused as production credentials.
+Do not reuse development credentials in production.
 
-PostgreSQL 18+ state is persisted from:
+## Persistence and Restart
 
-~~~text
-/var/lib/postgresql
-~~~
-
-## Persistence
-
-Stop containers while preserving local database state:
+Preserve data:
 
 ~~~bash
 docker compose down
-~~~
-
-The project-scoped postgres-data volume remains.
-
-Restart the already-built stack:
-
-~~~bash
 docker compose up -d --wait --wait-timeout 60
 ~~~
 
-The existing migrated volume is reused, so no migration rerun is required for an unchanged migration set. Task 5 smoke also verifies that previously created Monitor state survives this normal down/up cycle.
+The existing migrated volume is reused; no migration rerun is required when the migration set is unchanged.
+
+The canonical smoke verifies Monitor registration/execution before normal restart and retains Monitor state after restart.
 
 ## Destructive Reset
 
-To remove containers **and delete local PostgreSQL state**:
+Delete local PostgreSQL state:
 
 ~~~bash
 docker compose down -v
 ~~~
 
-This is destructive.
-
-Use it only when intentionally resetting the local database. Normal schema evolution uses the explicit migration command instead.
+After destructive reset, API returns to live-but-unready until the explicit migration command runs again. Previous Monitor and CheckRun state is absent.
 
 ## Optional Environment Overrides
 
 The stack works without a copied environment file.
 
-.env.example documents the supported local PostgreSQL overrides:
+`.env.example` documents local PostgreSQL overrides:
 
 ~~~dotenv
 POSTGRES_DB=uptime_lab
@@ -211,51 +179,43 @@ POSTGRES_USER=uptime_lab
 POSTGRES_PASSWORD=uptime_lab_local
 ~~~
 
-A developer may create an untracked root .env with different local values.
-
-The official PostgreSQL image applies initialization variables only when the data directory is empty. Changing them after initialization does not rewrite an existing cluster.
-
-To intentionally apply new initialization values, run `docker compose down -v` and then repeat the [Fresh Database Bootstrap](#fresh-database-bootstrap). A destructive reset removes both product data and migration metadata, so a one-step `docker compose up --wait` is intentionally insufficient on the fresh volume.
-
-The root .env is gitignored. Never place production/shared secrets in .env.example.
+Initialization variables affect a fresh PostgreSQL data directory only.
 
 ## Worktree and Project Isolation
 
-The repository defines no fixed Compose project name, container names, globally named networks, or globally named volumes.
+No fixed Compose project name, container name, globally named network, or globally named volume is used.
 
-For parallel worktrees, assign a unique project name before running the canonical bootstrap:
+For parallel worktrees:
 
 ~~~bash
 export COMPOSE_PROJECT_NAME=uptime-lab-my-branch
 ~~~
 
-Use the same project name for build, up, exec, ps, logs, down, and down -v in that worktree.
+Use the same project name for build/up/exec/logs/down commands in that worktree.
 
-The repository smoke script automatically selects an isolated project name when one is not supplied.
+## Host Verification
 
-## Optional Host Go Workflow
-
-Docker remains the canonical local runtime, but developers with the reviewed Go toolchain can run Go verification directly:
+Go:
 
 ~~~bash
 cd apps/api
-go version
-test -z "$(gofmt -l .)"
-go mod tidy
-test -z "$(git status --porcelain -- go.mod go.sum)"
-go mod verify
-go vet ./...
 go test ./...
 go test -count=1 -race ./...
 ~~~
 
-The reviewed foundation toolchain is Go 1.27.1.
+Rust:
 
-Real PostgreSQL integration and canonical Docker smoke are still required CI evidence; host-only unit tests do not replace them.
+~~~bash
+cd apps/checker
+cargo fmt --all --check
+cargo check --workspace --all-targets --locked
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cargo test --workspace --all-targets --locked
+~~~
+
+Real PostgreSQL and real Docker remain required CI evidence.
 
 ## Repository Verification
-
-Local-dev checks:
 
 ~~~bash
 ./scripts/ci/test-detect-local-dev-changes.sh
@@ -266,83 +226,75 @@ Local-dev checks:
 docker compose config --quiet
 ~~~
 
-The checks cover:
+The canonical Docker smoke proves the real execution path using:
 
-- API-source-sensitive local-dev change detection;
-- four-service topology invariants;
-- exact/pinned API Docker stages;
-- non-root/read-only API runtime;
-- real schema-aware `/readyz` health;
-- live-before-ready behavior on a fresh database;
-- explicit migration bootstrap with no startup auto-migration;
-- real container-local `POST /monitors` -> `GET /monitors/{monitorId}` with exact `createdAt` round trip;
-- Checker-after-API startup ordering;
-- PostgreSQL/product persistence across normal down/up;
-- PostgreSQL/product reset across down -v;
-- deterministic cleanup.
+~~~text
+targetUrl = http://web/
 
-The fake-Docker harness validates smoke control flow only. The real smoke is authoritative runtime evidence.
+Go claim
+-> Rust Checker
+-> production private-address policy
+-> policy_rejected
+-> Go result submission
+-> PostgreSQL terminal CheckRun
+~~~
 
-The stable aggregate required workflow check is CI / gate.
+The target resolves to the private Compose network. Production policy must reject it; there is no test-only private-network bypass or public-internet dependency.
+
+The smoke bounded-polls PostgreSQL, verifies one terminal `policy_rejected` CheckRun and zero pending rows, and correlates the same CheckID/MonitorID with Checker events:
+
+~~~text
+check_claimed
+-> probe_completed(policy_rejected)
+-> result_delivered
+~~~
+
+The fake-Docker harness validates shell control flow and diagnostics only. The real smoke is authoritative runtime evidence.
 
 ## Troubleshooting
 
 ### API is unhealthy
 
-Inspect:
+Inspect `docker compose ps` and API/DB logs. On a fresh volume, keep API running and apply migrations explicitly.
+
+### Checker is unhealthy
 
 ~~~bash
 docker compose ps
+docker compose logs checker
 docker compose logs api
-docker compose logs db
 ~~~
 
-Remember that `/readyz` tests both database reachability and repository migration compatibility. On a fresh volume, keep the API running and apply migrations explicitly; do not weaken readiness or expect API startup to migrate.
+Checker health means its worker loop started after configuration/runtime construction; it does not mean an external target is reachable.
 
 ### Migration status is unexpected
-
-Run:
 
 ~~~bash
 docker compose exec api /usr/local/bin/uptime-lab-migrate status
 ~~~
 
-Do not delete the database volume merely to apply ordinary migrations.
-
-### PostgreSQL credentials changed after initialization
-
-Use the documented destructive reset only if you intentionally want a fresh local cluster:
-
-~~~bash
-docker compose down -v
-~~~
-
-Then repeat the [Fresh Database Bootstrap](#fresh-database-bootstrap), including the explicit migration step.
-
 ### Parallel worktrees interfere
 
-Use a distinct COMPOSE_PROJECT_NAME for each worktree.
+Use a distinct `COMPOSE_PROJECT_NAME`.
 
 ## Current Limitations
 
-- Web is a placeholder, not React.
-- Checker is a placeholder, not Rust.
-- The Go runtime serves only the current create/read Monitoring product surface; list/update/delete/lifecycle operations remain absent.
-- No application host port is exposed by Compose, so a live product transport is not the same as public network deployment.
-- No internal Checker API exists.
-- No mutable monitor lifecycle exists.
-- No scheduler/due-work/result history exists.
-- No probe execution occurs.
-- No host application port is exposed.
-- There is no production deployment contract in compose.yaml.
+- Web remains a placeholder; React is not implemented.
+- Public Monitor surface remains create/read only.
+- No public CheckRun/status/history endpoint exists.
+- No mutable Monitor lifecycle exists.
+- Only one logical Checker process is supported.
+- Production probe execution rejects private/non-public destinations.
+- No application host port is exposed.
+- Authentication/authorization, CORS/rate limiting, ingress/TLS, and production deployment topology remain deferred.
 
 ## Related Architecture
 
 - [Architecture index](../architecture/README.md)
 - [Container View](../architecture/container-view.md)
-- [Module Boundaries](../architecture/module-boundaries.md)
+- [Runtime Flows](../architecture/runtime-flows.md)
 - [Data Ownership](../architecture/data-ownership.md)
 - [Go Control Plane](../backend/go-control-plane.md)
-- [Go Monitoring Testing](../testing/go-monitoring-foundation.md)
-- [Public Monitoring Contract Testing](../testing/public-monitoring-contract.md)
+- [Rust Checker](../checker/rust-checker.md)
+- [Single-Checker Execution Testing](../testing/single-checker-execution-slice.md)
 - [Repository Governance](repository-governance.md)

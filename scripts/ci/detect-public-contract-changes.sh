@@ -28,7 +28,7 @@ fi
 PUBLIC_CONTRACT=false
 while IFS= read -r path; do
   case "$path" in
-    contracts/openapi/*|\
+    contracts/openapi/public.yaml|\
     scripts/ci/detect-public-contract-changes.sh|scripts/ci/test-detect-public-contract-changes.sh|\
     scripts/ci/check-public-contract.mjs|scripts/ci/test-check-public-contract.mjs|\
     .github/workflows/ci.yml)
