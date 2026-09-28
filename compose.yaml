@@ -55,9 +55,11 @@ services:
         condition: service_healthy
 
   checker:
-    build: ./deploy/docker/placeholder
+    build:
+      context: .
+      dockerfile: apps/checker/Dockerfile
     environment:
-      SERVICE_NAME: checker
+      UPTIME_LAB_CONTROL_PLANE_URL: http://api:8080
     init: true
     read_only: true
     tmpfs:

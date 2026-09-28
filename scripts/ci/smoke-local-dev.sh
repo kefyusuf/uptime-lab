@@ -123,7 +123,7 @@ json_created_at() {
 }
 
 MONITOR_ID=""
-MONITOR_TARGET="https://example.com/local-smoke"
+MONITOR_TARGET="http://web/"
 MONITOR_CREATED_AT=""
 
 create_monitor() {
@@ -133,7 +133,7 @@ create_monitor() {
 
   response="$(compose exec -T api wget -q -O - \
     --header='Content-Type: application/json' \
-    --post-data='{"targetUrl":"https://example.com/local-smoke"}' \
+    --post-data='{"targetUrl":"http://web/"}' \
     http://127.0.0.1:8080/monitors)"
 
   MONITOR_ID="$(json_id "$response")"

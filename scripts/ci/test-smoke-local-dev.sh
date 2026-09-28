@@ -77,13 +77,13 @@ fi
 if [[ "$joined" == *"exec -T api wget"* && "$joined" == *"--post-data="* && "$joined" == *"/monitors"* ]]; then
   [[ -f "$migrated" ]] || exit 44
   : > "$product"
-  printf '{"id":"018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2","targetUrl":"https://example.com/local-smoke","createdAt":"2026-09-24T22:00:00.123456Z"}\n'
+  printf '{"id":"018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2","targetUrl":"http://web/","createdAt":"2026-09-24T22:00:00.123456Z"}\n'
   exit 0
 fi
 
 if [[ "$joined" == *"exec -T api wget"* && "$joined" == *"/monitors/018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2"* ]]; then
   if [[ -f "$product" ]]; then
-    printf '{"id":"018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2","targetUrl":"https://example.com/local-smoke","createdAt":"2026-09-24T22:00:00.123456Z"}\n'
+    printf '{"id":"018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2","targetUrl":"http://web/","createdAt":"2026-09-24T22:00:00.123456Z"}\n'
     exit 0
   fi
   exit 8
@@ -161,7 +161,7 @@ case_success_path() {
   grep -Fq 'exec -T api wget -q -O - http://127.0.0.1:8080/livez' "$DOCKER_LOG" || return 1
   grep -Fq 'exec -T api wget -q -O - http://127.0.0.1:8080/readyz' "$DOCKER_LOG" || return 1
   grep -Fq "goose_db_version" "$DOCKER_LOG" || return 1
-  grep -Fq -- '--post-data={"targetUrl":"https://example.com/local-smoke"}' "$DOCKER_LOG" || return 1
+  grep -Fq -- '--post-data={"targetUrl":"http://web/"}' "$DOCKER_LOG" || return 1
   grep -Fq '/monitors/018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2' "$DOCKER_LOG" || return 1
   grep -Fq 'CREATE TABLE public.__uptime_lab_local_dev_probe' "$DOCKER_LOG" || return 1
   grep -Fq 'down -v --remove-orphans' "$DOCKER_LOG" || return 1
@@ -170,7 +170,7 @@ case_success_path() {
   start_line="$(first_line 'up -d db api')"
   migrate_line="$(first_line 'exec -T api /usr/local/bin/uptime-lab-migrate up')"
   wait_line="$(first_line 'up -d --wait --wait-timeout 60')"
-  post_line="$(first_line '--post-data={"targetUrl":"https://example.com/local-smoke"}')"
+  post_line="$(first_line '--post-data={"targetUrl":"http://web/"}')"
 
   (( start_line < migrate_line )) || return 1
   (( migrate_line < wait_line )) || return 1

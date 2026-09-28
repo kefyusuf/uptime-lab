@@ -57,6 +57,10 @@ HEAD="$(commit_file "apps/checker/Cargo.lock" 'version = 4\n')"
 expect_value "Checker lockfile change triggers checker" "true" bash -c "cd '$TMP' && '$DETECT' '$BASE' '$HEAD'"
 reset_base
 
+HEAD="$(commit_file "apps/checker/Dockerfile" 'FROM alpine:3.24.2\n')"
+expect_value "Checker Dockerfile change triggers checker" "true" bash -c "cd '$TMP' && '$DETECT' '$BASE' '$HEAD'"
+reset_base
+
 HEAD="$(commit_file "scripts/ci/check-rust-architecture.py" '# checker fixture\n')"
 expect_value "Rust architecture checker change triggers checker" "true" bash -c "cd '$TMP' && '$DETECT' '$BASE' '$HEAD'"
 reset_base
@@ -110,5 +114,5 @@ expect_value "unavailable base is conservative" "true" bash -c "cd '$TMP' && '$D
 expect_failure "unavailable head fails closed" bash -c "cd '$TMP' && '$DETECT' '$DELETE_BASE' '2222222222222222222222222222222222222222'"
 
 printf '\nChecker change detection tests: %d passed, %d failed\n' "$PASS" "$FAIL"
-test "$PASS" -eq 15
+test "$PASS" -eq 16
 test "$FAIL" -eq 0

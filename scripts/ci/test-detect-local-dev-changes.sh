@@ -108,7 +108,16 @@ HEAD="$(git -C "$TMP" rev-parse HEAD)"
 expect_value "Checker source addition triggers local-dev" "true"   bash -c "cd '$TMP' && '$DETECT' '$BASE' '$HEAD'"
 reset_base
 
-# Case 7: unrelated architecture documentation remains irrelevant.
+# Case 7: Checker Dockerfile changes are both Checker and local-dev relevant.
+mkdir -p "$TMP/apps/checker"
+printf 'FROM alpine:3.24.2\n' > "$TMP/apps/checker/Dockerfile"
+git -C "$TMP" add apps/checker/Dockerfile
+git -C "$TMP" commit -q -m "build(checker): add Dockerfile fixture"
+HEAD="$(git -C "$TMP" rev-parse HEAD)"
+expect_value "Checker Dockerfile addition triggers local-dev" "true"   bash -c "cd '$TMP' && '$DETECT' '$BASE' '$HEAD'"
+reset_base
+
+# Case 8: unrelated architecture documentation remains irrelevant.
 mkdir -p "$TMP/docs/architecture"
 printf '# Unrelated\n' > "$TMP/docs/architecture/unrelated.md"
 git -C "$TMP" add docs/architecture/unrelated.md
@@ -116,11 +125,11 @@ git -C "$TMP" commit -q -m "docs: add unrelated fixture"
 HEAD="$(git -C "$TMP" rev-parse HEAD)"
 expect_value "unrelated docs skip local-dev" "false"   bash -c "cd '$TMP' && '$DETECT' '$BASE' '$HEAD'"
 
-# Cases 8-9 reuse the unrelated HEAD because only base-resolution behavior changes.
+# Cases 9-10 reuse the unrelated HEAD because only base-resolution behavior changes.
 ZERO_SHA="0000000000000000000000000000000000000000"
 expect_value "zero base is conservative" "true"   bash -c "cd '$TMP' && '$DETECT' '$ZERO_SHA' '$HEAD'"
 expect_value "unavailable base is conservative" "true"   bash -c "cd '$TMP' && '$DETECT' '1111111111111111111111111111111111111111' '$HEAD'"
 
 printf '\nLocal-dev change detection tests: %d passed, %d failed\n' "$PASS" "$FAIL"
-test "$PASS" -eq 9
+test "$PASS" -eq 10
 test "$FAIL" -eq 0
