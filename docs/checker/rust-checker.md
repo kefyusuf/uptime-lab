@@ -150,7 +150,7 @@ The Checker does not publish a public product endpoint, and canonical Compose pu
 
 No application host ports are published.
 
-No public CheckRun/status/history API exists.
+No public CheckRun history or derived availability/status API exists.
 
 ## Current Limitations
 
@@ -162,7 +162,7 @@ This milestone intentionally remains narrow:
 - no private-network monitoring;
 - no proxy-enabled production probe;
 - no mutable Monitor lifecycle;
-- no public status/history surface;
+- no public CheckRun history or derived availability/status surface;
 - no React runtime;
 - no public ingress/authentication/CORS/rate-limit policy.
 

@@ -17,9 +17,9 @@ The **Single-Checker Execution Vertical Slice is implemented**. The repository n
 - PostgreSQL migrations for `monitoring.monitors` and `monitoring.check_runs`;
 - schema-aware readiness;
 - a real four-service Docker Compose topology;
-- cross-runtime Docker evidence from claim through terminal CheckRun persistence.
+- cross-runtime Docker evidence from claim through terminal CheckRun persistence and public latest-result readback.
 
-The public Monitoring contract at `contracts/openapi/public.yaml` remains intentionally small: `POST /monitors` and `GET /monitors/{monitorId}`. There is still no public CheckRun/status/history API, mutable Monitor lifecycle, React runtime, authentication/authorization, CORS/rate limiting, public ingress, or application host port.
+The public Monitoring contract at `contracts/openapi/public.yaml` remains intentionally small: `POST /monitors`, `GET /monitors/{monitorId}`, and `GET /monitors/{monitorId}/latest-result`. The latest-result route exposes only the latest terminal execution fact: pending work is invisible, `204` means a known Monitor has no terminal result yet, and `resultKind` is not an up/down availability verdict. Full CheckRun history, derived availability/status, mutable Monitor lifecycle, React runtime, authentication/authorization, CORS/rate limiting, public ingress, and application host ports remain deferred.
 
 ## Architecture
 

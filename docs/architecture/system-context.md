@@ -14,7 +14,7 @@ This document is the C4 Level 1 view and intentionally hides package, crate, tab
 
 ### User / Operator
 
-The user/operator defines monitoring intent and eventually consumes product state. The current runtime exposes Monitor registration/read operations but no public CheckRun/status/history surface.
+The user/operator defines monitoring intent and can read the latest terminal execution fact. The current runtime exposes Monitor registration/read plus a terminal-only latest-result operation; full CheckRun history and derived availability/status remain deferred.
 
 ### External HTTP/HTTPS Target
 
@@ -24,13 +24,13 @@ A monitored target is outside the `uptime-lab` trust boundary. Address resolutio
 
 `uptime-lab` currently implements:
 
-- Monitor registration/read through Go;
+- Monitor registration/read and latest terminal execution-result read through Go;
 - due-work coordination and CheckRun persistence through Go;
 - bounded HTTP/HTTPS execution through Rust;
 - normalized result delivery from Rust to Go;
 - explicit PostgreSQL migrations and schema-aware readiness.
 
-React presentation, public deployment exposure, authentication/authorization, and public status/history remain outside the current implemented surface.
+React presentation, public deployment exposure, authentication/authorization, full CheckRun history, and derived availability/status remain outside the current implemented surface.
 
 ## Trust Boundary
 
@@ -56,7 +56,7 @@ flowchart LR
     System[uptime-lab]
     Target[External HTTP/HTTPS Target]
 
-    User -->|Register/read Monitor intent| System
+    User -->|Register/read Monitor intent and latest terminal result| System
     System -->|Bounded validated monitoring request| Target
 ```
 
@@ -64,7 +64,7 @@ flowchart LR
 
 The system owns:
 
-- public Monitor create/read semantics;
+- public Monitor create/read and latest terminal result semantics;
 - internal work/result semantics;
 - due-work scheduling truth;
 - durable Monitor and CheckRun state;

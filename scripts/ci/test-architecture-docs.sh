@@ -34,6 +34,7 @@ DOC
 The Go Control Plane foundation is implemented.
 The public source contract is contracts/openapi/public.yaml.
 The runtime serves POST /monitors and GET /monitors/{monitorId}.
+GET  /monitors/{monitorId}/latest-result
 The internal runtime serves POST /internal/checks/claim and PUT /internal/checks/{checkId}/result.
 Durable execution state is stored in monitoring.check_runs.
 Production uses a read-only migration compatibility checker.
@@ -44,6 +45,7 @@ DOC
 
 Authoritative source: contracts/openapi/public.yaml.
 OpenAPI 3.1.2 is validated with @redocly/cli@2.53.3.
+GET  /monitors/{monitorId}/latest-result
 Contract verification is separate from Go transport conformance.
 DOC
 
@@ -62,13 +64,14 @@ POST /internal/checks/claim
 PUT /internal/checks/{checkId}/result
 Production destination policy rejects private and non-public addresses.
 No application host ports are published.
-No public CheckRun/status/history API exists.
+No public CheckRun history or derived availability/status API exists.
 DOC
 
   cat > "$TMP/repo/docs/testing/single-checker-execution-slice.md" <<'DOC'
 # Single-Checker Execution Slice Testing
 
-Go -> Rust -> policy_rejected -> Go -> PostgreSQL
+Go -> Rust -> policy_rejected -> Go -> PostgreSQL -> public latest-result read
+GET /monitors/{monitorId}/latest-result
 Internal contract verification is separate from runtime execution evidence.
 Canonical Docker smoke proves the cross-runtime path.
 Rust vulnerability audit uses cargo audit.
@@ -79,6 +82,7 @@ DOC
 
 POST /monitors
 GET  /monitors/{monitorId}
+GET  /monitors/{monitorId}/latest-result
 No application host ports are published.
 The readiness path is read-only.
 The internal Checker contract is implemented.
@@ -90,6 +94,7 @@ DOC
 docker compose up -d db api
 docker compose exec -T api /usr/local/bin/uptime-lab-migrate up
 docker compose up -d --wait --wait-timeout 60
+GET  /monitors/{monitorId}/latest-result
 DOC
 
   cat > "$TMP/repo/docs/glossary.md" <<'DOC'
@@ -205,9 +210,17 @@ sequenceDiagram
 ## Read Current State
 ```mermaid
 sequenceDiagram
-  User->>Web: View status
-  Web->>Go: Read state
-  Go->>DB: Read owned state
+  User->>Web: View Monitor
+  Web->>Go: Read Monitor
+  Go->>DB: Read owned Monitor state
+```
+
+## Read Latest Terminal Result
+```mermaid
+sequenceDiagram
+  User->>Web: Inspect latest execution fact
+  Web->>Go: GET /monitors/{monitorId}/latest-result
+  Go->>DB: Read latest terminal CheckRun
 ```
 
 ## Failure Boundary
@@ -287,7 +300,7 @@ expect_failure "missing Rust database prohibition fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
 sed -i '0,/^sequenceDiagram$/{/^sequenceDiagram$/d;}' "$TMP/repo/docs/architecture/runtime-flows.md"
-expect_failure "only three sequence diagrams fails" "$CHECKER" "$TMP/repo"
+expect_failure "only four sequence diagrams fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
 rm "$TMP/repo/docs/backend/go-control-plane.md"
@@ -350,8 +363,8 @@ sed -i '/Production destination policy rejects private and non-public addresses\
 expect_failure "missing production destination-policy marker fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
-sed -i '/No public CheckRun\/status\/history API exists\./d' "$TMP/repo/docs/checker/rust-checker.md"
-expect_failure "missing public status deferral marker fails" "$CHECKER" "$TMP/repo"
+sed -i '/No public CheckRun history or derived availability\/status API exists\./d' "$TMP/repo/docs/checker/rust-checker.md"
+expect_failure "missing public history/status deferral marker fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
 sed -i '/Go -> Rust -> policy_rejected -> Go -> PostgreSQL/d' "$TMP/repo/docs/testing/single-checker-execution-slice.md"

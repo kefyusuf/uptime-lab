@@ -2,7 +2,7 @@
 
 ## Status
 
-The Go Control Plane is implemented for public Monitor create/read and the Single-Checker execution loop.
+The Go Control Plane is implemented for public Monitor create/read, latest terminal execution-result read, and the Single-Checker execution loop.
 
 It owns product semantics, scheduling truth, durable Monitor/CheckRun state, public/internal HTTP adapters, explicit migrations, and schema-aware readiness.
 
@@ -22,6 +22,7 @@ The public runtime surface is:
 ~~~text
 POST /monitors
 GET  /monitors/{monitorId}
+GET  /monitors/{monitorId}/latest-result
 ~~~
 
 The internal Checker surface is:
@@ -38,7 +39,7 @@ GET /livez
 GET /readyz
 ~~~
 
-No public CheckRun/status/history route exists.
+The latest-result route exposes only the latest terminal CheckRun execution fact. Pending rows are invisible; a known Monitor with no terminal result maps to `204`. Full CheckRun history and derived availability/status remain deferred.
 
 ## Monitoring Domain
 
@@ -57,6 +58,12 @@ Registration-time TargetURL validation is not execution safety. The Rust Checker
 ### RegisterMonitor / GetMonitor
 
 These preserve the existing immutable public Monitor create/read behavior.
+
+### GetLatestCheckResult
+
+This public read is side-effect free and uses a dedicated read-facing persistence port. It considers only terminal CheckRuns and orders them by `completed_at DESC, issued_at DESC, id DESC`.
+
+A newer pending CheckRun does not hide the previous terminal result, and the read path never reconciles expired pending work. Public `resultKind` values are execution facts only; no up/down/healthy/degraded policy is derived. `worker_timeout` exposes neither `httpStatus` nor a fabricated `durationMs`.
 
 ### ClaimDueCheck
 
@@ -89,9 +96,9 @@ Rust cannot submit `worker_timeout`.
 
 ## Persistence Ports
 
-Monitoring owns narrow Monitor and execution persistence interfaces.
+Monitoring owns narrow Monitor, latest-result read, and execution persistence interfaces.
 
-Execution persistence contains only the claim/completion behavior required by the application layer; no generic Unit of Work or repository hierarchy is introduced.
+`LatestCheckResultRepository` is separate from `CheckExecutionRepository`. The former performs the bounded terminal read; execution persistence remains limited to claim/completion behavior. No generic Unit of Work or repository hierarchy is introduced.
 
 ## Database Schema
 
@@ -144,7 +151,7 @@ The generic platform server owns operational routing.
 ~~~text
 one pgx pool
   |-> Monitoring PostgreSQL repository
-  |     |-> public Monitoring module/adapter
+  |     |-> public Monitoring module/adapter (create/read/latest terminal result)
   |     |-> execution application
   |           |-> internal Checker adapter
   |
@@ -201,8 +208,8 @@ Cross-runtime Docker acceptance is documented separately in [../testing/single-c
 
 Still deferred:
 
-- public Monitor operations beyond create/read;
-- public CheckRun/status/history;
+- public Monitor operations beyond create/read/latest-result;
+- full CheckRun history and derived availability/status;
 - mutable Monitor lifecycle;
 - multi-worker coordination/leases;
 - broker/outbox;

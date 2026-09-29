@@ -14,12 +14,13 @@ registered Monitor
   -> normalized result submission
   -> Go completion
   -> PostgreSQL terminal CheckRun
+  -> public latest-result read
 ~~~
 
 The canonical private-target Docker evidence is summarized as:
 
 ~~~text
-Go -> Rust -> policy_rejected -> Go -> PostgreSQL
+Go -> Rust -> policy_rejected -> Go -> PostgreSQL -> public latest-result read
 ~~~
 
 Each layer owns different evidence. Passing one layer does not substitute for another.
@@ -55,7 +56,7 @@ PUT /internal/checks/{checkId}/result
 
 Contract fixtures protect CheckWork and normalized result compatibility across Go and Rust.
 
-The public contract remains a separate source at `contracts/openapi/public.yaml` and is not expanded with CheckRun/status/history operations.
+The public contract remains a separate source at `contracts/openapi/public.yaml`. It now exposes `GET /monitors/{monitorId}/latest-result` for the latest terminal execution fact only; full history and derived availability/status remain outside the execution slice.
 
 ## Go Unit and Application Evidence
 
@@ -178,6 +179,8 @@ The smoke bounded-polls PostgreSQL and verifies:
 - bounded integer `duration_ms`;
 - `completed_at IS NOT NULL`.
 
+The same smoke then reads `GET /monitors/{monitorId}/latest-result` and binds the public payload to that persisted CheckRun: the CheckID and `durationMs` must match, `resultKind` must be `policy_rejected`, `completedAt` must be a canonical UTC instant, and `httpStatus` must be absent. This read does not derive up/down status.
+
 For the same CheckID/MonitorID, Checker logs must show strict order:
 
 ~~~text
@@ -192,7 +195,7 @@ The same smoke retains the existing bootstrap/restart/reset evidence:
 - Goose metadata absent before explicit migration;
 - explicit migration required;
 - real Checker healthy;
-- Monitor registration/read;
+- Monitor registration/read/latest-result;
 - normal restart preserves state;
 - destructive volume reset removes state;
 - re-migration is required after reset.
@@ -257,7 +260,7 @@ This evidence does not claim:
 - public network deployment readiness;
 - authentication/authorization;
 - mutable Monitor lifecycle;
-- public CheckRun/status/history API;
+- full public CheckRun history or derived availability/status API;
 - multi-worker coordination;
 - broker/outbox behavior;
 - private-network monitoring;

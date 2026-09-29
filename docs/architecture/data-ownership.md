@@ -2,7 +2,7 @@
 
 **Architecture state:** Committed
 
-**Implementation state:** Implemented for Monitor registration/read and single-Checker execution persistence.
+**Implementation state:** Implemented for Monitor registration/read, latest terminal CheckRun read, and single-Checker execution persistence.
 
 ## Primary Ownership Rule
 
@@ -60,7 +60,7 @@ duration_ms
 
 Database constraints enforce pending/terminal shape, bounds, timestamp ordering, and at most one pending CheckRun per Monitor.
 
-There is no enabled flag, Monitor update/version column, monitor_states table, incidents table, lease owner, worker identity, or public status/history projection.
+There is no enabled flag, Monitor update/version column, monitor_states table, incidents table, lease owner, worker identity, or materialized status/history projection. The public latest-result read queries existing terminal `monitoring.check_runs`; it does not add duplicated status state.
 
 ## Persistence Boundary
 
@@ -69,6 +69,8 @@ Monitoring persistence is intentionally narrow.
 Monitor persistence supports create/read.
 
 Execution persistence supports atomic due claim and completion. Claim creates the pending CheckRun; Rust does not create or mutate database rows directly.
+
+A separate latest-result read port selects the latest terminal CheckRun without locks, writes, or reconciliation. Pending rows remain invisible.
 
 Late completion is resolved by Go into durable `worker_timeout` state using the stored deadline.
 
@@ -104,7 +106,7 @@ No Kafka, RabbitMQ, Redis broker, outbox, or event-sourcing infrastructure is in
 Still deferred:
 
 - mutable Monitor lifecycle;
-- public CheckRun/status/history projection;
+- full CheckRun history and derived availability/status projection;
 - retention/archival;
 - multi-worker leases/identity;
 - broker/outbox topology;
