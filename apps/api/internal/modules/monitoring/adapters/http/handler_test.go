@@ -13,6 +13,7 @@ import (
 
 	"github.com/kefyusuf/uptime-lab/apps/api/internal/modules/monitoring/application"
 	"github.com/kefyusuf/uptime-lab/apps/api/internal/modules/monitoring/domain"
+	"github.com/kefyusuf/uptime-lab/apps/api/internal/modules/monitoring/ports"
 )
 
 type registerMonitorStub struct {
@@ -39,6 +40,37 @@ func (stub *getMonitorStub) Execute(_ context.Context, id domain.MonitorID) (dom
 	stub.calls++
 	stub.id = id
 	return stub.monitor, stub.err
+}
+
+type getLatestCheckResultStub struct {
+	calls int
+	id    domain.MonitorID
+	err   error
+}
+
+func (stub *getLatestCheckResultStub) Execute(
+	_ context.Context,
+	id domain.MonitorID,
+) (application.LatestCheckResult, error) {
+	stub.calls++
+	stub.id = id
+	return application.LatestCheckResult{}, stub.err
+}
+
+type latestCheckResultRepositoryStub struct {
+	calls  int
+	id     domain.MonitorID
+	record ports.LatestCheckResultRecord
+	err    error
+}
+
+func (stub *latestCheckResultRepositoryStub) LatestTerminalByMonitorID(
+	_ context.Context,
+	id domain.MonitorID,
+) (ports.LatestCheckResultRecord, error) {
+	stub.calls++
+	stub.id = id
+	return stub.record, stub.err
 }
 
 func TestHandlerPostMonitorSuccess(t *testing.T) {
@@ -271,6 +303,178 @@ func TestHandlerGetApplicationErrorMappingIsSanitized(t *testing.T) {
 	}
 }
 
+func TestHandlerGetLatestResultSuccessVariants(t *testing.T) {
+	const monitorID = "018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2"
+	completedAt := time.Date(2026, time.September, 29, 12, 0, 0, 123456000, time.UTC)
+
+	tests := []struct {
+		name         string
+		record       ports.LatestCheckResultRecord
+		wantKeys     []string
+		wantKind     string
+		wantStatus   *float64
+		wantDuration *float64
+	}{
+		{
+			name: "HTTP response",
+			record: ports.LatestCheckResultRecord{
+				CheckID:     mustCheckID(t, "018f22d3-1d6a-7cc0-a37b-46fc3fafdcc1"),
+				ResultKind:  domain.CheckResultHTTPResponse,
+				HTTPStatus:  intPointer(204),
+				DurationMS:  int64Pointer(123),
+				CompletedAt: completedAt,
+			},
+			wantKeys:     []string{"checkId", "resultKind", "httpStatus", "durationMs", "completedAt"},
+			wantKind:     "http_response",
+			wantStatus:   float64Pointer(204),
+			wantDuration: float64Pointer(123),
+		},
+		{
+			name: "classified failure",
+			record: ports.LatestCheckResultRecord{
+				CheckID:     mustCheckID(t, "018f22d3-1d6a-7cc0-a37b-46fc3fafdcc2"),
+				ResultKind:  domain.CheckResultPolicyRejected,
+				DurationMS:  int64Pointer(0),
+				CompletedAt: completedAt,
+			},
+			wantKeys:     []string{"checkId", "resultKind", "durationMs", "completedAt"},
+			wantKind:     "policy_rejected",
+			wantDuration: float64Pointer(0),
+		},
+		{
+			name: "worker timeout",
+			record: ports.LatestCheckResultRecord{
+				CheckID:     mustCheckID(t, "018f22d3-1d6a-7cc0-a37b-46fc3fafdcc3"),
+				ResultKind:  domain.CheckResultWorkerTimeout,
+				CompletedAt: completedAt,
+			},
+			wantKeys: []string{"checkId", "resultKind", "completedAt"},
+			wantKind: "worker_timeout",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			register := &registerMonitorStub{}
+			get := &getMonitorStub{}
+			repository := &latestCheckResultRepositoryStub{record: test.record}
+			latest := application.NewGetLatestCheckResult(repository)
+			handler := NewHandlerWithLatestResult(register, get, latest)
+
+			response := serve(handler, http.MethodGet, "/monitors/"+monitorID+"/latest-result", "", "")
+
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
+			}
+			if got := response.Header().Get("Content-Type"); got != "application/json" {
+				t.Fatalf("Content-Type = %q, want application/json", got)
+			}
+			if register.calls != 0 || get.calls != 0 {
+				t.Fatalf("register/get calls = %d/%d, want 0/0", register.calls, get.calls)
+			}
+			if repository.calls != 1 || repository.id.String() != monitorID {
+				t.Fatalf("latest repository calls/id = %d/%s, want 1/%s", repository.calls, repository.id, monitorID)
+			}
+
+			got := decodeObject(t, response.Body.String())
+			assertExactKeys(t, got, test.wantKeys...)
+			if got["checkId"] != test.record.CheckID.String() {
+				t.Fatalf("checkId = %#v, want %q", got["checkId"], test.record.CheckID.String())
+			}
+			if got["resultKind"] != test.wantKind {
+				t.Fatalf("resultKind = %#v, want %q", got["resultKind"], test.wantKind)
+			}
+			if got["completedAt"] != "2026-09-29T12:00:00.123456Z" {
+				t.Fatalf("completedAt = %#v, want canonical UTC instant", got["completedAt"])
+			}
+			if test.wantStatus != nil && got["httpStatus"] != *test.wantStatus {
+				t.Fatalf("httpStatus = %#v, want %v", got["httpStatus"], *test.wantStatus)
+			}
+			if test.wantDuration != nil && got["durationMs"] != *test.wantDuration {
+				t.Fatalf("durationMs = %#v, want %v", got["durationMs"], *test.wantDuration)
+			}
+		})
+	}
+}
+
+func TestHandlerGetLatestResultNoTerminalResultIsEmpty204(t *testing.T) {
+	const monitorID = "018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2"
+	latest := &getLatestCheckResultStub{err: application.ErrNoTerminalCheckResult}
+	handler := NewHandlerWithLatestResult(&registerMonitorStub{}, &getMonitorStub{}, latest)
+
+	response := serve(handler, http.MethodGet, "/monitors/"+monitorID+"/latest-result", "", "")
+
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusNoContent, response.Body.String())
+	}
+	if response.Body.Len() != 0 {
+		t.Fatalf("204 body = %q, want empty", response.Body.String())
+	}
+	if got := response.Header().Get("Content-Type"); got != "" {
+		t.Fatalf("204 Content-Type = %q, want absent", got)
+	}
+	if latest.calls != 1 || latest.id.String() != monitorID {
+		t.Fatalf("latest calls/id = %d/%s, want 1/%s", latest.calls, latest.id, monitorID)
+	}
+}
+
+func TestHandlerGetLatestResultRejectsInvalidMonitorIDBeforeUseCase(t *testing.T) {
+	latest := &getLatestCheckResultStub{}
+	handler := NewHandlerWithLatestResult(&registerMonitorStub{}, &getMonitorStub{}, latest)
+
+	response := serve(handler, http.MethodGet, "/monitors/not-a-uuid/latest-result", "", "")
+
+	assertProblem(t, response, http.StatusBadRequest)
+	if latest.calls != 0 {
+		t.Fatalf("GetLatestCheckResult calls = %d, want 0", latest.calls)
+	}
+}
+
+func TestHandlerGetLatestResultApplicationErrorMappingIsSanitized(t *testing.T) {
+	const id = "018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2"
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus int
+	}{
+		{name: "not found", err: application.ErrMonitorNotFound, wantStatus: http.StatusNotFound},
+		{name: "wrapped not found", err: fmt.Errorf("wrapped: %w", application.ErrMonitorNotFound), wantStatus: http.StatusNotFound},
+		{name: "persistence", err: application.ErrPersistence, wantStatus: http.StatusInternalServerError},
+		{name: "wrapped persistence", err: fmt.Errorf("wrapped: %w", application.ErrPersistence), wantStatus: http.StatusInternalServerError},
+		{name: "unexpected", err: errors.New("sql credential=secret table=monitoring.check_runs"), wantStatus: http.StatusInternalServerError},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			latest := &getLatestCheckResultStub{err: test.err}
+			handler := NewHandlerWithLatestResult(&registerMonitorStub{}, &getMonitorStub{}, latest)
+			response := serve(handler, http.MethodGet, "/monitors/"+id+"/latest-result", "", "")
+
+			assertProblem(t, response, test.wantStatus)
+			if latest.calls != 1 {
+				t.Fatalf("GetLatestCheckResult calls = %d, want 1", latest.calls)
+			}
+			body := response.Body.String()
+			for _, secret := range []string{"credential=secret", "monitoring.check_runs", "sql"} {
+				if strings.Contains(body, secret) {
+					t.Fatalf("problem body leaked %q: %s", secret, body)
+				}
+			}
+		})
+	}
+}
+
+func TestHandlerWithoutLatestCapabilityKeepsLatestRouteNotFound(t *testing.T) {
+	const id = "018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2"
+	handler := NewHandler(&registerMonitorStub{}, &getMonitorStub{})
+
+	response := serve(handler, http.MethodGet, "/monitors/"+id+"/latest-result", "", "")
+
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusNotFound, response.Body.String())
+	}
+}
+
 func TestHandlerKnownResourcesRejectUnsupportedMethodsWithoutUseCaseExecution(t *testing.T) {
 	const id = "018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2"
 	tests := []struct {
@@ -291,13 +495,20 @@ func TestHandlerKnownResourcesRejectUnsupportedMethodsWithoutUseCaseExecution(t 
 		{name: "resource patch", method: http.MethodPatch, path: "/monitors/" + id, wantAllow: http.MethodGet},
 		{name: "resource delete", method: http.MethodDelete, path: "/monitors/" + id, wantAllow: http.MethodGet},
 		{name: "resource options", method: http.MethodOptions, path: "/monitors/" + id, wantAllow: http.MethodGet},
+		{name: "latest result post", method: http.MethodPost, path: "/monitors/" + id + "/latest-result", wantAllow: http.MethodGet},
+		{name: "latest result head", method: http.MethodHead, path: "/monitors/" + id + "/latest-result", wantAllow: http.MethodGet},
+		{name: "latest result put", method: http.MethodPut, path: "/monitors/" + id + "/latest-result", wantAllow: http.MethodGet},
+		{name: "latest result patch", method: http.MethodPatch, path: "/monitors/" + id + "/latest-result", wantAllow: http.MethodGet},
+		{name: "latest result delete", method: http.MethodDelete, path: "/monitors/" + id + "/latest-result", wantAllow: http.MethodGet},
+		{name: "latest result options", method: http.MethodOptions, path: "/monitors/" + id + "/latest-result", wantAllow: http.MethodGet},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			register := &registerMonitorStub{}
 			get := &getMonitorStub{}
-			handler := NewHandler(register, get)
+			latest := &getLatestCheckResultStub{}
+			handler := NewHandlerWithLatestResult(register, get, latest)
 			response := serve(handler, test.method, test.path, "", "")
 
 			if response.Code != http.StatusMethodNotAllowed {
@@ -306,8 +517,13 @@ func TestHandlerKnownResourcesRejectUnsupportedMethodsWithoutUseCaseExecution(t 
 			if got := response.Header().Get("Allow"); got != test.wantAllow {
 				t.Fatalf("Allow = %q, want %q", got, test.wantAllow)
 			}
-			if register.calls != 0 || get.calls != 0 {
-				t.Fatalf("use-case calls register/get = %d/%d, want 0/0", register.calls, get.calls)
+			if register.calls != 0 || get.calls != 0 || latest.calls != 0 {
+				t.Fatalf(
+					"use-case calls register/get/latest = %d/%d/%d, want 0/0/0",
+					register.calls,
+					get.calls,
+					latest.calls,
+				)
 			}
 		})
 	}
@@ -322,20 +538,30 @@ func TestHandlerUnknownAndNonExactPathsRemainNotFound(t *testing.T) {
 		"/monitors/",
 		"/monitors//" + id,
 		"/monitors/" + id + "/extra",
+		"/monitors//latest-result",
+		"/monitors/" + id + "/latest-result/extra",
+		"/monitors/" + id + "/latest-result/",
+		"/monitors/" + id + "/unknown",
 	}
 
 	for _, path := range paths {
 		t.Run(path, func(t *testing.T) {
 			register := &registerMonitorStub{}
 			get := &getMonitorStub{}
-			handler := NewHandler(register, get)
+			latest := &getLatestCheckResultStub{}
+			handler := NewHandlerWithLatestResult(register, get, latest)
 			response := serve(handler, http.MethodGet, path, "", "")
 
 			if response.Code != http.StatusNotFound {
 				t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusNotFound, response.Body.String())
 			}
-			if register.calls != 0 || get.calls != 0 {
-				t.Fatalf("use-case calls register/get = %d/%d, want 0/0", register.calls, get.calls)
+			if register.calls != 0 || get.calls != 0 || latest.calls != 0 {
+				t.Fatalf(
+					"use-case calls register/get/latest = %d/%d/%d, want 0/0/0",
+					register.calls,
+					get.calls,
+					latest.calls,
+				)
 			}
 		})
 	}
@@ -367,6 +593,28 @@ func mustMonitor(t *testing.T, rawID, rawTarget string, createdAt time.Time) dom
 		t.Fatalf("NewMonitor() error = %v", err)
 	}
 	return monitor
+}
+
+func mustCheckID(t *testing.T, raw string) domain.CheckID {
+	t.Helper()
+
+	id, err := domain.ParseCheckID(raw)
+	if err != nil {
+		t.Fatalf("ParseCheckID() error = %v", err)
+	}
+	return id
+}
+
+func intPointer(value int) *int {
+	return &value
+}
+
+func int64Pointer(value int64) *int64 {
+	return &value
+}
+
+func float64Pointer(value float64) *float64 {
+	return &value
 }
 
 func decodeObject(t *testing.T, body string) map[string]any {
