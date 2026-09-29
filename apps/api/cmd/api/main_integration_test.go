@@ -33,6 +33,14 @@ type checkWorkPayload struct {
 	MaxRedirects int    `json:"maxRedirects"`
 }
 
+type latestCheckResultPayload struct {
+	CheckID     string `json:"checkId"`
+	ResultKind  string `json:"resultKind"`
+	HTTPStatus  *int   `json:"httpStatus,omitempty"`
+	DurationMS  *int64 `json:"durationMs,omitempty"`
+	CompletedAt string `json:"completedAt"`
+}
+
 func TestProductionMonitoringCompositionAgainstPostgreSQL(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -120,6 +128,16 @@ func TestProductionMonitoringCompositionAgainstPostgreSQL(t *testing.T) {
 	}
 	assertStatus(t, client, http.MethodGet, baseURL+"/readyz", "", http.StatusOK)
 
+	missingMonitorID := uuid.NewV7().String()
+	assertStatus(
+		t,
+		client,
+		http.MethodGet,
+		baseURL+"/monitors/"+missingMonitorID+"/latest-result",
+		"",
+		http.StatusNotFound,
+	)
+
 	postBody := `{"targetUrl":"https://example.com/production-composition"}`
 	postResponse, err := client.Post(baseURL+"/monitors", "application/json", strings.NewReader(postBody))
 	if err != nil {
@@ -164,6 +182,15 @@ func TestProductionMonitoringCompositionAgainstPostgreSQL(t *testing.T) {
 	if getPayload.CreatedAt != postPayload.CreatedAt {
 		t.Fatalf("GET createdAt = %q, want exact POST instant %q", getPayload.CreatedAt, postPayload.CreatedAt)
 	}
+
+	assertStatus(
+		t,
+		client,
+		http.MethodGet,
+		baseURL+"/monitors/"+postPayload.ID+"/latest-result",
+		"",
+		http.StatusNoContent,
+	)
 
 	claimResponse := doRequest(t, client, http.MethodPost, baseURL+"/internal/checks/claim", "", "")
 	if claimResponse.StatusCode != http.StatusOK {
@@ -226,6 +253,53 @@ func TestProductionMonitoringCompositionAgainstPostgreSQL(t *testing.T) {
 			persistedKind,
 			persistedStatus,
 			persistedDurationMS,
+		)
+	}
+
+	latestHTTPResponse := doRequest(
+		t,
+		client,
+		http.MethodGet,
+		baseURL+"/monitors/"+postPayload.ID+"/latest-result",
+		"",
+		"",
+	)
+	if latestHTTPResponse.StatusCode != http.StatusOK {
+		defer latestHTTPResponse.Body.Close()
+		body, _ := io.ReadAll(latestHTTPResponse.Body)
+		t.Fatalf(
+			"GET latest HTTP result status = %d, want %d; body=%s",
+			latestHTTPResponse.StatusCode,
+			http.StatusOK,
+			body,
+		)
+	}
+	latestHTTP := decodeLatestCheckResultPayload(
+		t,
+		latestHTTPResponse,
+		"checkId",
+		"resultKind",
+		"httpStatus",
+		"durationMs",
+		"completedAt",
+	)
+	if latestHTTP.CheckID != claimPayload.CheckID {
+		t.Fatalf("latest HTTP checkId = %q, want %q", latestHTTP.CheckID, claimPayload.CheckID)
+	}
+	if latestHTTP.ResultKind != "http_response" {
+		t.Fatalf("latest HTTP resultKind = %q, want http_response", latestHTTP.ResultKind)
+	}
+	if latestHTTP.HTTPStatus == nil || *latestHTTP.HTTPStatus != persistedStatus {
+		t.Fatalf("latest HTTP httpStatus = %v, want %d", latestHTTP.HTTPStatus, persistedStatus)
+	}
+	if latestHTTP.DurationMS == nil || *latestHTTP.DurationMS != persistedDurationMS {
+		t.Fatalf("latest HTTP durationMs = %v, want %d", latestHTTP.DurationMS, persistedDurationMS)
+	}
+	if latestHTTP.CompletedAt != persistedCompletedAt.UTC().Format(time.RFC3339Nano) {
+		t.Fatalf(
+			"latest HTTP completedAt = %q, want %q",
+			latestHTTP.CompletedAt,
+			persistedCompletedAt.UTC().Format(time.RFC3339Nano),
 		)
 	}
 
@@ -347,6 +421,59 @@ func TestProductionMonitoringCompositionAgainstPostgreSQL(t *testing.T) {
 		t.Fatalf("late duration_ms = %v, want NULL", *lateDurationMS)
 	}
 
+	latestWorkerTimeoutResponse := doRequest(
+		t,
+		client,
+		http.MethodGet,
+		baseURL+"/monitors/"+lateMonitor.ID+"/latest-result",
+		"",
+		"",
+	)
+	if latestWorkerTimeoutResponse.StatusCode != http.StatusOK {
+		defer latestWorkerTimeoutResponse.Body.Close()
+		body, _ := io.ReadAll(latestWorkerTimeoutResponse.Body)
+		t.Fatalf(
+			"GET latest worker_timeout status = %d, want %d; body=%s",
+			latestWorkerTimeoutResponse.StatusCode,
+			http.StatusOK,
+			body,
+		)
+	}
+	latestWorkerTimeout := decodeLatestCheckResultPayload(
+		t,
+		latestWorkerTimeoutResponse,
+		"checkId",
+		"resultKind",
+		"completedAt",
+	)
+	if latestWorkerTimeout.CheckID != lateClaim.CheckID {
+		t.Fatalf(
+			"latest worker_timeout checkId = %q, want %q",
+			latestWorkerTimeout.CheckID,
+			lateClaim.CheckID,
+		)
+	}
+	if latestWorkerTimeout.ResultKind != "worker_timeout" {
+		t.Fatalf(
+			"latest worker_timeout resultKind = %q, want worker_timeout",
+			latestWorkerTimeout.ResultKind,
+		)
+	}
+	if latestWorkerTimeout.HTTPStatus != nil || latestWorkerTimeout.DurationMS != nil {
+		t.Fatalf(
+			"latest worker_timeout optional fields = status=%v duration=%v, want absent",
+			latestWorkerTimeout.HTTPStatus,
+			latestWorkerTimeout.DurationMS,
+		)
+	}
+	if latestWorkerTimeout.CompletedAt != lateCompleted.UTC().Format(time.RFC3339Nano) {
+		t.Fatalf(
+			"latest worker_timeout completedAt = %q, want %q",
+			latestWorkerTimeout.CompletedAt,
+			lateCompleted.UTC().Format(time.RFC3339Nano),
+		)
+	}
+
 	if _, err := pool.Exec(
 		ctx,
 		"INSERT INTO public.goose_db_version (version_id, is_applied) VALUES (999, true)",
@@ -420,6 +547,43 @@ func decodeCheckWorkPayload(t *testing.T, response *http.Response) checkWorkPayl
 	var payload checkWorkPayload
 	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode check work response: %v", err)
+	}
+	return payload
+}
+
+func decodeLatestCheckResultPayload(
+	t *testing.T,
+	response *http.Response,
+	wantKeys ...string,
+) latestCheckResultPayload {
+	t.Helper()
+	defer response.Body.Close()
+
+	if got := response.Header.Get("Content-Type"); got != "application/json" {
+		t.Fatalf("latest-result Content-Type = %q, want application/json", got)
+	}
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read latest-result response: %v", err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatalf("decode latest-result JSON object: %v; body=%q", err, body)
+	}
+	if len(raw) != len(wantKeys) {
+		t.Fatalf("latest-result keys = %v, want exactly %v", raw, wantKeys)
+	}
+	for _, key := range wantKeys {
+		if _, ok := raw[key]; !ok {
+			t.Fatalf("latest-result missing key %q: %v", key, raw)
+		}
+	}
+
+	var payload latestCheckResultPayload
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("decode latest-result payload: %v", err)
 	}
 	return payload
 }
