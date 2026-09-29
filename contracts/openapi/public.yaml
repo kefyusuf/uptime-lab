@@ -3,9 +3,9 @@ info:
   title: uptime-lab Public API
   version: 0.1.0
   description: >
-    Pre-stable public contract for the implemented Monitoring registration and
-    get-by-ID application behavior. This contract is not yet exposed by the Go
-    runtime.
+    Pre-stable public contract for Monitoring registration, get-by-ID, and the
+    latest terminal execution-result read. The latest-result operation exposes
+    execution facts only and does not derive Monitor availability status.
 paths:
   /monitors:
     post:
@@ -95,6 +95,49 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  /monitors/{monitorId}/latest-result:
+    get:
+      operationId: getLatestCheckResult
+      summary: Get the latest terminal check result
+      description: >
+        Returns the latest terminal execution fact for the Monitor, ordered by
+        terminal completion. Pending CheckRuns are not exposed and this read
+        does not derive an up/down availability verdict.
+      parameters:
+        - name: monitorId
+          in: path
+          required: true
+          description: Stable monitor UUID.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Latest terminal execution result found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LatestCheckResult'
+        '204':
+          description: Monitor exists but has no terminal execution result yet.
+        '400':
+          description: monitorId is not a valid UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: Monitor not found.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          description: Latest-result persistence read failed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
 components:
   schemas:
     CreateMonitorRequest:
@@ -137,6 +180,93 @@ components:
           type: string
           format: date-time
           description: Immutable monitor creation instant emitted with UTC domain semantics.
+    LatestCheckResult:
+      oneOf:
+        - $ref: '#/components/schemas/LatestHTTPResponseResult'
+        - $ref: '#/components/schemas/LatestFailureResult'
+        - $ref: '#/components/schemas/LatestWorkerTimeoutResult'
+    LatestHTTPResponseResult:
+      type: object
+      additionalProperties: false
+      required:
+        - checkId
+        - resultKind
+        - httpStatus
+        - durationMs
+        - completedAt
+      properties:
+        checkId:
+          type: string
+          format: uuid
+          description: Durable CheckRun UUID.
+        resultKind:
+          type: string
+          const: http_response
+        httpStatus:
+          type: integer
+          minimum: 100
+          maximum: 599
+          description: Final HTTP response status after safe redirect handling.
+        durationMs:
+          type: integer
+          minimum: 0
+          maximum: 20000
+          description: Monotonic probe duration in milliseconds.
+        completedAt:
+          type: string
+          format: date-time
+          description: Persisted terminal completion instant.
+    LatestFailureResult:
+      type: object
+      additionalProperties: false
+      required:
+        - checkId
+        - resultKind
+        - durationMs
+        - completedAt
+      properties:
+        checkId:
+          type: string
+          format: uuid
+          description: Durable CheckRun UUID.
+        resultKind:
+          type: string
+          enum:
+            - dns_error
+            - policy_rejected
+            - timeout
+            - connect_error
+            - tls_error
+            - protocol_error
+            - internal_error
+        durationMs:
+          type: integer
+          minimum: 0
+          maximum: 20000
+          description: Monotonic duration until terminal failure classification.
+        completedAt:
+          type: string
+          format: date-time
+          description: Persisted terminal completion instant.
+    LatestWorkerTimeoutResult:
+      type: object
+      additionalProperties: false
+      required:
+        - checkId
+        - resultKind
+        - completedAt
+      properties:
+        checkId:
+          type: string
+          format: uuid
+          description: Durable CheckRun UUID.
+        resultKind:
+          type: string
+          const: worker_timeout
+        completedAt:
+          type: string
+          format: date-time
+          description: Persisted terminal completion instant.
     Problem:
       type: object
       additionalProperties: false
