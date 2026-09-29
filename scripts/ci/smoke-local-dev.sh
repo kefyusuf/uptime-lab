@@ -122,6 +122,30 @@ json_created_at() {
   printf '%s\n' "$1" | sed -n 's/.*"createdAt":"\([^"]*\)".*/\1/p'
 }
 
+json_check_id() {
+  printf '%s\n' "$1" | sed -n 's/.*"checkId":"\([^"]*\)".*/\1/p'
+}
+
+json_result_kind() {
+  printf '%s\n' "$1" | sed -n 's/.*"resultKind":"\([^"]*\)".*/\1/p'
+}
+
+json_duration_ms() {
+  printf '%s\n' "$1" | sed -n 's/.*"durationMs":\([0-9][0-9]*\).*/\1/p'
+}
+
+json_completed_at() {
+  printf '%s\n' "$1" | sed -n 's/.*"completedAt":"\([^"]*\)".*/\1/p'
+}
+
+json_keys() {
+  printf '%s\n' "$1" |
+    grep -oE '"[^"]+":' |
+    sed 's/^"//; s/":$//' |
+    sort |
+    paste -sd, -
+}
+
 MONITOR_ID=""
 MONITOR_TARGET="http://web/"
 MONITOR_CREATED_AT=""
@@ -292,6 +316,57 @@ wait_for_policy_rejected_check_run() {
     "$MONITOR_ID" "$CHECK_RUN_ID" "$CHECK_RUN_DURATION_MS"
 }
 
+assert_latest_result_public_read() {
+  local response
+  local keys
+  local check_id
+  local kind
+  local duration_ms
+  local completed_at
+  local parseable
+
+  response="$(compose exec -T api wget -q -O -     "http://127.0.0.1:8080/monitors/$MONITOR_ID/latest-result")"
+
+  keys="$(json_keys "$response")"
+  check_id="$(json_check_id "$response")"
+  kind="$(json_result_kind "$response")"
+  duration_ms="$(json_duration_ms "$response")"
+  completed_at="$(json_completed_at "$response")"
+
+  [[ "$keys" == "checkId,completedAt,durationMs,resultKind" ]] || {
+    printf 'GET latest-result keys=%q, want exact checkId,completedAt,durationMs,resultKind; response=%s\n'       "$keys" "$response" >&2
+    return 1
+  }
+  [[ "$check_id" == "$CHECK_RUN_ID" ]] || {
+    printf 'GET latest-result checkId=%q, want persisted %q\n' "$check_id" "$CHECK_RUN_ID" >&2
+    return 1
+  }
+  [[ "$kind" == "policy_rejected" ]] || {
+    printf 'GET latest-result resultKind=%q, want policy_rejected\n' "$kind" >&2
+    return 1
+  }
+  [[ "$duration_ms" == "$CHECK_RUN_DURATION_MS" ]] || {
+    printf 'GET latest-result durationMs=%q, want persisted %q\n'       "$duration_ms" "$CHECK_RUN_DURATION_MS" >&2
+    return 1
+  }
+  [[ "$response" != *'"httpStatus":'* ]] || {
+    printf 'GET latest-result unexpectedly exposes httpStatus for policy_rejected: %s\n'       "$response" >&2
+    return 1
+  }
+  [[ "$completed_at" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z$ ]] || {
+    printf 'GET latest-result completedAt=%q is not canonical UTC RFC3339\n'       "$completed_at" >&2
+    return 1
+  }
+
+  parseable="$(query_check_runs "SELECT '$completed_at'::timestamptz IS NOT NULL;")"
+  [[ "$parseable" == "t" ]] || {
+    printf 'GET latest-result completedAt=%q is not parseable by PostgreSQL\n'       "$completed_at" >&2
+    return 1
+  }
+
+  printf 'Public latest-result evidence: monitor_id=%s check_id=%s result_kind=%s duration_ms=%s completed_at=%s\n'     "$MONITOR_ID" "$check_id" "$kind" "$duration_ms" "$completed_at"
+}
+
 assert_checker_execution_events() {
   local logs
   local claimed_line
@@ -347,6 +422,7 @@ assert_monitor_get
 # Prove the real cross-runtime execution path:
 # Go claim -> Rust Checker -> production private-address policy -> Go result -> PostgreSQL terminal CheckRun.
 wait_for_policy_rejected_check_run
+assert_latest_result_public_read
 assert_checker_execution_events
 
 compose exec -T db sh -lc \

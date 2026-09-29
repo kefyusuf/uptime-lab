@@ -37,6 +37,7 @@ migrated="$state_dir/migrated"
 product="$state_dir/product"
 probe="$state_dir/probe"
 check_run_id="018f22d3-1d6a-7cc0-a37b-46fc3fafdcb3"
+completed_at="2026-09-24T22:00:07.123456Z"
 
 if [[ -n "${FAIL_ON_PATTERN:-}" && "$joined" == *"$FAIL_ON_PATTERN"* ]]; then
   exit 42
@@ -82,6 +83,28 @@ if [[ "$joined" == *"exec -T api wget"* && "$joined" == *"--post-data="* && "$jo
   exit 0
 fi
 
+if [[ "$joined" == *"exec -T api wget"* && "$joined" == *"/monitors/018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2/latest-result"* ]]; then
+  [[ -f "$product" ]] || exit 49
+  case "${FAKE_LATEST_RESULT_MODE:-valid}" in
+    valid)
+      printf '{"checkId":"%s","resultKind":"policy_rejected","durationMs":7,"completedAt":"%s"}\n'         "$check_run_id" "$completed_at"
+      ;;
+    wrong-check-id)
+      printf '{"checkId":"018f22d3-1d6a-7cc0-a37b-46fc3fafdcb4","resultKind":"policy_rejected","durationMs":7,"completedAt":"%s"}\n'         "$completed_at"
+      ;;
+    exposes-http-status)
+      printf '{"checkId":"%s","resultKind":"policy_rejected","httpStatus":403,"durationMs":7,"completedAt":"%s"}\n'         "$check_run_id" "$completed_at"
+      ;;
+    invalid-completed-at)
+      printf '{"checkId":"%s","resultKind":"policy_rejected","durationMs":7,"completedAt":"not-a-timestamp"}\n'         "$check_run_id"
+      ;;
+    *)
+      exit 50
+      ;;
+  esac
+  exit 0
+fi
+
 if [[ "$joined" == *"exec -T api wget"* && "$joined" == *"/monitors/018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2"* ]]; then
   if [[ -f "$product" ]]; then
     printf '{"id":"018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2","targetUrl":"http://web/","createdAt":"2026-09-24T22:00:00.123456Z"}\n'
@@ -118,6 +141,14 @@ if [[ "$joined" == *"logs --no-color checker"* ]]; then
   printf 'checker-1 | event=check_claimed check_id=%s monitor_id=018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2\n' "$check_run_id"
   printf 'checker-1 | event=probe_completed check_id=%s monitor_id=018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2 result_kind=policy_rejected duration_ms=7\n' "$check_run_id"
   printf 'checker-1 | event=result_delivered check_id=%s monitor_id=018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2 result_kind=policy_rejected duration_ms=7\n' "$check_run_id"
+  exit 0
+fi
+
+if [[ "$joined" == *"psql"* && "$joined" == *"-Atc"* && "$joined" == *"::timestamptz IS NOT NULL"* ]]; then
+  if [[ "$joined" == *"not-a-timestamp"* ]]; then
+    exit 51
+  fi
+  printf 't\n'
   exit 0
 fi
 
@@ -190,6 +221,8 @@ case_success_path() {
   grep -Fq "goose_db_version" "$DOCKER_LOG" || return 1
   grep -Fq -- '--post-data={"targetUrl":"http://web/"}' "$DOCKER_LOG" || return 1
   grep -Fq '/monitors/018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2' "$DOCKER_LOG" || return 1
+  grep -Fq '/monitors/018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2/latest-result' "$DOCKER_LOG" || return 1
+  grep -Fq "::timestamptz IS NOT NULL" "$DOCKER_LOG" || return 1
   grep -Fq 'CREATE TABLE public.__uptime_lab_local_dev_probe' "$DOCKER_LOG" || return 1
   grep -Fq 'FROM monitoring.check_runs' "$DOCKER_LOG" || return 1
   grep -Fq 'completed_at IS NULL' "$DOCKER_LOG" || return 1
@@ -197,19 +230,21 @@ case_success_path() {
   grep -Fq 'logs --no-color checker' "$DOCKER_LOG" || return 1
   grep -Fq 'down -v --remove-orphans' "$DOCKER_LOG" || return 1
 
-  local start_line migrate_line wait_line post_line execution_line logs_line
+  local start_line migrate_line wait_line post_line execution_line latest_line logs_line
   start_line="$(first_line 'up -d db api')"
   migrate_line="$(first_line 'exec -T api /usr/local/bin/uptime-lab-migrate up')"
   wait_line="$(first_line 'up -d --wait --wait-timeout 60')"
   post_line="$(first_line '--post-data={"targetUrl":"http://web/"}')"
   execution_line="$(first_line 'FROM monitoring.check_runs')"
+  latest_line="$(first_line '/monitors/018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2/latest-result')"
   logs_line="$(first_line 'logs --no-color checker')"
 
   (( start_line < migrate_line )) || return 1
   (( migrate_line < wait_line )) || return 1
   (( wait_line < post_line )) || return 1
   (( post_line < execution_line )) || return 1
-  (( execution_line < logs_line )) || return 1
+  (( execution_line < latest_line )) || return 1
+  (( latest_line < logs_line )) || return 1
 }
 
 case_old_compose() {
@@ -239,6 +274,36 @@ case_failure_cleanup() {
 
   grep -Fq 'build' "$DOCKER_LOG" || return 1
   grep -Fq 'down -v --remove-orphans' "$DOCKER_LOG" || return 1
+}
+
+case_latest_result_wrong_check_id() {
+  reset_state
+
+  if DOCKER_LOG="$DOCKER_LOG"     FAKE_STATE_DIR="$FAKE_STATE_DIR"     DOCKER_BIN="$FAKE_DOCKER"     FAKE_LATEST_RESULT_MODE=wrong-check-id     "$SMOKE" >/dev/null 2>&1; then
+    return 1
+  fi
+
+  grep -Fq '/latest-result' "$DOCKER_LOG" || return 1
+}
+
+case_latest_result_exposes_http_status() {
+  reset_state
+
+  if DOCKER_LOG="$DOCKER_LOG"     FAKE_STATE_DIR="$FAKE_STATE_DIR"     DOCKER_BIN="$FAKE_DOCKER"     FAKE_LATEST_RESULT_MODE=exposes-http-status     "$SMOKE" >/dev/null 2>&1; then
+    return 1
+  fi
+
+  grep -Fq '/latest-result' "$DOCKER_LOG" || return 1
+}
+
+case_latest_result_invalid_completed_at() {
+  reset_state
+
+  if DOCKER_LOG="$DOCKER_LOG"     FAKE_STATE_DIR="$FAKE_STATE_DIR"     DOCKER_BIN="$FAKE_DOCKER"     FAKE_LATEST_RESULT_MODE=invalid-completed-at     "$SMOKE" >/dev/null 2>&1; then
+    return 1
+  fi
+
+  grep -Fq '/latest-result' "$DOCKER_LOG" || return 1
 }
 
 case_migration_failure_cleanup() {
@@ -274,6 +339,24 @@ else
   fail "build failure triggers cleanup"
 fi
 
+if case_latest_result_wrong_check_id; then
+  pass "latest-result rejects wrong check id"
+else
+  fail "latest-result rejects wrong check id"
+fi
+
+if case_latest_result_exposes_http_status; then
+  pass "latest-result rejects forbidden httpStatus"
+else
+  fail "latest-result rejects forbidden httpStatus"
+fi
+
+if case_latest_result_invalid_completed_at; then
+  pass "latest-result rejects invalid completedAt"
+else
+  fail "latest-result rejects invalid completedAt"
+fi
+
 if case_migration_failure_cleanup; then
   pass "migration failure triggers cleanup"
 else
@@ -281,5 +364,5 @@ else
 fi
 
 printf '\nLocal-dev smoke tests: %d passed, %d failed\n' "$PASS" "$FAIL"
-test "$PASS" -eq 4
+test "$PASS" -eq 7
 test "$FAIL" -eq 0
