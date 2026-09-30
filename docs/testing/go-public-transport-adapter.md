@@ -23,7 +23,7 @@ GET /readyz
 
 No application host ports are published. A live public-contract handler inside the Compose network is not a public-deployment decision.
 
-The internal Checker contract is implemented as a separate contract and adapter surface documented in [single-checker-execution-slice.md](single-checker-execution-slice.md). Rust execution does not add public endpoints by itself; the latest-result route is a Go-owned public read of already-durable terminal CheckRun truth.
+The internal Checker contract is implemented. It remains a separate contract and adapter surface documented in [single-checker-execution-slice.md](single-checker-execution-slice.md). Rust execution does not add public endpoints by itself; the latest-result route is a Go-owned public read of already-durable terminal CheckRun truth.
 
 ## Transport Boundary
 
