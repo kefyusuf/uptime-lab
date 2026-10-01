@@ -9,7 +9,7 @@ This document maps Go-owned Monitoring responsibilities to the cheapest meaningf
 | Responsibility | Primary evidence |
 |---|---|
 | Monitor/CheckID/result domain invariants | Go unit tests |
-| Register/Get/Claim/Submit orchestration | application unit tests |
+| Register/Get/GetLatest/Claim/Submit orchestration | application unit tests |
 | Dependency direction | Go architecture fitness |
 | Monitor + CheckRun schema/migrations | real PostgreSQL integration |
 | atomic claim/completion/reconciliation | real PostgreSQL integration |
@@ -36,7 +36,8 @@ Go tests protect:
 - due-before/deadline derivation from one Go server time;
 - no-work/error mapping;
 - idempotent duplicate and conflict semantics;
-- Go-owned `worker_timeout` behavior.
+- Go-owned `worker_timeout` behavior;
+- latest-terminal read shape validation and stable no-result/not-found/persistence mapping.
 
 Registration-time TargetURL validation is not execution-time SSRF evidence.
 
@@ -68,13 +69,14 @@ Real PostgreSQL evidence covers:
 - exact duplicate completion;
 - conflicting completion;
 - late result -> `worker_timeout`;
-- query cancellation/error mapping.
+- query cancellation/error mapping;
+- deterministic latest-terminal ordering, pending invisibility, and side-effect-free reads.
 
 Migration history fitness rejects modification/rename/deletion of already-landed SQL migrations.
 
 ## HTTP Runtime Tests
 
-Public adapter tests protect `POST /monitors` and `GET /monitors/{monitorId}`.
+Public adapter tests protect `POST /monitors`, `GET /monitors/{monitorId}`, and `GET /monitors/{monitorId}/latest-result`.
 
 Internal adapter tests protect:
 
@@ -85,7 +87,7 @@ PUT  /internal/checks/{checkId}/result
 
 They verify exact request/response classification, normalized result shapes, method/path behavior, and sanitized errors.
 
-`cmd/api` integration proves real production composition and terminal CheckRun persistence.
+`cmd/api` integration proves real production composition, terminal CheckRun persistence, `204` no-result behavior, and public reads of both `http_response` and Go-owned `worker_timeout` shapes.
 
 ## Race Verification
 
@@ -120,7 +122,7 @@ The real Docker smoke retains:
 It also proves:
 
 ~~~text
-Go -> Rust -> policy_rejected -> Go -> PostgreSQL
+Go -> Rust -> policy_rejected -> Go -> PostgreSQL -> public latest-result read
 ~~~
 
 Detailed durable/log assertions belong to [single-checker-execution-slice.md](single-checker-execution-slice.md).
@@ -128,7 +130,7 @@ Detailed durable/log assertions belong to [single-checker-execution-slice.md](si
 The fake-Docker control-flow suite remains:
 
 ~~~text
-Local-dev smoke tests: 4 passed, 0 failed
+Local-dev smoke tests: 7 passed, 0 failed
 ~~~
 
 ## Vulnerability Scanning
@@ -168,7 +170,7 @@ For the complete Go/Rust/Docker evidence matrix, see [single-checker-execution-s
 
 Still intentionally absent:
 
-- public CheckRun/status/history behavior;
+- full CheckRun history and derived availability/status behavior;
 - mutable Monitor lifecycle;
 - multi-worker coordination;
 - React UI flows;

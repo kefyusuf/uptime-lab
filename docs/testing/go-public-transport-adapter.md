@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This guide owns verification of the live public Monitor create/read transport. It does not treat the public adapter as the owner of Checker execution semantics.
+This guide owns verification of the live public Monitoring transport: Monitor create/read plus the latest terminal execution-result read. It does not treat the public adapter as the owner of Checker execution semantics.
 
 The authoritative public contract is `contracts/openapi/public.yaml`.
 
@@ -11,6 +11,7 @@ The authoritative public contract is `contracts/openapi/public.yaml`.
 ~~~text
 POST /monitors
 GET  /monitors/{monitorId}
+GET  /monitors/{monitorId}/latest-result
 ~~~
 
 Operational health is separate:
@@ -22,7 +23,7 @@ GET /readyz
 
 No application host ports are published. A live public-contract handler inside the Compose network is not a public-deployment decision.
 
-The internal Checker contract is implemented. It is a separate contract and adapter surface documented in [single-checker-execution-slice.md](single-checker-execution-slice.md). The Rust Checker is also implemented; neither expands the public OpenAPI surface.
+The internal Checker contract is implemented. It remains a separate contract and adapter surface documented in [single-checker-execution-slice.md](single-checker-execution-slice.md). Rust execution does not add public endpoints by itself; the latest-result route is a Go-owned public read of already-durable terminal CheckRun truth.
 
 ## Transport Boundary
 
@@ -47,6 +48,12 @@ Malformed media/syntax/shape/domain input is classified deterministically. Persi
 ### GET /monitors/{monitorId}
 
 Tests protect existing/malformed/missing/error cases, explicit method handling, and unknown/trailing/nested paths.
+
+### GET /monitors/{monitorId}/latest-result
+
+Tests protect terminal-only reads, pending invisibility, empty `204` for a known Monitor without a terminal result, `404` for a missing Monitor, exact result-field sets, GET-only method handling, and sanitized failures. Classified failures omit `httpStatus`; `worker_timeout` omits both `httpStatus` and `durationMs`.
+
+The route exposes execution facts only. No availability/up/down policy is derived in the transport.
 
 ## Production Identity and Time
 
@@ -93,9 +100,9 @@ Before migration, API is live but unready and Goose metadata is absent. After mi
 
 ## Real Docker Public-Transport Evidence
 
-The canonical smoke still proves explicit migration bootstrap, real container-local Monitor POST/GET, normal restart persistence, destructive reset, and re-migration.
+The canonical smoke still proves explicit migration bootstrap, real container-local Monitor POST/GET, latest-result readback, normal restart persistence, destructive reset, and re-migration.
 
-The same smoke continues into real Checker execution, but CheckRun assertions are owned by [single-checker-execution-slice.md](single-checker-execution-slice.md).
+The same smoke continues into real Checker execution and binds the public latest-result payload to the exact persisted terminal CheckRun; detailed cross-runtime assertions are owned by [single-checker-execution-slice.md](single-checker-execution-slice.md).
 
 ## Verification Commands
 
@@ -122,7 +129,7 @@ The aggregate remains `CI / gate`.
 
 This public transport still does not add:
 
-- public CheckRun/status/history;
+- full CheckRun history or derived availability/status;
 - list/search/update/delete/enable/disable Monitor operations;
 - mutable Monitor lifecycle;
 - React;

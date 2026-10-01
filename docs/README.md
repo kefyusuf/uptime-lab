@@ -22,9 +22,9 @@ Design/spec/plan documents preserve the decision history for the phase in which 
 - Single-Checker execution verification: [testing/single-checker-execution-slice.md](testing/single-checker-execution-slice.md)
 - Canonical local runtime: [devops/local-development.md](devops/local-development.md)
 
-The Go runtime serves the public create/read Monitoring contract and the internal Checker claim/result contract. Go owns due-work scheduling truth and durable `monitoring.check_runs`; Rust owns bounded probe execution and never accesses PostgreSQL. The canonical Docker smoke proves the real Go -> Rust -> `policy_rejected` -> Go -> PostgreSQL path.
+The Go runtime serves public Monitor create/read plus `GET /monitors/{monitorId}/latest-result`, alongside the internal Checker claim/result contract. Go owns due-work scheduling truth and durable `monitoring.check_runs`; Rust owns bounded probe execution and never accesses PostgreSQL. The canonical Docker smoke proves the real Go -> Rust -> `policy_rejected` -> Go -> PostgreSQL -> public latest-result read path.
 
-This does not imply public production readiness. Public CheckRun/status/history, mutable Monitor lifecycle, React, authentication/authorization, CORS/rate limiting, ingress/TLS, and public network exposure remain deferred.
+The latest-result read is terminal-only: pending work is invisible, `204` means a known Monitor has no terminal result yet, and `resultKind` remains an execution fact rather than an up/down verdict. Full CheckRun history, derived availability/status, mutable Monitor lifecycle, React, authentication/authorization, CORS/rate limiting, ingress/TLS, and public network exposure remain deferred.
 
 ## Architecture
 

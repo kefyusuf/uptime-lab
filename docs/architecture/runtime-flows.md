@@ -2,7 +2,7 @@
 
 **Architecture state:** Committed
 
-**Implementation state:** Public Monitor create/read and the internal Go/Rust execution loop are implemented. React/public network exposure and public CheckRun/status/history remain deferred.
+**Implementation state:** Public Monitor create/read, latest terminal execution-result read, and the internal Go/Rust execution loop are implemented. React/public network exposure, full CheckRun history, and derived availability/status remain deferred.
 
 ## Purpose
 
@@ -57,7 +57,7 @@ sequenceDiagram
 
 Go owns due-work and durable identity. Rust probes a claimed CheckID once and submits only a normalized result. Rust never accesses PostgreSQL directly.
 
-The canonical Docker smoke proves the private `http://web/` target is rejected by production destination policy as `policy_rejected` and persisted as a terminal CheckRun.
+The canonical Docker smoke proves the private `http://web/` target is rejected by production destination policy as `policy_rejected`, persisted as a terminal CheckRun, and read back through the public latest-result route.
 
 ## Read Monitor
 
@@ -78,7 +78,28 @@ sequenceDiagram
     Go-->>Web: 200 Monitor
 ```
 
-The public route returns Monitor registration state only. No public CheckRun/status/history API exists.
+The Monitor route returns registration state only. Execution facts remain separate from the Monitor payload.
+
+## Read Latest Terminal Result
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Web as Future Web / container-local caller
+    participant Go as Go Control Plane
+    participant Monitoring as Monitoring Application
+    participant DB as PostgreSQL
+
+    User->>Web: Inspect latest execution fact
+    Web->>Go: GET /monitors/{monitorId}/latest-result
+    Go->>Monitoring: GetLatestCheckResult
+    Monitoring->>DB: SELECT latest terminal CheckRun
+    DB-->>Monitoring: terminal CheckRun or no terminal result
+    Monitoring-->>Go: latest execution fact / no-result
+    Go-->>Web: 200 latest result or 204
+```
+
+Only `completed_at IS NOT NULL` rows participate. Pending CheckRuns are invisible, including a newer pending run when an older terminal result exists. `resultKind` is an execution fact, not an up/down verdict. `worker_timeout` exposes neither `httpStatus` nor `durationMs`. Full history remains deferred.
 
 ## Failure Boundary
 

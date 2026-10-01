@@ -130,6 +130,106 @@ function assertObjectShape(schema, properties, required, label) {
   assertExactSet(schema.required, required, `${label}.required`);
 }
 
+function assertIntegerRange(schema, minimum, maximum, label) {
+  assert(isObject(schema), `${label} must be an object`);
+  assert(schema.type === 'integer', `${label}.type must be integer`);
+  assert(schema.minimum === minimum, `${label}.minimum must be ${minimum}`);
+  assert(schema.maximum === maximum, `${label}.maximum must be ${maximum}`);
+}
+
+function assertStringConst(schema, value, label) {
+  assert(isObject(schema), `${label} must be an object`);
+  assert(schema.type === 'string', `${label}.type must be string`);
+  assert(schema.const === value, `${label}.const must be ${value}`);
+}
+
+function assertStringEnum(schema, values, label) {
+  assert(isObject(schema), `${label} must be an object`);
+  assert(schema.type === 'string', `${label}.type must be string`);
+  assert(Array.isArray(schema.enum), `${label}.enum must be an array`);
+  assertExactSet(schema.enum, values, `${label}.enum`);
+}
+
+function assertOneOfRefs(schema, refs, label) {
+  assert(isObject(schema), `${label} must be an object`);
+  assertExactKeys(schema, ['oneOf'], label);
+  assert(Array.isArray(schema.oneOf), `${label}.oneOf must be an array`);
+  const actual = schema.oneOf.map((entry) => {
+    assert(isObject(entry) && typeof entry.$ref === 'string', `${label}.oneOf entries must be refs`);
+    return entry.$ref;
+  });
+  assertExactSet(actual, refs, `${label}.oneOf refs`);
+}
+
+function readJSONFixture(repositoryRoot, filename) {
+  const fixturePath = path.join(repositoryRoot, 'contracts', 'fixtures', 'public', filename);
+  assert(fs.existsSync(fixturePath), `public fixture ${filename} must exist`);
+  try {
+    return JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
+  } catch (error) {
+    fail(`public fixture ${filename} must be valid JSON: ${error.message}`);
+  }
+}
+
+function assertFixtureString(value, label) {
+  assert(typeof value === 'string' && value.length > 0, `${label} must be a non-empty string`);
+}
+
+function validateLatestResultFixtures(repositoryRoot) {
+  const fixtureDir = path.join(repositoryRoot, 'contracts', 'fixtures', 'public');
+  assert(fs.existsSync(fixtureDir), 'contracts/fixtures/public must exist');
+  assertExactSet(
+    fs.readdirSync(fixtureDir).filter((name) => name.endsWith('.json')),
+    [
+      'latest-result-failure.json',
+      'latest-result-http-response.json',
+      'latest-result-worker-timeout.json',
+    ],
+    'public fixture file set',
+  );
+
+  const httpResult = readJSONFixture(repositoryRoot, 'latest-result-http-response.json');
+  assertExactKeys(
+    httpResult,
+    ['checkId', 'resultKind', 'httpStatus', 'durationMs', 'completedAt'],
+    'latest-result-http-response fixture',
+  );
+  assertFixtureString(httpResult.checkId, 'latest-result-http-response.checkId');
+  assert(httpResult.resultKind === 'http_response', 'latest-result-http-response.resultKind must be http_response');
+  assert(Number.isInteger(httpResult.httpStatus) && httpResult.httpStatus >= 100 && httpResult.httpStatus <= 599,
+    'latest-result-http-response.httpStatus must be 100..599');
+  assert(Number.isInteger(httpResult.durationMs) && httpResult.durationMs >= 0 && httpResult.durationMs <= 20000,
+    'latest-result-http-response.durationMs must be 0..20000');
+  assertFixtureString(httpResult.completedAt, 'latest-result-http-response.completedAt');
+
+  const failure = readJSONFixture(repositoryRoot, 'latest-result-failure.json');
+  assertExactKeys(
+    failure,
+    ['checkId', 'resultKind', 'durationMs', 'completedAt'],
+    'latest-result-failure fixture',
+  );
+  assertFixtureString(failure.checkId, 'latest-result-failure.checkId');
+  assert(
+    ['dns_error', 'policy_rejected', 'timeout', 'connect_error', 'tls_error', 'protocol_error', 'internal_error']
+      .includes(failure.resultKind),
+    'latest-result-failure.resultKind must be a classified failure',
+  );
+  assert(Number.isInteger(failure.durationMs) && failure.durationMs >= 0 && failure.durationMs <= 20000,
+    'latest-result-failure.durationMs must be 0..20000');
+  assertFixtureString(failure.completedAt, 'latest-result-failure.completedAt');
+
+  const workerTimeout = readJSONFixture(repositoryRoot, 'latest-result-worker-timeout.json');
+  assertExactKeys(
+    workerTimeout,
+    ['checkId', 'resultKind', 'completedAt'],
+    'latest-result-worker-timeout fixture',
+  );
+  assertFixtureString(workerTimeout.checkId, 'latest-result-worker-timeout.checkId');
+  assert(workerTimeout.resultKind === 'worker_timeout',
+    'latest-result-worker-timeout.resultKind must be worker_timeout');
+  assertFixtureString(workerTimeout.completedAt, 'latest-result-worker-timeout.completedAt');
+}
+
 export function validatePublicContract(document, repositoryRoot = '.') {
   assert(isObject(document), 'document must be a JSON object');
 
@@ -144,31 +244,54 @@ export function validatePublicContract(document, repositoryRoot = '.') {
   assert(isObject(document.components.schemas), 'components.schemas must be an object');
   assertExactKeys(
     document.components.schemas,
-    ['CreateMonitorRequest', 'Monitor', 'Problem'],
+    [
+      'CreateMonitorRequest',
+      'LatestCheckResult',
+      'LatestFailureResult',
+      'LatestHTTPResponseResult',
+      'LatestWorkerTimeoutResult',
+      'Monitor',
+      'Problem',
+    ],
     'components.schemas',
   );
 
   assert(isObject(document.paths), 'paths must be an object');
   const publicPaths = Object.keys(document.paths).filter((key) => key.startsWith('/'));
-  assertExactSet(publicPaths, ['/monitors', '/monitors/{monitorId}'], 'public path set');
+  assertExactSet(
+    publicPaths,
+    ['/monitors', '/monitors/{monitorId}', '/monitors/{monitorId}/latest-result'],
+    'public path set',
+  );
 
   const createPath = document.paths['/monitors'];
   const getPath = document.paths['/monitors/{monitorId}'];
+  const latestResultPath = document.paths['/monitors/{monitorId}/latest-result'];
   assert(isObject(createPath), '/monitors path item must be an object');
   assert(isObject(getPath), '/monitors/{monitorId} path item must be an object');
+  assert(isObject(latestResultPath), '/monitors/{monitorId}/latest-result path item must be an object');
   assert(!own(createPath, 'servers'), '/monitors path item must not define servers');
   assert(!own(getPath, 'servers'), '/monitors/{monitorId} path item must not define servers');
+  assert(!own(latestResultPath, 'servers'), '/monitors/{monitorId}/latest-result path item must not define servers');
   assertExactSet(operationMethods(createPath), ['post'], '/monitors operations');
   assertExactSet(operationMethods(getPath), ['get'], '/monitors/{monitorId} operations');
+  assertExactSet(operationMethods(latestResultPath), ['get'], '/monitors/{monitorId}/latest-result operations');
 
   const register = createPath.post;
   const getMonitor = getPath.get;
+  const getLatestResult = latestResultPath.get;
   assert(isObject(register), 'POST /monitors must exist');
   assert(isObject(getMonitor), 'GET /monitors/{monitorId} must exist');
+  assert(isObject(getLatestResult), 'GET /monitors/{monitorId}/latest-result must exist');
   assert(register.operationId === 'registerMonitor', 'POST /monitors operationId must be registerMonitor');
   assert(getMonitor.operationId === 'getMonitor', 'GET /monitors/{monitorId} operationId must be getMonitor');
+  assert(
+    getLatestResult.operationId === 'getLatestCheckResult',
+    'GET /monitors/{monitorId}/latest-result operationId must be getLatestCheckResult',
+  );
   assertNoOperationSecurityOrServers(register, 'POST /monitors');
   assertNoOperationSecurityOrServers(getMonitor, 'GET /monitors/{monitorId}');
+  assertNoOperationSecurityOrServers(getLatestResult, 'GET /monitors/{monitorId}/latest-result');
 
   assert(isObject(register.requestBody), 'POST /monitors requestBody must exist');
   assert(register.requestBody.required === true, 'POST /monitors requestBody.required must be true');
@@ -221,6 +344,43 @@ export function validatePublicContract(document, repositoryRoot = '.') {
   );
   assertProblemResponses(document, getMonitor, ['400', '404', '500'], 'GET /monitors/{monitorId}');
 
+  assert(
+    Array.isArray(getLatestResult.parameters),
+    'GET /monitors/{monitorId}/latest-result parameters must be an array',
+  );
+  assert(
+    getLatestResult.parameters.length === 1,
+    'GET /monitors/{monitorId}/latest-result must define exactly one parameter',
+  );
+  const latestMonitorId = getLatestResult.parameters[0];
+  assert(isObject(latestMonitorId), 'latest-result monitorId parameter must be an object');
+  assert(latestMonitorId.name === 'monitorId', 'latest-result path parameter name must be monitorId');
+  assert(latestMonitorId.in === 'path', 'latest-result monitorId parameter must be in path');
+  assert(latestMonitorId.required === true, 'latest-result monitorId path parameter must be required');
+  assertStringFormat(latestMonitorId.schema, 'uuid', 'latest-result monitorId parameter schema');
+
+  assertExactKeys(
+    getLatestResult.responses,
+    ['200', '204', '400', '404', '500'],
+    'GET /monitors/{monitorId}/latest-result responses',
+  );
+  assertResponseContent(
+    document,
+    getLatestResult.responses['200'],
+    'application/json',
+    'LatestCheckResult',
+    'GET /monitors/{monitorId}/latest-result 200',
+  );
+  const noResult = getLatestResult.responses['204'];
+  assert(isObject(noResult), 'GET /monitors/{monitorId}/latest-result 204 response must be an object');
+  assert(!own(noResult, 'content'), 'GET /monitors/{monitorId}/latest-result 204 content must be absent');
+  assertProblemResponses(
+    document,
+    getLatestResult,
+    ['400', '404', '500'],
+    'GET /monitors/{monitorId}/latest-result',
+  );
+
   const createSchema = document.components.schemas.CreateMonitorRequest;
   assertObjectShape(createSchema, ['targetUrl'], ['targetUrl'], 'CreateMonitorRequest');
   assertStringWithoutFormat(createSchema.properties.targetUrl, 'CreateMonitorRequest.targetUrl');
@@ -242,6 +402,65 @@ export function validatePublicContract(document, repositoryRoot = '.') {
     'Monitor.id must not promise UUID v7',
   );
 
+  const latestResultSchema = document.components.schemas.LatestCheckResult;
+  assertOneOfRefs(
+    latestResultSchema,
+    [
+      '#/components/schemas/LatestHTTPResponseResult',
+      '#/components/schemas/LatestFailureResult',
+      '#/components/schemas/LatestWorkerTimeoutResult',
+    ],
+    'LatestCheckResult',
+  );
+
+  const latestHTTP = document.components.schemas.LatestHTTPResponseResult;
+  assertObjectShape(
+    latestHTTP,
+    ['checkId', 'resultKind', 'httpStatus', 'durationMs', 'completedAt'],
+    ['checkId', 'resultKind', 'httpStatus', 'durationMs', 'completedAt'],
+    'LatestHTTPResponseResult',
+  );
+  assertStringFormat(latestHTTP.properties.checkId, 'uuid', 'LatestHTTPResponseResult.checkId');
+  assertStringConst(latestHTTP.properties.resultKind, 'http_response', 'LatestHTTPResponseResult.resultKind');
+  assertIntegerRange(latestHTTP.properties.httpStatus, 100, 599, 'LatestHTTPResponseResult.httpStatus');
+  assertIntegerRange(latestHTTP.properties.durationMs, 0, 20000, 'LatestHTTPResponseResult.durationMs');
+  assertStringFormat(latestHTTP.properties.completedAt, 'date-time', 'LatestHTTPResponseResult.completedAt');
+
+  const latestFailure = document.components.schemas.LatestFailureResult;
+  assertObjectShape(
+    latestFailure,
+    ['checkId', 'resultKind', 'durationMs', 'completedAt'],
+    ['checkId', 'resultKind', 'durationMs', 'completedAt'],
+    'LatestFailureResult',
+  );
+  assertStringFormat(latestFailure.properties.checkId, 'uuid', 'LatestFailureResult.checkId');
+  assertStringEnum(
+    latestFailure.properties.resultKind,
+    ['dns_error', 'policy_rejected', 'timeout', 'connect_error', 'tls_error', 'protocol_error', 'internal_error'],
+    'LatestFailureResult.resultKind',
+  );
+  assertIntegerRange(latestFailure.properties.durationMs, 0, 20000, 'LatestFailureResult.durationMs');
+  assertStringFormat(latestFailure.properties.completedAt, 'date-time', 'LatestFailureResult.completedAt');
+
+  const latestWorkerTimeout = document.components.schemas.LatestWorkerTimeoutResult;
+  assertObjectShape(
+    latestWorkerTimeout,
+    ['checkId', 'resultKind', 'completedAt'],
+    ['checkId', 'resultKind', 'completedAt'],
+    'LatestWorkerTimeoutResult',
+  );
+  assertStringFormat(latestWorkerTimeout.properties.checkId, 'uuid', 'LatestWorkerTimeoutResult.checkId');
+  assertStringConst(
+    latestWorkerTimeout.properties.resultKind,
+    'worker_timeout',
+    'LatestWorkerTimeoutResult.resultKind',
+  );
+  assertStringFormat(
+    latestWorkerTimeout.properties.completedAt,
+    'date-time',
+    'LatestWorkerTimeoutResult.completedAt',
+  );
+
   const problemSchema = document.components.schemas.Problem;
   assert(isObject(problemSchema), 'Problem must be an object');
   assert(problemSchema.type === 'object', 'Problem.type must be object');
@@ -259,6 +478,7 @@ export function validatePublicContract(document, repositoryRoot = '.') {
   assert(problemSchema.properties.detail?.type === 'string', 'Problem.detail.type must be string');
   assertStringFormat(problemSchema.properties.instance, 'uri-reference', 'Problem.instance');
 
+  validateLatestResultFixtures(repositoryRoot);
 }
 
 function main() {

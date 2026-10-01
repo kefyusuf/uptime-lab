@@ -96,6 +96,7 @@ Public Monitor transport inside the container network:
 ~~~text
 POST /monitors
 GET  /monitors/{monitorId}
+GET  /monitors/{monitorId}/latest-result
 ~~~
 
 Internal Checker transport:
@@ -237,11 +238,12 @@ Go claim
 -> policy_rejected
 -> Go result submission
 -> PostgreSQL terminal CheckRun
+-> GET /monitors/{monitorId}/latest-result
 ~~~
 
 The target resolves to the private Compose network. Production policy must reject it; there is no test-only private-network bypass or public-internet dependency.
 
-The smoke bounded-polls PostgreSQL, verifies one terminal `policy_rejected` CheckRun and zero pending rows, and correlates the same CheckID/MonitorID with Checker events:
+The smoke bounded-polls PostgreSQL, verifies one terminal `policy_rejected` CheckRun and zero pending rows, then reads the same terminal fact through `GET /monitors/{monitorId}/latest-result`. The public payload must match the persisted CheckID and duration, omit `httpStatus`, and keep `resultKind = policy_rejected`; pending work remains invisible. The same CheckID/MonitorID is also correlated with Checker events:
 
 ~~~text
 check_claimed
@@ -280,8 +282,8 @@ Use a distinct `COMPOSE_PROJECT_NAME`.
 ## Current Limitations
 
 - Web remains a placeholder; React is not implemented.
-- Public Monitor surface remains create/read only.
-- No public CheckRun/status/history endpoint exists.
+- Public Monitoring surface is limited to Monitor create/read plus latest terminal result read.
+- Full CheckRun history and derived availability/status remain unavailable.
 - No mutable Monitor lifecycle exists.
 - Only one logical Checker process is supported.
 - Production probe execution rejects private/non-public destinations.

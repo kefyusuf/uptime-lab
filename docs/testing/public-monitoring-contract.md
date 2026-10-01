@@ -17,9 +17,10 @@ The milestone contract is OpenAPI 3.1.2 with `info.version: 0.1.0` and exactly:
 ~~~text
 POST /monitors
 GET  /monitors/{monitorId}
+GET  /monitors/{monitorId}/latest-result
 ~~~
 
-The Go runtime serves these two public operations through the Monitoring HTTP adapter in addition to `GET /livez` and schema-aware `GET /readyz`. Canonical Compose publishes no application host ports, so this does not imply public network deployment. The internal Checker contract is now implemented separately at `contracts/openapi/internal.yaml`; it does not extend the public contract.
+The Go runtime serves these three public operations through the Monitoring HTTP adapter in addition to `GET /livez` and schema-aware `GET /readyz`. The latest-result operation is terminal-only: `204` means a known Monitor has no terminal result, pending CheckRuns are not exposed, and the result vocabulary is an execution fact rather than an availability verdict. Canonical Compose publishes no application host ports, so this does not imply public network deployment. The internal Checker contract remains separate at `contracts/openapi/internal.yaml`.
 
 ## Verification Layers
 
@@ -27,7 +28,7 @@ Verification is deliberately layered:
 
 1. Redocly CLI validates OpenAPI syntax/spec conformance and bundles references.
 2. `scripts/ci/check-public-contract.mjs` owns repository-specific semantic invariants over the bundled JSON.
-3. `scripts/ci/test-check-public-contract.mjs` exercises one canonical positive fixture and the negative invariant matrix.
+3. `scripts/ci/test-check-public-contract.mjs` exercises the canonical contract, exactly three public latest-result fixtures, and the negative invariant matrix.
 4. `scripts/ci/detect-public-contract-changes.sh` decides whether the path-aware CI job must run.
 5. `CI / gate` accepts the conditional job only when it is either successful or legitimately skipped.
 
@@ -91,7 +92,9 @@ The repository-owned checker mechanically protects the landed contract decisions
 - exact operation IDs;
 - request/response media and status sets;
 - `Location` header shape;
-- exact request, Monitor, and Problem schema surfaces;
+- exact request, Monitor, Problem, and latest-result variant schema surfaces;
+- exact `200/204/400/404/500` latest-result response semantics, including an empty `204`;
+- absence of `httpStatus` on classified failures and both `httpStatus`/`durationMs` on `worker_timeout`;
 - explicit absence of an RFC 3986 `uri` format on `targetUrl`, plus locked UUID, date-time, and URI-reference formats;
 - absence of servers and security schemes;
 - absence of a public UUID-version guarantee.
@@ -118,7 +121,7 @@ Those concerns require separate runtime/product gates.
 
 The public contract is **defined and served**, but the evidence layers remain intentionally separate.
 
-A green `public-contract` job means the source artifact is valid and matches repository-owned semantic invariants. Runtime conformance is proven by Monitoring HTTP adapter tests, real PostgreSQL production-composition integration, schema-aware readiness evidence, and canonical Docker POST/GET smoke.
+A green `public-contract` job means the source artifact is valid and matches repository-owned semantic invariants. Runtime conformance is proven by Monitoring HTTP adapter tests, real PostgreSQL production-composition integration, schema-aware readiness evidence, and canonical Docker POST/GET/latest-result smoke.
 
 This separation keeps `contracts/openapi/public.yaml` authoritative without making the OpenAPI parser responsible for Go routing or persistence behavior.
 

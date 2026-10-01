@@ -20,7 +20,7 @@ The browser never accesses PostgreSQL directly.
 
 The Go Control Plane is implemented and owns:
 
-- public Monitor create/read semantics;
+- public Monitor create/read and latest terminal result semantics;
 - `CheckID` and normalized result semantics;
 - due-work selection and fixed cadence;
 - CheckRun deadlines and `worker_timeout`;
@@ -96,7 +96,7 @@ flowchart LR
     DB[(PostgreSQL)]
     Target["External HTTP/HTTPS target"]
 
-    Caller -->|POST /monitors + GET /monitors/{monitorId}| Go
+    Caller -->|POST/GET Monitor + GET latest-result| Go
     Checker -->|claim/result internal contract| Go
     Go -->|owned persistence| DB
     Checker -->|validated bounded probe| Target
@@ -131,13 +131,14 @@ GET  /livez
 GET  /readyz
 POST /monitors
 GET  /monitors/{monitorId}
+GET  /monitors/{monitorId}/latest-result
 POST /internal/checks/claim
 PUT  /internal/checks/{checkId}/result
 ~~~
 
 `/livez` is database-independent. `/readyz` performs bounded PostgreSQL connectivity plus read-only exact migration compatibility checks.
 
-There is no public CheckRun/status/history endpoint.
+The public latest-result endpoint exposes one latest terminal execution fact only. Full CheckRun history and derived availability/status remain deferred.
 
 ## Ownership Rules
 

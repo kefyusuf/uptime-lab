@@ -24,10 +24,15 @@ type getMonitor interface {
 	Execute(context.Context, domain.MonitorID) (domain.Monitor, error)
 }
 
+type getLatestCheckResult interface {
+	Execute(context.Context, domain.MonitorID) (application.LatestCheckResult, error)
+}
+
 // Handler adapts the public Monitoring HTTP contract to the existing application use cases.
 type Handler struct {
-	register registerMonitor
-	get      getMonitor
+	register  registerMonitor
+	get       getMonitor
+	getLatest getLatestCheckResult
 }
 
 // NewHandler constructs the isolated public Monitoring HTTP adapter.
@@ -38,10 +43,26 @@ func NewHandler(register registerMonitor, get getMonitor) *Handler {
 	}
 }
 
-// ServeHTTP recognizes only the two contracted Monitoring resource shapes.
+// NewHandlerWithLatestResult adds the isolated latest-terminal-result capability.
+func NewHandlerWithLatestResult(
+	register registerMonitor,
+	get getMonitor,
+	getLatest getLatestCheckResult,
+) *Handler {
+	handler := NewHandler(register, get)
+	handler.getLatest = getLatest
+	return handler
+}
+
+// ServeHTTP recognizes only configured contracted Monitoring resource shapes.
 func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	if request.URL.Path == monitorsPath {
 		handler.serveCollection(writer, request)
+		return
+	}
+
+	if rawID, ok := latestResultMonitorIDPathSegment(request.URL.Path); ok && handler.getLatest != nil {
+		handler.serveLatestResult(writer, request, rawID)
 		return
 	}
 
@@ -127,6 +148,54 @@ func (handler *Handler) serveResource(writer http.ResponseWriter, request *http.
 	writeMonitor(writer, http.StatusOK, monitor, "")
 }
 
+func (handler *Handler) serveLatestResult(
+	writer http.ResponseWriter,
+	request *http.Request,
+	rawID string,
+) {
+	if request.Method != http.MethodGet {
+		methodNotAllowed(writer, http.MethodGet)
+		return
+	}
+
+	id, err := domain.ParseMonitorID(rawID)
+	if err != nil {
+		writeProblem(writer, http.StatusBadRequest, "monitorId is not a valid UUID.")
+		return
+	}
+
+	result, err := handler.getLatest.Execute(request.Context(), id)
+	if err != nil {
+		switch {
+		case errors.Is(err, application.ErrNoTerminalCheckResult):
+			writer.WriteHeader(http.StatusNoContent)
+		case errors.Is(err, application.ErrMonitorNotFound):
+			writeProblem(writer, http.StatusNotFound, "The monitor was not found.")
+		default:
+			writeProblem(writer, http.StatusInternalServerError, "The server could not complete the request.")
+		}
+		return
+	}
+
+	writeLatestCheckResult(writer, result)
+}
+
+func latestResultMonitorIDPathSegment(path string) (string, bool) {
+	const (
+		prefix = monitorsPath + "/"
+		suffix = "/latest-result"
+	)
+	if !strings.HasPrefix(path, prefix) || !strings.HasSuffix(path, suffix) {
+		return "", false
+	}
+
+	segment := strings.TrimSuffix(strings.TrimPrefix(path, prefix), suffix)
+	if segment == "" || strings.Contains(segment, "/") {
+		return "", false
+	}
+	return segment, true
+}
+
 func monitorIDPathSegment(path string) (string, bool) {
 	const prefix = monitorsPath + "/"
 	if !strings.HasPrefix(path, prefix) {
@@ -166,6 +235,14 @@ type monitorResponse struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
+type latestCheckResultResponse struct {
+	CheckID     string                 `json:"checkId"`
+	ResultKind  domain.CheckResultKind `json:"resultKind"`
+	HTTPStatus  *int                   `json:"httpStatus,omitempty"`
+	DurationMS  *int64                 `json:"durationMs,omitempty"`
+	CompletedAt time.Time              `json:"completedAt"`
+}
+
 type problemResponse struct {
 	Type   string `json:"type"`
 	Title  string `json:"title"`
@@ -189,6 +266,34 @@ func writeMonitor(writer http.ResponseWriter, status int, monitor domain.Monitor
 		writer.Header().Set("Location", location)
 	}
 	writer.WriteHeader(status)
+	_, _ = writer.Write(payload)
+}
+
+func writeLatestCheckResult(writer http.ResponseWriter, result application.LatestCheckResult) {
+	var httpStatus *int
+	if value, ok := result.HTTPStatus(); ok {
+		httpStatus = &value
+	}
+
+	var durationMS *int64
+	if value, ok := result.DurationMS(); ok {
+		durationMS = &value
+	}
+
+	payload, err := json.Marshal(latestCheckResultResponse{
+		CheckID:     result.CheckID().String(),
+		ResultKind:  result.ResultKind(),
+		HTTPStatus:  httpStatus,
+		DurationMS:  durationMS,
+		CompletedAt: result.CompletedAt(),
+	})
+	if err != nil {
+		writeProblem(writer, http.StatusInternalServerError, "The server could not complete the request.")
+		return
+	}
+
+	writer.Header().Set("Content-Type", "application/json")
+	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write(payload)
 }
 

@@ -6,6 +6,9 @@ var (
 	// ErrMonitorNotFound is the stable application-level not-found result.
 	ErrMonitorNotFound = errors.New("monitor not found")
 
+	// ErrNoTerminalCheckResult is the stable application-level known-Monitor-without-result outcome.
+	ErrNoTerminalCheckResult = errors.New("no terminal check result")
+
 	// ErrNoDueCheck is the stable application-level no-work result.
 	ErrNoDueCheck = errors.New("no due check")
 

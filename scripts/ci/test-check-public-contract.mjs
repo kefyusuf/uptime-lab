@@ -24,6 +24,29 @@ function problemResponse() {
   };
 }
 
+function canonicalPublicFixtures() {
+  return {
+    'latest-result-http-response.json': {
+      checkId: '7d9b2eb0-52bb-4dd7-8934-c5ce30d5c675',
+      resultKind: 'http_response',
+      httpStatus: 204,
+      durationMs: 123,
+      completedAt: '2026-09-29T12:00:00Z',
+    },
+    'latest-result-failure.json': {
+      checkId: 'aa29443e-c597-4e7b-9202-a4762e0e04c0',
+      resultKind: 'policy_rejected',
+      durationMs: 0,
+      completedAt: '2026-09-29T12:00:01Z',
+    },
+    'latest-result-worker-timeout.json': {
+      checkId: '6d1276e6-f3f7-4897-91a7-20673a5cc277',
+      resultKind: 'worker_timeout',
+      completedAt: '2026-09-29T12:00:20Z',
+    },
+  };
+}
+
 function validDocument() {
   return {
     openapi: '3.1.2',
@@ -90,6 +113,33 @@ function validDocument() {
           },
         },
       },
+      '/monitors/{monitorId}/latest-result': {
+        get: {
+          operationId: 'getLatestCheckResult',
+          parameters: [
+            {
+              name: 'monitorId',
+              in: 'path',
+              required: true,
+              schema: { type: 'string', format: 'uuid' },
+            },
+          ],
+          responses: {
+            '200': {
+              description: 'Latest result.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/LatestCheckResult' },
+                },
+              },
+            },
+            '204': { description: 'No terminal result.' },
+            '400': problemResponse(),
+            '404': problemResponse(),
+            '500': problemResponse(),
+          },
+        },
+      },
     },
     components: {
       schemas: {
@@ -115,6 +165,57 @@ function validDocument() {
             createdAt: { type: 'string', format: 'date-time' },
           },
         },
+        LatestCheckResult: {
+          oneOf: [
+            { $ref: '#/components/schemas/LatestHTTPResponseResult' },
+            { $ref: '#/components/schemas/LatestFailureResult' },
+            { $ref: '#/components/schemas/LatestWorkerTimeoutResult' },
+          ],
+        },
+        LatestHTTPResponseResult: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['checkId', 'resultKind', 'httpStatus', 'durationMs', 'completedAt'],
+          properties: {
+            checkId: { type: 'string', format: 'uuid' },
+            resultKind: { type: 'string', const: 'http_response' },
+            httpStatus: { type: 'integer', minimum: 100, maximum: 599 },
+            durationMs: { type: 'integer', minimum: 0, maximum: 20000 },
+            completedAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        LatestFailureResult: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['checkId', 'resultKind', 'durationMs', 'completedAt'],
+          properties: {
+            checkId: { type: 'string', format: 'uuid' },
+            resultKind: {
+              type: 'string',
+              enum: [
+                'dns_error',
+                'policy_rejected',
+                'timeout',
+                'connect_error',
+                'tls_error',
+                'protocol_error',
+                'internal_error',
+              ],
+            },
+            durationMs: { type: 'integer', minimum: 0, maximum: 20000 },
+            completedAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        LatestWorkerTimeoutResult: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['checkId', 'resultKind', 'completedAt'],
+          properties: {
+            checkId: { type: 'string', format: 'uuid' },
+            resultKind: { type: 'string', const: 'worker_timeout' },
+            completedAt: { type: 'string', format: 'date-time' },
+          },
+        },
         Problem: {
           type: 'object',
           additionalProperties: false,
@@ -138,12 +239,20 @@ function clone(value) {
 function fixtureRoot(name) {
   const root = path.join(tempRoot, name.replace(/[^a-z0-9]+/gi, '-').toLowerCase());
   fs.mkdirSync(path.join(root, 'contracts', 'openapi'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'contracts', 'fixtures', 'public'), { recursive: true });
   fs.writeFileSync(path.join(root, 'contracts', 'openapi', 'public.yaml'), 'fixture\n');
+  for (const [filename, payload] of Object.entries(canonicalPublicFixtures())) {
+    fs.writeFileSync(
+      path.join(root, 'contracts', 'fixtures', 'public', filename),
+      JSON.stringify(payload),
+    );
+  }
   return root;
 }
 
-function runChecker(name, document) {
+function runChecker(name, document, mutateRoot = () => {}) {
   const root = fixtureRoot(name);
+  mutateRoot(root);
   const bundle = path.join(root, 'bundle.json');
   fs.writeFileSync(bundle, JSON.stringify(document));
   return spawnSync(process.execPath, [checkerPath, bundle, root], {
@@ -169,13 +278,26 @@ function expectPass(name, mutate = () => {}) {
   else fail(name, result.stderr.trim() || `exit ${result.status}`);
 }
 
-function expectReject(name, mutate, expected, options = {}) {
+function expectReject(name, mutate, expected) {
   const document = clone(validDocument());
   mutate(document);
-  const result = runChecker(name, document, options);
+  const result = runChecker(name, document);
   const output = `${result.stdout}\n${result.stderr}`;
   if (result.status !== 0 && output.includes(expected)) pass(name);
   else fail(name, `expected rejection containing "${expected}", got exit=${result.status}: ${output.trim()}`);
+}
+
+function expectFixtureReject(name, filename, mutate, expected) {
+  const document = clone(validDocument());
+  const result = runChecker(name, document, (root) => {
+    const fixturePath = path.join(root, 'contracts', 'fixtures', 'public', filename);
+    const payload = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
+    mutate(payload);
+    fs.writeFileSync(fixturePath, JSON.stringify(payload));
+  });
+  const output = `${result.stdout}\n${result.stderr}`;
+  if (result.status !== 0 && output.includes(expected)) pass(name);
+  else fail(name, `expected fixture rejection containing "${expected}", got exit=${result.status}: ${output.trim()}`);
 }
 
 expectPass('canonical fixture passes');
@@ -183,6 +305,12 @@ expectPass('canonical fixture passes');
 expectReject('OpenAPI version mismatch fails', (d) => { d.openapi = '3.2.1'; }, 'openapi must be exactly 3.1.2');
 expectReject('contract version mismatch fails', (d) => { d.info.version = '0.2.0'; }, 'info.version must be exactly 0.1.0');
 expectReject('extra public path fails', (d) => { d.paths['/extra'] = { get: {} }; }, 'public path set');
+expectReject('missing latest-result path fails', (d) => {
+  delete d.paths['/monitors/{monitorId}/latest-result'];
+}, 'public path set');
+expectReject('POST latest-result fails', (d) => {
+  d.paths['/monitors/{monitorId}/latest-result'].post = {};
+}, '/monitors/{monitorId}/latest-result operations');
 expectReject('GET /monitors fails', (d) => { d.paths['/monitors'].get = {}; }, '/monitors operations');
 expectReject('PUT lifecycle mutation fails', (d) => { d.paths['/monitors/{monitorId}'].put = {}; }, '/monitors/{monitorId} operations');
 expectReject('PATCH lifecycle mutation fails', (d) => { d.paths['/monitors/{monitorId}'].patch = {}; }, '/monitors/{monitorId} operations');
@@ -191,8 +319,19 @@ expectReject('missing POST fails', (d) => { delete d.paths['/monitors'].post; },
 expectReject('missing GET by ID fails', (d) => { delete d.paths['/monitors/{monitorId}'].get; }, '/monitors/{monitorId} operations');
 expectReject('wrong register operationId fails', (d) => { d.paths['/monitors'].post.operationId = 'createMonitor'; }, 'operationId must be registerMonitor');
 expectReject('wrong get operationId fails', (d) => { d.paths['/monitors/{monitorId}'].get.operationId = 'findMonitor'; }, 'operationId must be getMonitor');
+expectReject('wrong latest-result operationId fails', (d) => {
+  d.paths['/monitors/{monitorId}/latest-result'].get.operationId = 'getMonitorStatus';
+}, 'operationId must be getLatestCheckResult');
 expectReject('wrong POST response set fails', (d) => { d.paths['/monitors'].post.responses['202'] = problemResponse(); }, 'POST /monitors responses');
 expectReject('wrong GET response set fails', (d) => { d.paths['/monitors/{monitorId}'].get.responses['204'] = {}; }, 'GET /monitors/{monitorId} responses');
+expectReject('wrong latest-result response set fails', (d) => {
+  d.paths['/monitors/{monitorId}/latest-result'].get.responses['202'] = {};
+}, 'GET /monitors/{monitorId}/latest-result responses');
+expectReject('latest-result 204 body fails', (d) => {
+  d.paths['/monitors/{monitorId}/latest-result'].get.responses['204'].content = {
+    'application/json': { schema: { type: 'object' } },
+  };
+}, 'latest-result 204 content must be absent');
 expectReject('missing Location header fails', (d) => { delete d.paths['/monitors'].post.responses['201'].headers.Location; }, 'must define Location header');
 expectReject('non URI-reference Location fails', (d) => { d.paths['/monitors'].post.responses['201'].headers.Location.schema.format = 'uri'; }, 'Location schema.format must be uri-reference');
 expectReject('optional POST request body fails', (d) => { d.paths['/monitors'].post.requestBody.required = false; }, 'requestBody.required must be true');
@@ -233,8 +372,46 @@ expectReject('root servers fails', (d) => { d.servers = [{ url: 'https://example
 expectReject('operation servers fails', (d) => { d.paths['/monitors'].post.servers = [{ url: 'https://example.test' }]; }, 'POST /monitors must not define servers');
 expectReject('extra component schema fails', (d) => { d.components.schemas.Future = { type: 'object' }; }, 'components.schemas keys');
 expectReject('monitorId format mismatch fails', (d) => { d.paths['/monitors/{monitorId}'].get.parameters[0].schema.format = 'string'; }, 'monitorId parameter schema.format must be uuid');
+expectReject('latest-result monitorId format mismatch fails', (d) => {
+  d.paths['/monitors/{monitorId}/latest-result'].get.parameters[0].schema.format = 'string';
+}, 'latest-result monitorId parameter schema.format must be uuid');
+expectReject('latest HTTP result missing duration fails', (d) => {
+  d.components.schemas.LatestHTTPResponseResult.required =
+    d.components.schemas.LatestHTTPResponseResult.required.filter((field) => field !== 'durationMs');
+}, 'LatestHTTPResponseResult.required');
+expectReject('latest failure exposes httpStatus fails', (d) => {
+  d.components.schemas.LatestFailureResult.properties.httpStatus =
+    { type: 'integer', minimum: 100, maximum: 599 };
+}, 'LatestFailureResult.properties keys');
+expectReject('worker timeout exposes duration fails', (d) => {
+  d.components.schemas.LatestWorkerTimeoutResult.properties.durationMs =
+    { type: 'integer', minimum: 0, maximum: 20000 };
+}, 'LatestWorkerTimeoutResult.properties keys');
+expectReject('failure enum admits worker_timeout fails', (d) => {
+  d.components.schemas.LatestFailureResult.properties.resultKind.enum.push('worker_timeout');
+}, 'LatestFailureResult.resultKind.enum');
 expectReject('Problem type format mismatch fails', (d) => { d.components.schemas.Problem.properties.type.format = 'uri'; }, 'Problem.type.format must be uri-reference');
 expectReject('Problem instance format mismatch fails', (d) => { d.components.schemas.Problem.properties.instance.format = 'uri'; }, 'Problem.instance.format must be uri-reference');
 expectReject('Problem status range mismatch fails', (d) => { d.components.schemas.Problem.properties.status.maximum = 999; }, 'Problem.status.maximum must be 599');
+
+expectFixtureReject(
+  'HTTP fixture missing httpStatus fails',
+  'latest-result-http-response.json',
+  (fixture) => { delete fixture.httpStatus; },
+  'latest-result-http-response fixture keys',
+);
+expectFixtureReject(
+  'failure fixture exposing httpStatus fails',
+  'latest-result-failure.json',
+  (fixture) => { fixture.httpStatus = 500; },
+  'latest-result-failure fixture keys',
+);
+expectFixtureReject(
+  'worker-timeout fixture exposing duration fails',
+  'latest-result-worker-timeout.json',
+  (fixture) => { fixture.durationMs = 20000; },
+  'latest-result-worker-timeout fixture keys',
+);
+
 console.log(`\nPublic contract semantic tests: ${passed} passed, ${failed} failed`);
 if (failed !== 0) process.exit(1);
