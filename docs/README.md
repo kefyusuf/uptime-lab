@@ -10,6 +10,7 @@ Current availability is exposed by `GET /monitors/{monitorId}/availability` as a
 - Go Monitoring Foundation design: [superpowers/specs/2026-09-20-go-monitoring-foundation-design.md](superpowers/specs/2026-09-20-go-monitoring-foundation-design.md)
 - Public Monitoring API Contract design: [superpowers/specs/2026-09-22-public-monitoring-api-contract-design.md](superpowers/specs/2026-09-22-public-monitoring-api-contract-design.md)
 - Single-Checker Execution Vertical Slice design: [superpowers/specs/2026-09-26-single-checker-execution-vertical-slice-design.md](superpowers/specs/2026-09-26-single-checker-execution-vertical-slice-design.md)
+- Local Web Monitoring Vertical Slice design candidate: [superpowers/specs/2026-10-02-local-web-monitoring-vertical-slice-design.md](superpowers/specs/2026-10-02-local-web-monitoring-vertical-slice-design.md); written proposal for the approved local scope, awaiting design review before implementation planning.
 - Implementation plans: [superpowers/plans/](superpowers/plans/)
 
 Design/spec/plan documents preserve the decision history for the phase in which they were written. Current implementation truth is described by the canonical architecture, backend, checker, testing, and devops documents below.
