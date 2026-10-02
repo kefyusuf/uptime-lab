@@ -72,6 +72,8 @@ for (const [file, content, label] of cases) {
 const root = mkdtempSync(join(tmpdir(), "uptime-web-boundary-"));
 try {
   for (const [path, content] of [
+    ["apps/web/src/app/main.ts", "import './styles.css';"],
+    ["apps/web/src/app/styles.css", "body { color: black; }"],
     ["apps/web/src/pages/Detail.ts", "import '../entities/monitor/index';"],
     ["apps/web/src/entities/monitor/index.ts", "export {};"],
   ]) {

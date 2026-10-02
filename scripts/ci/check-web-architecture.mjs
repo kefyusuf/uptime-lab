@@ -53,12 +53,24 @@ export function checkWebArchitecture(root) {
         report("Browser code cannot import Node modules.");
         return;
       }
-      const resolved = ts.resolveModuleName(
+      let resolved = ts.resolveModuleName(
         specifier,
         path,
         options,
         ts.sys,
       ).resolvedModule;
+      if (
+        !resolved &&
+        specifier.startsWith(".") &&
+        specifier.endsWith(".css")
+      ) {
+        const asset = resolve(dirname(path), specifier);
+        if (existsSync(asset))
+          resolved = {
+            resolvedFileName: asset,
+            isExternalLibraryImport: false,
+          };
+      }
       if (!resolved) {
         if (specifier.startsWith(".") || specifier.startsWith("@/"))
           report("Unresolved local import " + specifier);
