@@ -105,6 +105,33 @@ if [[ "$joined" == *"exec -T api wget"* && "$joined" == *"/monitors/018f22d3-1d6
   exit 0
 fi
 
+if [[ "$joined" == *"exec -T api wget"* && "$joined" == *"/availability"* ]]; then
+  [[ -f "$product" ]] || exit 51
+  status=unknown
+  reason=policy_rejected
+  evidence="\"evidence\":{\"completedAt\":\"$completed_at\",\"checkId\":\"$check_run_id\"}"
+  evaluated_at="2026-09-24T22:00:08.123456Z"
+  case "${FAKE_AVAILABILITY_MODE:-valid}" in
+    wrong-check-id) evidence="\"evidence\":{\"completedAt\":\"$completed_at\",\"checkId\":\"wrong\"}" ;;
+    stale-reason) reason=stale_result ;;
+    unavailable-status) status=unavailable ;;
+    missing-evidence) evidence='"extra":"missing"' ;;
+    invalid-timestamp) evaluated_at=invalid ;;
+    extra-evidence-key) evidence="\"evidence\":{\"completedAt\":\"$completed_at\",\"checkId\":\"$check_run_id\",\"extra\":\"bad\"}" ;;
+    expired-age|future-age|wrong-completion) ;;
+  esac
+  printf '{ %s, "reason" : "%s", "evaluatedAt" : "%s", "status" : "%s" }\n' "$evidence" "$reason" "$evaluated_at" "$status"
+  exit 0
+fi
+
+if [[ "$joined" == *"availability_age_valid"* ]]; then
+  case "${FAKE_AVAILABILITY_MODE:-valid}" in
+    expired-age|future-age|wrong-completion) printf 'f\n' ;;
+    *) printf 't\n' ;;
+  esac
+  exit 0
+fi
+
 if [[ "$joined" == *"exec -T api wget"* && "$joined" == *"/monitors/018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2"* ]]; then
   if [[ -f "$product" ]]; then
     printf '{"id":"018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2","targetUrl":"http://web/","createdAt":"2026-09-24T22:00:00.123456Z"}\n'
@@ -222,6 +249,7 @@ case_success_path() {
   grep -Fq -- '--post-data={"targetUrl":"http://web/"}' "$DOCKER_LOG" || return 1
   grep -Fq '/monitors/018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2' "$DOCKER_LOG" || return 1
   grep -Fq '/monitors/018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2/latest-result' "$DOCKER_LOG" || return 1
+  grep -Fq '/monitors/018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2/availability' "$DOCKER_LOG" || return 1
   grep -Fq "::timestamptz IS NOT NULL" "$DOCKER_LOG" || return 1
   grep -Fq 'CREATE TABLE public.__uptime_lab_local_dev_probe' "$DOCKER_LOG" || return 1
   grep -Fq 'FROM monitoring.check_runs' "$DOCKER_LOG" || return 1
@@ -306,6 +334,30 @@ case_latest_result_invalid_completed_at() {
   grep -Fq '/latest-result' "$DOCKER_LOG" || return 1
 }
 
+case_availability_json_helpers() {
+  source <(sed -n '/^json_availability_fields()/,/^MONITOR_ID=/p' "$SMOKE" | sed '$d')
+  local payload='{ "evidence": {"completedAt":"2026-10-02T12:00:00.123456Z", "checkId":"id"}, "reason":"policy_rejected", "status":"unknown", "evaluatedAt":"2026-10-02T12:00:01Z" }'
+  [[ "$(json_availability_keys "$payload")" == 'evaluatedAt,evidence,reason,status' ]] || return 1
+  [[ "$(json_availability_evidence_keys "$payload")" == 'checkId,completedAt' ]] || return 1
+  [[ "$(json_availability_completed_at "$payload")" == '2026-10-02T12:00:00.123456Z' ]] || return 1
+  [[ "$(json_availability_status "$payload")" == unknown ]] || return 1
+  local malformed
+  for malformed in '{"status":"unknown","status":"unknown"}' '{"evidence":[]}' '{"status":"unknown",}' '{"status":"unknown"} trailing'; do
+    if json_availability_fields "$malformed" >/dev/null; then return 1; fi
+  done
+}
+
+case_availability_rejects() {
+  reset_state
+  if DOCKER_LOG="$DOCKER_LOG" FAKE_STATE_DIR="$FAKE_STATE_DIR" DOCKER_BIN="$FAKE_DOCKER" FAKE_AVAILABILITY_MODE="$1" "$SMOKE" >/dev/null 2>&1; then return 1; fi
+  grep -Fq '/availability' "$DOCKER_LOG" || return 1
+}
+case_availability_wrong_check_id() { case_availability_rejects wrong-check-id; }
+case_availability_stale_reason() { case_availability_rejects stale-reason; }
+case_availability_unavailable_status() { case_availability_rejects unavailable-status; }
+case_availability_missing_evidence() { case_availability_rejects missing-evidence; }
+case_availability_invalid_timestamp() { case_availability_rejects invalid-timestamp; }
+
 case_migration_failure_cleanup() {
   reset_state
 
@@ -363,6 +415,12 @@ else
   fail "migration failure triggers cleanup"
 fi
 
+for case_name in case_availability_json_helpers case_availability_wrong_check_id case_availability_stale_reason case_availability_unavailable_status case_availability_missing_evidence case_availability_invalid_timestamp; do
+  if "$case_name"; then pass "$case_name"; else fail "$case_name"; fi
+done
+for mode in extra-evidence-key expired-age future-age wrong-completion; do
+  if case_availability_rejects "$mode"; then pass "availability rejects $mode"; else fail "availability rejects $mode"; fi
+done
 printf '\nLocal-dev smoke tests: %d passed, %d failed\n' "$PASS" "$FAIL"
-test "$PASS" -eq 7
+test "$PASS" -eq 17
 test "$FAIL" -eq 0
