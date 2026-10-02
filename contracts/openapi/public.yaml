@@ -4,7 +4,7 @@ info:
   version: 0.1.0
   description: >
     Pre-stable public contract for Monitoring registration, get-by-ID, and the
-    latest terminal execution-result read. The latest-result operation exposes
+    latest terminal execution-result read and current availability assessment. The latest-result operation exposes
     execution facts only and does not derive Monitor availability status.
 paths:
   /monitors:
@@ -138,6 +138,68 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  "/monitors/{monitorId}/availability":
+    "get":
+      "operationId": "getMonitorAvailability"
+      "parameters":
+        -
+          "name": "monitorId"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+      "responses":
+        "200":
+          "description": "Assessment."
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/MonitorAvailability"
+          "headers":
+            "Cache-Control":
+              "schema":
+                "type": "string"
+                "const": "no-store"
+              "description": "Always bypass cached availability assessments."
+        "400":
+          "description": "Request failed."
+          "content":
+            "application/problem+json":
+              "schema":
+                "$ref": "#/components/schemas/Problem"
+          "headers":
+            "Cache-Control":
+              "schema":
+                "type": "string"
+                "const": "no-store"
+              "description": "Always bypass cached availability assessments."
+        "404":
+          "description": "Request failed."
+          "content":
+            "application/problem+json":
+              "schema":
+                "$ref": "#/components/schemas/Problem"
+          "headers":
+            "Cache-Control":
+              "schema":
+                "type": "string"
+                "const": "no-store"
+              "description": "Always bypass cached availability assessments."
+        "500":
+          "description": "Request failed."
+          "content":
+            "application/problem+json":
+              "schema":
+                "$ref": "#/components/schemas/Problem"
+          "headers":
+            "Cache-Control":
+              "schema":
+                "type": "string"
+                "const": "no-store"
+              "description": "Always bypass cached availability assessments."
+      "summary": "Get current monitor availability"
+      "description": "Read-only assessment from the latest terminal result. Future or older-than-120-second evidence is unknown; exactly 120 seconds is fresh. HTTP 200–299 is available; other valid HTTP statuses and probe failures are unavailable. Policy and execution failures are unknown. No terminal result returns unknown/no_result without evidence. All matched responses use no-store."
 components:
   schemas:
     CreateMonitorRequest:
@@ -285,3 +347,109 @@ components:
         instance:
           type: string
           format: uri-reference
+    "MonitorAvailability":
+      "oneOf":
+        -
+          "$ref": "#/components/schemas/AvailableMonitorAvailability"
+        -
+          "$ref": "#/components/schemas/UnavailableMonitorAvailability"
+        -
+          "$ref": "#/components/schemas/UnknownMonitorAvailability"
+        -
+          "$ref": "#/components/schemas/NoResultMonitorAvailability"
+    "MonitorAvailabilityEvidence":
+      "type": "object"
+      "additionalProperties": false
+      "required":
+        - "checkId"
+        - "completedAt"
+      "properties":
+        "checkId":
+          "type": "string"
+          "format": "uuid"
+        "completedAt":
+          "type": "string"
+          "format": "date-time"
+    "AvailableMonitorAvailability":
+      "type": "object"
+      "additionalProperties": false
+      "required":
+        - "status"
+        - "reason"
+        - "evaluatedAt"
+        - "evidence"
+      "properties":
+        "status":
+          "type": "string"
+          "const": "available"
+        "reason":
+          "type": "string"
+          "const": "successful_response"
+        "evaluatedAt":
+          "type": "string"
+          "format": "date-time"
+        "evidence":
+          "$ref": "#/components/schemas/MonitorAvailabilityEvidence"
+    "UnavailableMonitorAvailability":
+      "type": "object"
+      "additionalProperties": false
+      "required":
+        - "status"
+        - "reason"
+        - "evaluatedAt"
+        - "evidence"
+      "properties":
+        "status":
+          "type": "string"
+          "const": "unavailable"
+        "reason":
+          "type": "string"
+          "enum":
+            - "unexpected_http_status"
+            - "probe_failure"
+        "evaluatedAt":
+          "type": "string"
+          "format": "date-time"
+        "evidence":
+          "$ref": "#/components/schemas/MonitorAvailabilityEvidence"
+    "UnknownMonitorAvailability":
+      "type": "object"
+      "additionalProperties": false
+      "required":
+        - "status"
+        - "reason"
+        - "evaluatedAt"
+        - "evidence"
+      "properties":
+        "status":
+          "type": "string"
+          "const": "unknown"
+        "reason":
+          "type": "string"
+          "enum":
+            - "future_result"
+            - "stale_result"
+            - "policy_rejected"
+            - "execution_failure"
+        "evaluatedAt":
+          "type": "string"
+          "format": "date-time"
+        "evidence":
+          "$ref": "#/components/schemas/MonitorAvailabilityEvidence"
+    "NoResultMonitorAvailability":
+      "type": "object"
+      "additionalProperties": false
+      "required":
+        - "status"
+        - "reason"
+        - "evaluatedAt"
+      "properties":
+        "status":
+          "type": "string"
+          "const": "unknown"
+        "reason":
+          "type": "string"
+          "const": "no_result"
+        "evaluatedAt":
+          "type": "string"
+          "format": "date-time"

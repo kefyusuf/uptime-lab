@@ -1,0 +1,9 @@
+{
+  "status": "unknown",
+  "reason": "future_result",
+  "evaluatedAt": "2026-10-02T12:00:00Z",
+  "evidence": {
+    "checkId": "7d9b2eb0-52bb-4dd7-8934-c5ce30d5c675",
+    "completedAt": "2026-10-02T12:00:01Z"
+  }
+}

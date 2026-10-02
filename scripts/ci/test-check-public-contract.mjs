@@ -26,6 +26,7 @@ function problemResponse() {
 
 function canonicalPublicFixtures() {
   return {
+    ...availabilityFixtures(),
     'latest-result-http-response.json': {
       checkId: '7d9b2eb0-52bb-4dd7-8934-c5ce30d5c675',
       resultKind: 'http_response',
@@ -48,7 +49,7 @@ function canonicalPublicFixtures() {
 }
 
 function validDocument() {
-  return {
+  const document = {
     openapi: '3.1.2',
     info: {
       title: 'uptime-lab Public API',
@@ -230,6 +231,41 @@ function validDocument() {
       },
     },
   };
+  document.paths['/monitors/{monitorId}/availability'] = availabilityPath();
+  Object.assign(document.components.schemas, availabilitySchemas());
+  return document;
+}
+
+function availabilityPath() {
+  const responses = { '200': { description: 'Assessment.', content: { 'application/json': { schema: { $ref: '#/components/schemas/MonitorAvailability' } } } } };
+  for (const code of ['400', '404', '500']) responses[code] = problemResponse();
+  for (const response of Object.values(responses)) response.headers = { 'Cache-Control': { schema: { type: 'string', const: 'no-store' } } };
+  return { get: { operationId: 'getMonitorAvailability', parameters: [{ name: 'monitorId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }], responses } };
+}
+
+function availabilitySchemas() {
+  const variants = [
+    ['AvailableMonitorAvailability', 'available', ['successful_response']],
+    ['UnavailableMonitorAvailability', 'unavailable', ['unexpected_http_status', 'probe_failure']],
+    ['UnknownMonitorAvailability', 'unknown', ['future_result', 'stale_result', 'policy_rejected', 'execution_failure']],
+    ['NoResultMonitorAvailability', 'unknown', ['no_result']],
+  ];
+  const schemas = { MonitorAvailability: { oneOf: variants.map(([name]) => ({ $ref: `#/components/schemas/${name}` })) }, MonitorAvailabilityEvidence: { type: 'object', additionalProperties: false, required: ['checkId', 'completedAt'], properties: { checkId: { type: 'string', format: 'uuid' }, completedAt: { type: 'string', format: 'date-time' } } } };
+  for (const [name, status, reasons] of variants) {
+    const properties = { status: { type: 'string', const: status }, reason: reasons.length === 1 ? { type: 'string', const: reasons[0] } : { type: 'string', enum: reasons }, evaluatedAt: { type: 'string', format: 'date-time' } };
+    if (name !== 'NoResultMonitorAvailability') properties.evidence = { $ref: '#/components/schemas/MonitorAvailabilityEvidence' };
+    schemas[name] = { type: 'object', additionalProperties: false, required: Object.keys(properties), properties };
+  }
+  return schemas;
+}
+
+function availabilityFixtures() {
+  return Object.fromEntries([
+    ['available', 'available', 'successful_response'], ['unavailable-http', 'unavailable', 'unexpected_http_status'],
+    ['unavailable-probe', 'unavailable', 'probe_failure'], ['unknown-no-result', 'unknown', 'no_result'],
+    ['unknown-stale', 'unknown', 'stale_result'], ['unknown-future', 'unknown', 'future_result'],
+    ['unknown-policy', 'unknown', 'policy_rejected'], ['unknown-execution', 'unknown', 'execution_failure'],
+  ].map(([name, status, reason]) => [`availability-${name}.json`, { status, reason, evaluatedAt: '2026-10-02T12:00:00Z', ...(reason === 'no_result' ? {} : { evidence: { checkId: '7d9b2eb0-52bb-4dd7-8934-c5ce30d5c675', completedAt: reason === 'future_result' ? '2026-10-02T12:00:01Z' : reason === 'stale_result' ? '2026-10-02T11:57:59Z' : '2026-10-02T11:59:59Z' } }) }]));
 }
 
 function clone(value) {
@@ -301,6 +337,23 @@ function expectFixtureReject(name, filename, mutate, expected) {
 }
 
 expectPass('canonical fixture passes');
+
+expectReject('availability path missing fails', d => { delete d.paths['/monitors/{monitorId}/availability']; }, 'public path set');
+expectReject('availability operation ID fails', d => { d.paths['/monitors/{monitorId}/availability'].get.operationId = 'wrong'; }, 'operationId must be getMonitorAvailability');
+expectReject('availability response set fails', d => { d.paths['/monitors/{monitorId}/availability'].get.responses['204'] = {}; }, 'availability responses');
+expectReject('availability UUID fails', d => { delete d.paths['/monitors/{monitorId}/availability'].get.parameters[0].schema.format; }, 'availability monitorId.format');
+expectReject('availability cache header fails', d => { delete d.paths['/monitors/{monitorId}/availability'].get.responses['404'].headers; }, 'Cache-Control');
+expectReject('availability open schema fails', d => { d.components.schemas.AvailableMonitorAvailability.additionalProperties = true; }, 'AvailableMonitorAvailability.additionalProperties');
+expectReject('availability schema reason pairing fails', d => { d.components.schemas.AvailableMonitorAvailability.properties.reason.const = 'execution_failure'; }, 'AvailableMonitorAvailability.reason');
+expectReject('availability optional evidence fails', d => { d.components.schemas.UnknownMonitorAvailability.required.pop(); }, 'UnknownMonitorAvailability.required');
+expectFixtureReject('availability invalid reason pairing fails', 'availability-available.json', p => { p.reason = 'execution_failure'; }, 'status/reason');
+expectFixtureReject('availability no-result evidence fails', 'availability-unknown-no-result.json', p => { p.evidence = {}; }, 'keys');
+expectFixtureReject('availability missing evidence fails', 'availability-unknown-policy.json', p => { delete p.evidence; }, 'keys');
+expectFixtureReject('availability null evidence fails', 'availability-unknown-policy.json', p => { p.evidence = null; }, 'evidence must be an object');
+expectFixtureReject('availability extra field fails', 'availability-available.json', p => { p.extra = 1; }, 'keys');
+expectFixtureReject('availability extra evidence field fails', 'availability-available.json', p => { p.evidence.extra = 1; }, 'keys');
+expectFixtureReject('availability invalid timestamp fails', 'availability-available.json', p => { p.evaluatedAt = 'yesterday'; }, 'UTC timestamp');
+expectFixtureReject('availability invalid check ID fails', 'availability-available.json', p => { p.evidence.checkId = 'bad'; }, 'UUID');
 
 expectReject('OpenAPI version mismatch fails', (d) => { d.openapi = '3.2.1'; }, 'openapi must be exactly 3.1.2');
 expectReject('contract version mismatch fails', (d) => { d.info.version = '0.2.0'; }, 'info.version must be exactly 0.1.0');
