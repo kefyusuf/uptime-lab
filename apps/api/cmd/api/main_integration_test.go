@@ -192,6 +192,12 @@ func TestProductionMonitoringCompositionAgainstPostgreSQL(t *testing.T) {
 		http.StatusNoContent,
 	)
 
+	assertProductionAvailability(t, client, baseURL, postPayload.ID, "unknown", "no_result", "", time.Time{})
+	missingAvailability := doRequest(t, client, http.MethodGet, baseURL+"/monitors/"+missingMonitorID+"/availability", "", "")
+	if missingAvailability.StatusCode != 404 || missingAvailability.Header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("missing availability: %d %v", missingAvailability.StatusCode, missingAvailability.Header)
+	}
+	missingAvailability.Body.Close()
 	claimResponse := doRequest(t, client, http.MethodPost, baseURL+"/internal/checks/claim", "", "")
 	if claimResponse.StatusCode != http.StatusOK {
 		defer claimResponse.Body.Close()
@@ -313,6 +319,7 @@ func TestProductionMonitoringCompositionAgainstPostgreSQL(t *testing.T) {
 		http.StatusNoContent,
 	)
 
+	assertProductionAvailability(t, client, baseURL, postPayload.ID, "available", "successful_response", claimPayload.CheckID, persistedCompletedAt)
 	var duplicateCompletedAt time.Time
 	if err := pool.QueryRow(
 		ctx,
@@ -474,6 +481,53 @@ func TestProductionMonitoringCompositionAgainstPostgreSQL(t *testing.T) {
 		)
 	}
 
+	assertProductionAvailability(t, client, baseURL, lateMonitor.ID, "unknown", "execution_failure", lateClaim.CheckID, lateCompleted)
+	now := productionClock()
+	for _, tc := range []struct {
+		name, status, reason string
+		completed            time.Time
+		httpStatus           int
+	}{
+		{"stale", "unknown", "stale_result", now.Add(-121 * time.Second), 200},
+		{"future", "unknown", "future_result", now.Add(time.Hour), 200},
+		{"http failure", "unavailable", "unexpected_http_status", now.Add(-5 * time.Second), 500},
+	} {
+		monitor := decodeMonitorPayload(t, doRequest(t, client, http.MethodPost, baseURL+"/monitors", "application/json", `{"targetUrl":"https://availability.example/"}`))
+		checkID := uuid.NewV7().String()
+		if _, err := pool.Exec(ctx, `INSERT INTO monitoring.check_runs (id,monitor_id,issued_at,deadline_at,completed_at,result_kind,http_status,duration_ms) VALUES ($1::uuid,$2::uuid,$3,$4,$5,'http_response',$6,1)`, checkID, monitor.ID, tc.completed.Add(-time.Second), tc.completed.Add(time.Second), tc.completed, tc.httpStatus); err != nil {
+			t.Fatal(err)
+		}
+		assertProductionAvailability(t, client, baseURL, monitor.ID, tc.status, tc.reason, checkID, tc.completed)
+		if tc.name != "http failure" {
+			continue
+		}
+		pendingID := uuid.NewV7().String()
+		if _, err := pool.Exec(ctx, `INSERT INTO monitoring.check_runs (id,monitor_id,issued_at,deadline_at) VALUES ($1::uuid,$2::uuid,$3,$4)`, pendingID, monitor.ID, now.Add(-time.Second), now.Add(-time.Millisecond)); err != nil {
+			t.Fatal(err)
+		}
+		var before, after string
+		snapshot := `SELECT json_agg(row_to_json(r) ORDER BY id)::text FROM monitoring.check_runs r WHERE monitor_id=$1::uuid`
+		if err := pool.QueryRow(ctx, snapshot, monitor.ID).Scan(&before); err != nil {
+			t.Fatal(err)
+		}
+		assertProductionAvailability(t, client, baseURL, monitor.ID, tc.status, tc.reason, checkID, tc.completed)
+		if err := pool.QueryRow(ctx, snapshot, monitor.ID).Scan(&after); err != nil {
+			t.Fatal(err)
+		}
+		if before != after {
+			t.Fatalf("availability GET mutated durable rows: %s -> %s", before, after)
+		}
+		raw := decodeLatestCheckResultPayload(t, doRequest(t, client, http.MethodGet, baseURL+"/monitors/"+monitor.ID+"/latest-result", "", ""), "checkId", "resultKind", "httpStatus", "durationMs", "completedAt")
+		newerID := uuid.NewV7().String()
+		completed := now.Add(-2 * time.Second)
+		if _, err := pool.Exec(ctx, `INSERT INTO monitoring.check_runs (id,monitor_id,issued_at,deadline_at,completed_at,result_kind,duration_ms) VALUES ($1::uuid,$2::uuid,$3,$4,$5,'policy_rejected',0)`, newerID, monitor.ID, completed.Add(-time.Second), completed.Add(time.Second), completed); err != nil {
+			t.Fatal(err)
+		}
+		assertProductionAvailability(t, client, baseURL, monitor.ID, "unknown", "policy_rejected", newerID, completed)
+		if raw.CheckID != checkID || raw.CheckID == newerID {
+			t.Fatal("separate reads must each identify their own evidence")
+		}
+	}
 	if _, err := pool.Exec(
 		ctx,
 		"INSERT INTO public.goose_db_version (version_id, is_applied) VALUES (999, true)",
@@ -496,6 +550,54 @@ func TestProductionMonitoringCompositionAgainstPostgreSQL(t *testing.T) {
 	sqlClosed = true
 	if err := pool.Ping(ctx); err != nil {
 		t.Fatalf("pool.Ping() after sqlDB.Close() error = %v; shared pool must remain open", err)
+	}
+}
+
+func assertProductionAvailability(t *testing.T, client *http.Client, baseURL, monitorID, status, reason, checkID string, completedAt time.Time) {
+	t.Helper()
+	response := doRequest(t, client, http.MethodGet, baseURL+"/monitors/"+monitorID+"/availability", "", "")
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != 200 || response.Header.Get("Cache-Control") != "no-store" || response.Header.Get("Content-Type") != "application/json" {
+		t.Fatalf("availability response: %d %v %s", response.StatusCode, response.Header, body)
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Status, Reason string
+		EvaluatedAt    time.Time
+		Evidence       *struct {
+			CheckID     string
+			CompletedAt time.Time
+		}
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+	keys := 3
+	if checkID != "" {
+		keys = 4
+	}
+	if len(payload) != keys || payload["status"] == nil || payload["reason"] == nil || payload["evaluatedAt"] == nil || got.Status != status || got.Reason != reason || got.EvaluatedAt.IsZero() || got.EvaluatedAt.Location() != time.UTC {
+		t.Fatalf("availability payload: %s", body)
+	}
+	if checkID == "" {
+		if got.Evidence != nil || payload["evidence"] != nil {
+			t.Fatal("no-result includes evidence")
+		}
+		return
+	}
+	var evidence map[string]json.RawMessage
+	if err := json.Unmarshal(payload["evidence"], &evidence); err != nil {
+		t.Fatal(err)
+	}
+	if len(evidence) != 2 || got.Evidence == nil || got.Evidence.CheckID != checkID || !got.Evidence.CompletedAt.Equal(completedAt) {
+		t.Fatalf("availability evidence: %s", body)
 	}
 }
 
