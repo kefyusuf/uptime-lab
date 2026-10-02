@@ -14,6 +14,11 @@ Current availability is exposed by `GET /monitors/{monitorId}/availability` as a
 
 Design/spec/plan documents preserve the decision history for the phase in which they were written. Current implementation truth is described by the canonical architecture, backend, checker, testing, and devops documents below.
 
+## Roadmap Proposals
+
+- [Industry benchmark and launch roadmap (2026-10-02)](roadmap/2026-10-02-industry-benchmark-and-launch-roadmap.md): researched product comparison, implementation gaps, proposed milestones, and live-release evidence, refreshed after Current Availability landed. This is a review candidate, not an approved implementation plan or production-readiness claim.
+- [Local Web and exposure scope candidate](superpowers/specs/2026-10-02-web-public-exposure-scope-reassessment.md): next-scope recommendation for a local browser journey consuming the four existing public operations; remote release remains a separate decision.
+
 ## Implemented Runtime
 
 - Go Control Plane: [backend/go-control-plane.md](backend/go-control-plane.md)
