@@ -118,6 +118,8 @@ if [[ "$joined" == *"exec -T api wget"* && "$joined" == *"/availability"* ]]; th
     missing-evidence) evidence='"extra":"missing"' ;;
     invalid-timestamp) evaluated_at=invalid ;;
     extra-evidence-key) evidence="\"evidence\":{\"completedAt\":\"$completed_at\",\"checkId\":\"$check_run_id\",\"extra\":\"bad\"}" ;;
+    dotted-top-level) evidence="\"evidence\":{},\"evidence.checkId\":\"$check_run_id\",\"evidence.completedAt\":\"$completed_at\"" ;;
+    flattened-evidence) evidence="\"evidence\":{\"checkId\":\"$check_run_id\"},\"evidence.completedAt\":\"$completed_at\"" ;;
     expired-age|future-age|wrong-completion) ;;
   esac
   printf '{ %s, "reason" : "%s", "evaluatedAt" : "%s", "status" : "%s" }\n' "$evidence" "$reason" "$evaluated_at" "$status"
@@ -342,7 +344,7 @@ case_availability_json_helpers() {
   [[ "$(json_availability_completed_at "$payload")" == '2026-10-02T12:00:00.123456Z' ]] || return 1
   [[ "$(json_availability_status "$payload")" == unknown ]] || return 1
   local malformed
-  for malformed in '{"status":"unknown","status":"unknown"}' '{"evidence":[]}' '{"status":"unknown",}' '{"status":"unknown"} trailing'; do
+  for malformed in '{"status":"unknown","status":"unknown"}' '{"evidence":[]}' '{"status":"unknown",}' '{"status":"unknown"} trailing' '{"evidence":{},"evidence.checkId":"id","evidence.completedAt":"2026-10-02T12:00:00Z"}' '{"evidence":{"checkId":"id"},"evidence.completedAt":"2026-10-02T12:00:00Z"}'; do
     if json_availability_fields "$malformed" >/dev/null; then return 1; fi
   done
 }
@@ -418,9 +420,9 @@ fi
 for case_name in case_availability_json_helpers case_availability_wrong_check_id case_availability_stale_reason case_availability_unavailable_status case_availability_missing_evidence case_availability_invalid_timestamp; do
   if "$case_name"; then pass "$case_name"; else fail "$case_name"; fi
 done
-for mode in extra-evidence-key expired-age future-age wrong-completion; do
+for mode in extra-evidence-key expired-age future-age wrong-completion dotted-top-level flattened-evidence; do
   if case_availability_rejects "$mode"; then pass "availability rejects $mode"; else fail "availability rejects $mode"; fi
 done
 printf '\nLocal-dev smoke tests: %d passed, %d failed\n' "$PASS" "$FAIL"
-test "$PASS" -eq 17
+test "$PASS" -eq 19
 test "$FAIL" -eq 0

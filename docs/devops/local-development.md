@@ -286,7 +286,7 @@ Use a distinct `COMPOSE_PROJECT_NAME`.
 ## Current Limitations
 
 - Web remains a placeholder; React is not implemented.
-- Public Monitoring surface is limited to Monitor create/read plus latest terminal result read.
+- Public Monitoring surface is limited to Monitor create/read, latest terminal result, and current availability assessment.
 - Full CheckRun history and materialized availability history remain unavailable.
 - No mutable Monitor lifecycle exists.
 - Only one logical Checker process is supported.

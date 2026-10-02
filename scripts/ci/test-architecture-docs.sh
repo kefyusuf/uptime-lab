@@ -384,5 +384,13 @@ make_fixture
 sed -i '/GET \/monitors\/{monitorId}\/availability/d' "$TMP/repo/docs/architecture/runtime-flows.md"
 expect_failure "missing current availability flow fails" "$CHECKER" "$TMP/repo"
 
+make_fixture
+printf '\n**Implementation state:** Current derived availability/status remain deferred.\n' >> "$TMP/repo/docs/architecture/runtime-flows.md"
+expect_failure "stale availability implementation summary fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+printf '\n- Public Monitoring surface is limited to Monitor create/read plus latest terminal result read.\n' >> "$TMP/repo/docs/devops/local-development.md"
+expect_failure "stale public operation limit fails" "$CHECKER" "$TMP/repo"
+
 printf '\nArchitecture documentation tests: %d passed, %d failed\n' "$PASS" "$FAIL"
 test "$FAIL" -eq 0

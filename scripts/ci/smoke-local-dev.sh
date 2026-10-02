@@ -165,7 +165,10 @@ json_availability_fields() {
       ws();if(substr(text,pos++,1)!="{") exit 1
       ws();if(substr(text,pos,1)=="}"){pos++;return}
       while(1) {
-        key=quoted();full=prefix key
+        key=quoted()
+        if(prefix=="" && key !~ /^(status|reason|evaluatedAt|evidence)$/) exit 1
+        if(prefix=="evidence." && key !~ /^(checkId|completedAt)$/) exit 1
+        full=prefix key
         if(full in names) exit 1
         names[full]=1
         ws();if(substr(text,pos++,1)!=":") exit 1
