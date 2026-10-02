@@ -139,8 +139,15 @@ require_text docs/testing/go-public-transport-adapter.md 'The readiness path is 
 require_text docs/testing/go-public-transport-adapter.md 'The internal Checker contract is implemented.'
 
 require_text docs/architecture/runtime-flows.md 'GET /monitors/{monitorId}/latest-result'
+require_text docs/architecture/runtime-flows.md 'GET /monitors/{monitorId}/availability'
+if grep -Fq 'derived availability/status remain deferred' "$ROOT/docs/architecture/runtime-flows.md"; then
+  fail 'runtime-flows.md must describe current availability as implemented'
+fi
+if grep -Fq 'Public Monitoring surface is limited to Monitor create/read plus latest terminal result read.' "$ROOT/docs/devops/local-development.md"; then
+  fail 'local-development.md must include the current availability operation'
+fi
 sequence_count="$(grep -c '^sequenceDiagram$' "$ROOT/docs/architecture/runtime-flows.md" || true)"
-[[ "$sequence_count" -eq 5 ]] || fail "runtime-flows.md must contain exactly five sequenceDiagram blocks (found $sequence_count)"
+[[ "$sequence_count" -eq 6 ]] || fail "runtime-flows.md must contain exactly six sequenceDiagram blocks (found $sequence_count)"
 
 require_text docs/architecture/change-flow.md 'Configure HTTP Request Timeout'
 

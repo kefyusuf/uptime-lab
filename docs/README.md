@@ -2,6 +2,8 @@
 
 Project documentation is organized by responsibility and by cross-runtime architecture.
 
+Current availability is exposed by `GET /monitors/{monitorId}/availability` as a read-only assessment of the latest terminal CheckRun. It returns `status`, `reason`, UTC `evaluatedAt`, and terminal `evidence` (`checkId`, `completedAt`). A known Monitor without a terminal result returns `200 unknown/no_result` with evidence omitted; the raw latest-result route retains its empty `204`. Every matched availability response, including errors and `405`, uses `Cache-Control: no-store`; `HEAD` returns `405` with `Allow: GET`. No new persistence, reconciliation, history, or public deployment is introduced.
+
 ## Canonical Design
 
 - Foundation design: [superpowers/specs/2026-09-17-uptime-lab-foundation-design.md](superpowers/specs/2026-09-17-uptime-lab-foundation-design.md)
@@ -22,9 +24,9 @@ Design/spec/plan documents preserve the decision history for the phase in which 
 - Single-Checker execution verification: [testing/single-checker-execution-slice.md](testing/single-checker-execution-slice.md)
 - Canonical local runtime: [devops/local-development.md](devops/local-development.md)
 
-The Go runtime serves public Monitor create/read plus `GET /monitors/{monitorId}/latest-result`, alongside the internal Checker claim/result contract. Go owns due-work scheduling truth and durable `monitoring.check_runs`; Rust owns bounded probe execution and never accesses PostgreSQL. The canonical Docker smoke proves the real Go -> Rust -> `policy_rejected` -> Go -> PostgreSQL -> public latest-result read path.
+The Go runtime serves public Monitor create/read, latest terminal result, and current availability, alongside the internal Checker claim/result contract. Go owns due-work scheduling truth, availability policy, and durable `monitoring.check_runs`; Rust owns bounded probe execution and never accesses PostgreSQL. The canonical Docker smoke proves the real Go -> Rust -> `policy_rejected` -> Go -> PostgreSQL -> public latest-result and availability read path.
 
-The latest-result read is terminal-only: pending work is invisible, `204` means a known Monitor has no terminal result yet, and `resultKind` remains an execution fact rather than an up/down verdict. Full CheckRun history, derived availability/status, mutable Monitor lifecycle, React, authentication/authorization, CORS/rate limiting, ingress/TLS, and public network exposure remain deferred.
+The latest-result read is terminal-only: pending work is invisible, `204` means a known Monitor has no terminal result yet, and `resultKind` remains an execution fact rather than an up/down verdict. Full CheckRun history, materialized availability history, mutable Monitor lifecycle, React, authentication/authorization, CORS/rate limiting, ingress/TLS, and public network exposure remain deferred.
 
 ## Architecture
 

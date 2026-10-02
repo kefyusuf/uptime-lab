@@ -1,5 +1,31 @@
 # Go Control Plane
 
+## Availability policy
+
+Go Monitoring samples its clock once after one successful, validated terminal
+read. Unsupported durable shapes fail as sanitized persistence errors; an
+invalid evaluation clock fails as a sanitized evaluation error.
+
+| Fresh execution evidence | Status | Reason |
+|---|---|---|
+| HTTP 200–299 | available | successful_response |
+| HTTP 100–199 or 300–599 | unavailable | unexpected_http_status |
+| dns_error, timeout, connect_error, tls_error, protocol_error | unavailable | probe_failure |
+| policy_rejected | unknown | policy_rejected |
+| internal_error, worker_timeout | unknown | execution_failure |
+| No terminal result | unknown | no_result |
+
+Future completion takes precedence as `unknown/future_result`. Otherwise age
+greater than 120 seconds takes precedence as `unknown/stale_result`. Exactly
+120 seconds is fresh; comparison is not rounded. Every terminal assessment keeps
+its evidence, even unknown. There is no fallback to an older successful check,
+no body-content or complete-download claim, and no write or reconciliation.
+Separate raw-result and availability requests can observe different CheckIDs;
+each assessment identifies its own evidence. Public timestamps are normalized
+to UTC and validated for JSON representation before the HTTP response is written.
+
+Current availability is exposed by `GET /monitors/{monitorId}/availability` as a read-only assessment of the latest terminal CheckRun. It returns `status`, `reason`, UTC `evaluatedAt`, and terminal `evidence` (`checkId`, `completedAt`). A known Monitor without a terminal result returns `200 unknown/no_result` with evidence omitted; the raw latest-result route retains its empty `204`. Every matched availability response, including errors and `405`, uses `Cache-Control: no-store`; `HEAD` returns `405` with `Allow: GET`. No new persistence, reconciliation, history, or public deployment is introduced.
+
 ## Status
 
 The Go Control Plane is implemented for public Monitor create/read, latest terminal execution-result read, and the Single-Checker execution loop.
@@ -23,6 +49,7 @@ The public runtime surface is:
 POST /monitors
 GET  /monitors/{monitorId}
 GET  /monitors/{monitorId}/latest-result
+GET  /monitors/{monitorId}/availability
 ~~~
 
 The internal Checker surface is:
@@ -39,7 +66,7 @@ GET /livez
 GET /readyz
 ~~~
 
-The latest-result route exposes only the latest terminal CheckRun execution fact. Pending rows are invisible; a known Monitor with no terminal result maps to `204`. Full CheckRun history and derived availability/status remain deferred.
+The latest-result route exposes only the latest terminal CheckRun execution fact. Pending rows are invisible; a known Monitor with no terminal result maps to `204`. Full CheckRun history and materialized availability history remain deferred.
 
 ## Monitoring Domain
 
@@ -208,8 +235,8 @@ Cross-runtime Docker acceptance is documented separately in [../testing/single-c
 
 Still deferred:
 
-- public Monitor operations beyond create/read/latest-result;
-- full CheckRun history and derived availability/status;
+- public Monitor operations beyond create/read/latest-result/availability;
+- full CheckRun history and materialized availability history;
 - mutable Monitor lifecycle;
 - multi-worker coordination/leases;
 - broker/outbox;

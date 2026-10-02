@@ -1,5 +1,7 @@
 # Single-Checker Execution Slice Testing
 
+Current availability is exposed by `GET /monitors/{monitorId}/availability` as a read-only assessment of the latest terminal CheckRun. It returns `status`, `reason`, UTC `evaluatedAt`, and terminal `evidence` (`checkId`, `completedAt`). A known Monitor without a terminal result returns `200 unknown/no_result` with evidence omitted; the raw latest-result route retains its empty `204`. Every matched availability response, including errors and `405`, uses `Cache-Control: no-store`; `HEAD` returns `405` with `Allow: GET`. No new persistence, reconciliation, history, or public deployment is introduced.
+
 ## Purpose
 
 This guide is the canonical verification map for the first real Go/Rust execution loop.
@@ -56,7 +58,7 @@ PUT /internal/checks/{checkId}/result
 
 Contract fixtures protect CheckWork and normalized result compatibility across Go and Rust.
 
-The public contract remains a separate source at `contracts/openapi/public.yaml`. It now exposes `GET /monitors/{monitorId}/latest-result` for the latest terminal execution fact only; full history and derived availability/status remain outside the execution slice.
+The public contract remains a separate source at `contracts/openapi/public.yaml`. It now exposes `GET /monitors/{monitorId}/latest-result` for the latest terminal execution fact only; full history and materialized availability history remain outside the execution slice.
 
 ## Go Unit and Application Evidence
 
@@ -181,6 +183,13 @@ The smoke bounded-polls PostgreSQL and verifies:
 
 The same smoke then reads `GET /monitors/{monitorId}/latest-result` and binds the public payload to that persisted CheckRun: the CheckID and `durationMs` must match, `resultKind` must be `policy_rejected`, `completedAt` must be a canonical UTC instant, and `httpStatus` must be absent. This read does not derive up/down status.
 
+The subsequent availability read must return `unknown/policy_rejected` with the
+same durable CheckID/completion and a UTC evaluation instant no more than 120
+seconds later. Wrong IDs, missing/extra nested keys, incorrect status/reason,
+malformed timestamps, future age and stale age fail the smoke. Unknown alone is
+insufficient evidence. This adds Go-owned product assessment to the execution
+proof without changing Rust, persistence, or the four-service Compose topology.
+
 For the same CheckID/MonitorID, Checker logs must show strict order:
 
 ~~~text
@@ -260,7 +269,7 @@ This evidence does not claim:
 - public network deployment readiness;
 - authentication/authorization;
 - mutable Monitor lifecycle;
-- full public CheckRun history or derived availability/status API;
+- full public CheckRun history or materialized availability history API;
 - multi-worker coordination;
 - broker/outbox behavior;
 - private-network monitoring;

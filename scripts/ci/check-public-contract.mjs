@@ -184,6 +184,7 @@ function validateLatestResultFixtures(repositoryRoot) {
       'latest-result-failure.json',
       'latest-result-http-response.json',
       'latest-result-worker-timeout.json',
+      ...availabilityFixtureCases.map(([name]) => `availability-${name}.json`),
     ],
     'public fixture file set',
   );
@@ -252,6 +253,8 @@ export function validatePublicContract(document, repositoryRoot = '.') {
       'LatestWorkerTimeoutResult',
       'Monitor',
       'Problem',
+      'MonitorAvailability', 'AvailableMonitorAvailability', 'UnavailableMonitorAvailability',
+      'UnknownMonitorAvailability', 'NoResultMonitorAvailability', 'MonitorAvailabilityEvidence',
     ],
     'components.schemas',
   );
@@ -260,7 +263,7 @@ export function validatePublicContract(document, repositoryRoot = '.') {
   const publicPaths = Object.keys(document.paths).filter((key) => key.startsWith('/'));
   assertExactSet(
     publicPaths,
-    ['/monitors', '/monitors/{monitorId}', '/monitors/{monitorId}/latest-result'],
+    ['/monitors', '/monitors/{monitorId}', '/monitors/{monitorId}/latest-result', '/monitors/{monitorId}/availability'],
     'public path set',
   );
 
@@ -479,6 +482,74 @@ export function validatePublicContract(document, repositoryRoot = '.') {
   assertStringFormat(problemSchema.properties.instance, 'uri-reference', 'Problem.instance');
 
   validateLatestResultFixtures(repositoryRoot);
+  validateAvailability(document, repositoryRoot);
+}
+
+const availabilityFixtureCases = [
+  ['available', 'available', 'successful_response'], ['unavailable-http', 'unavailable', 'unexpected_http_status'],
+  ['unavailable-probe', 'unavailable', 'probe_failure'], ['unknown-no-result', 'unknown', 'no_result'],
+  ['unknown-stale', 'unknown', 'stale_result'], ['unknown-future', 'unknown', 'future_result'],
+  ['unknown-policy', 'unknown', 'policy_rejected'], ['unknown-execution', 'unknown', 'execution_failure'],
+];
+
+function assertUTCTimestamp(value, label) {
+  assert(typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value)
+    && Number.isFinite(Date.parse(value))
+    && new Date(value).toISOString().slice(0, 19) === value.slice(0, 19), `${label} must be a UTC timestamp`);
+}
+
+function validateAvailability(document, repositoryRoot) {
+  const pathItem = document.paths['/monitors/{monitorId}/availability'];
+  assert(isObject(pathItem), 'availability path item must be an object');
+  assert(!own(pathItem, 'servers'), 'availability path item must not define servers');
+  assertExactSet(operationMethods(pathItem), ['get'], 'availability operations');
+  const operation = pathItem.get;
+  assert(operation.operationId === 'getMonitorAvailability', 'operationId must be getMonitorAvailability');
+  assertNoOperationSecurityOrServers(operation, 'availability');
+  assert(Array.isArray(operation.parameters) && operation.parameters.length === 1, 'availability requires one parameter');
+  const parameter = operation.parameters[0];
+  assert(parameter.name === 'monitorId' && parameter.in === 'path' && parameter.required === true, 'availability monitorId must be a required path parameter');
+  assertStringFormat(parameter.schema, 'uuid', 'availability monitorId');
+  assertExactKeys(operation.responses, ['200', '400', '404', '500'], 'availability responses');
+  assertResponseContent(document, operation.responses['200'], 'application/json', 'MonitorAvailability', 'availability 200');
+  assertProblemResponses(document, operation, ['400', '404', '500'], 'availability');
+  for (const [code, response] of Object.entries(operation.responses)) {
+    assert(isObject(response.headers?.['Cache-Control']), `availability ${code} must define Cache-Control`);
+    assertStringConst(response.headers['Cache-Control'].schema, 'no-store', `availability ${code} Cache-Control`);
+  }
+  const schemas = document.components.schemas;
+  const variants = [
+    ['AvailableMonitorAvailability', 'available', ['successful_response']],
+    ['UnavailableMonitorAvailability', 'unavailable', ['unexpected_http_status', 'probe_failure']],
+    ['UnknownMonitorAvailability', 'unknown', ['future_result', 'stale_result', 'policy_rejected', 'execution_failure']],
+    ['NoResultMonitorAvailability', 'unknown', ['no_result']],
+  ];
+  assertOneOfRefs(schemas.MonitorAvailability, variants.map(([name]) => `#/components/schemas/${name}`), 'MonitorAvailability');
+  for (const [name, status, reasons] of variants) {
+    const schema = schemas[name];
+    const keys = ['status', 'reason', 'evaluatedAt', ...(name === 'NoResultMonitorAvailability' ? [] : ['evidence'])];
+    assertObjectShape(schema, keys, keys, name);
+    assertStringConst(schema.properties.status, status, `${name}.status`);
+    if (reasons.length === 1) assertStringConst(schema.properties.reason, reasons[0], `${name}.reason`);
+    else assertStringEnum(schema.properties.reason, reasons, `${name}.reason`);
+    assertStringFormat(schema.properties.evaluatedAt, 'date-time', `${name}.evaluatedAt`);
+    if (name !== 'NoResultMonitorAvailability') assertSchemaTarget(document, schema.properties.evidence, 'MonitorAvailabilityEvidence', `${name}.evidence`);
+  }
+  const evidence = schemas.MonitorAvailabilityEvidence;
+  assertObjectShape(evidence, ['checkId', 'completedAt'], ['checkId', 'completedAt'], 'MonitorAvailabilityEvidence');
+  assertStringFormat(evidence.properties.checkId, 'uuid', 'MonitorAvailabilityEvidence.checkId');
+  assertStringFormat(evidence.properties.completedAt, 'date-time', 'MonitorAvailabilityEvidence.completedAt');
+  for (const [name, status, reason] of availabilityFixtureCases) {
+    const payload = readJSONFixture(repositoryRoot, `availability-${name}.json`);
+    assertExactKeys(payload, ['status', 'reason', 'evaluatedAt', ...(reason === 'no_result' ? [] : ['evidence'])], `availability-${name} fixture`);
+    assert(payload.status === status && payload.reason === reason, `availability-${name} status/reason must match its variant`);
+    assertUTCTimestamp(payload.evaluatedAt, `availability-${name}.evaluatedAt`);
+    if (reason !== 'no_result') {
+      assertExactKeys(payload.evidence, ['checkId', 'completedAt'], `availability-${name}.evidence`);
+      assert(typeof payload.evidence.checkId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.evidence.checkId), `availability-${name}.checkId must be a UUID`);
+      assertUTCTimestamp(payload.evidence.completedAt, `availability-${name}.completedAt`);
+    }
+  }
 }
 
 function main() {

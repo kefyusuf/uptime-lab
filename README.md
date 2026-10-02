@@ -2,6 +2,8 @@
 
 A production-disciplined uptime monitoring laboratory built around explicit boundaries between a React/TypeScript web client, a Go Control Plane, a Rust Checker, and PostgreSQL.
 
+Current availability is exposed by `GET /monitors/{monitorId}/availability` as a read-only assessment of the latest terminal CheckRun. It returns `status`, `reason`, UTC `evaluatedAt`, and terminal `evidence` (`checkId`, `completedAt`). A known Monitor without a terminal result returns `200 unknown/no_result` with evidence omitted; the raw latest-result route retains its empty `204`. Every matched availability response, including errors and `405`, uses `Cache-Control: no-store`; `HEAD` returns `405` with `Allow: GET`. No new persistence, reconciliation, history, or public deployment is introduced.
+
 ## Status
 
 uptime-lab is not a production-ready public monitoring service.
@@ -19,7 +21,7 @@ The **Single-Checker Execution Vertical Slice is implemented**. The repository n
 - a real four-service Docker Compose topology;
 - cross-runtime Docker evidence from claim through terminal CheckRun persistence and public latest-result readback.
 
-The public Monitoring contract at `contracts/openapi/public.yaml` remains intentionally small: `POST /monitors`, `GET /monitors/{monitorId}`, and `GET /monitors/{monitorId}/latest-result`. The latest-result route exposes only the latest terminal execution fact: pending work is invisible, `204` means a known Monitor has no terminal result yet, and `resultKind` is not an up/down availability verdict. Full CheckRun history, derived availability/status, mutable Monitor lifecycle, React runtime, authentication/authorization, CORS/rate limiting, public ingress, and application host ports remain deferred.
+The public Monitoring contract at `contracts/openapi/public.yaml` remains intentionally small: `POST /monitors`, `GET /monitors/{monitorId}`, `GET /monitors/{monitorId}/latest-result`, and `GET /monitors/{monitorId}/availability`. The latest-result route exposes only the latest terminal execution fact: pending work is invisible, `204` means a known Monitor has no terminal result yet, and `resultKind` is not an up/down availability verdict. Full CheckRun history, materialized availability history, mutable Monitor lifecycle, React runtime, authentication/authorization, CORS/rate limiting, public ingress, and application host ports remain deferred.
 
 ## Architecture
 

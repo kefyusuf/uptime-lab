@@ -1,5 +1,7 @@
 # Local Development
 
+Current availability is exposed by `GET /monitors/{monitorId}/availability` as a read-only assessment of the latest terminal CheckRun. It returns `status`, `reason`, UTC `evaluatedAt`, and terminal `evidence` (`checkId`, `completedAt`). A known Monitor without a terminal result returns `200 unknown/no_result` with evidence omitted; the raw latest-result route retains its empty `204`. Every matched availability response, including errors and `405`, uses `Cache-Control: no-store`; `HEAD` returns `405` with `Allow: GET`. No new persistence, reconciliation, history, or public deployment is introduced.
+
 ## Status
 
 Docker Compose is the canonical local-development substrate.
@@ -97,6 +99,7 @@ Public Monitor transport inside the container network:
 POST /monitors
 GET  /monitors/{monitorId}
 GET  /monitors/{monitorId}/latest-result
+GET  /monitors/{monitorId}/availability
 ~~~
 
 Internal Checker transport:
@@ -239,11 +242,12 @@ Go claim
 -> Go result submission
 -> PostgreSQL terminal CheckRun
 -> GET /monitors/{monitorId}/latest-result
+-> GET /monitors/{monitorId}/availability
 ~~~
 
 The target resolves to the private Compose network. Production policy must reject it; there is no test-only private-network bypass or public-internet dependency.
 
-The smoke bounded-polls PostgreSQL, verifies one terminal `policy_rejected` CheckRun and zero pending rows, then reads the same terminal fact through `GET /monitors/{monitorId}/latest-result`. The public payload must match the persisted CheckID and duration, omit `httpStatus`, and keep `resultKind = policy_rejected`; pending work remains invisible. The same CheckID/MonitorID is also correlated with Checker events:
+The smoke bounded-polls PostgreSQL, verifies one terminal `policy_rejected` CheckRun and zero pending rows, then reads the same terminal fact through `GET /monitors/{monitorId}/latest-result`. The public payload must match the persisted CheckID and duration, omit `httpStatus`, and keep `resultKind = policy_rejected`; pending work remains invisible. It then requires exact availability/evidence keys, `unknown/policy_rejected`, the same CheckID and completion instant, and a PostgreSQL-validated age between zero and 120 seconds inclusive. A delayed run returning `stale_result` fails. The same CheckID/MonitorID is also correlated with Checker events:
 
 ~~~text
 check_claimed
@@ -282,8 +286,8 @@ Use a distinct `COMPOSE_PROJECT_NAME`.
 ## Current Limitations
 
 - Web remains a placeholder; React is not implemented.
-- Public Monitoring surface is limited to Monitor create/read plus latest terminal result read.
-- Full CheckRun history and derived availability/status remain unavailable.
+- Public Monitoring surface is limited to Monitor create/read, latest terminal result, and current availability assessment.
+- Full CheckRun history and materialized availability history remain unavailable.
 - No mutable Monitor lifecycle exists.
 - Only one logical Checker process is supported.
 - Production probe execution rejects private/non-public destinations.

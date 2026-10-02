@@ -146,6 +146,58 @@ json_keys() {
     paste -sd, -
 }
 
+# Parse only the closed string/object shape emitted by the availability route.
+# Reject malformed JSON and duplicate keys rather than trusting substring matches.
+json_availability_fields() {
+  printf '%s\n' "$1" | awk '
+    function ws() { while (substr(text,pos,1) ~ /[ \t\r\n]/ && pos<=length(text)) pos++ }
+    function quoted(    start,value) {
+      ws(); if(substr(text,pos,1)!="\"") exit 1
+      start=++pos
+      while(pos<=length(text) && substr(text,pos,1)!="\"") {
+        if(substr(text,pos,1)=="\\" || substr(text,pos,1) ~ /[[:cntrl:]]/) exit 1
+        pos++
+      }
+      if(pos>length(text)) exit 1
+      value=substr(text,start,pos-start);pos++;return value
+    }
+    function object(prefix,    key,full,value,seen,count) {
+      ws();if(substr(text,pos++,1)!="{") exit 1
+      ws();if(substr(text,pos,1)=="}"){pos++;return}
+      while(1) {
+        key=quoted()
+        if(prefix=="" && key !~ /^(status|reason|evaluatedAt|evidence)$/) exit 1
+        if(prefix=="evidence." && key !~ /^(checkId|completedAt)$/) exit 1
+        full=prefix key
+        if(full in names) exit 1
+        names[full]=1
+        ws();if(substr(text,pos++,1)!=":") exit 1
+        ws()
+        if(substr(text,pos,1)=="{") {
+          if(full!="evidence") exit 1
+          object(full ".")
+        } else values[full]=quoted()
+        ws();value=substr(text,pos++,1)
+        if(value=="}") return
+        if(value!=",") exit 1
+      }
+    }
+    {text=text $0 "\n"}
+    END {
+      pos=1;object("");ws();if(pos<=length(text)) exit 1
+      for(key in names) print "key\t" key
+      for(key in values) print key "\t" values[key]
+    }'
+}
+json_availability_value() { json_availability_fields "$1" | awk -F '\t' -v key="$2" '$1==key {print $2}'; }
+json_availability_status() { json_availability_value "$1" status; }
+json_availability_reason() { json_availability_value "$1" reason; }
+json_availability_evidence_check_id() { json_availability_value "$1" evidence.checkId; }
+json_availability_completed_at() { json_availability_value "$1" evidence.completedAt; }
+json_availability_evaluated_at() { json_availability_value "$1" evaluatedAt; }
+json_availability_keys() { json_availability_fields "$1" | awk -F '\t' '$1=="key" && $2 !~ /\./ {print $2}' | sort | paste -sd, -; }
+json_availability_evidence_keys() { json_availability_fields "$1" | awk -F '\t' '$1=="key" && $2 ~ /^evidence\./ {sub(/^evidence\./,"",$2);print $2}' | sort | paste -sd, -; }
+
 MONITOR_ID=""
 MONITOR_TARGET="http://web/"
 MONITOR_CREATED_AT=""
@@ -367,6 +419,31 @@ assert_latest_result_public_read() {
   printf 'Public latest-result evidence: monitor_id=%s check_id=%s result_kind=%s duration_ms=%s completed_at=%s\n'     "$MONITOR_ID" "$check_id" "$kind" "$duration_ms" "$completed_at"
 }
 
+assert_availability_public_read() {
+  local response status reason check_id completed_at evaluated_at valid
+  response="$(compose exec -T api wget -q -O - "http://127.0.0.1:8080/monitors/$MONITOR_ID/availability")"
+  [[ "$(json_availability_keys "$response")" == "evaluatedAt,evidence,reason,status" && "$(json_availability_evidence_keys "$response")" == "checkId,completedAt" ]] || {
+    printf 'GET availability must have exact assessment/evidence keys: %s\n' "$response" >&2; return 1;
+  }
+  status="$(json_availability_status "$response")"
+  reason="$(json_availability_reason "$response")"
+  check_id="$(json_availability_evidence_check_id "$response")"
+  completed_at="$(json_availability_completed_at "$response")"
+  evaluated_at="$(json_availability_evaluated_at "$response")"
+  [[ "$status" == unknown && "$reason" == policy_rejected && "$check_id" == "$CHECK_RUN_ID" ]] || {
+    printf 'GET availability must identify fresh policy_rejected evidence: %s\n' "$response" >&2; return 1;
+  }
+  local timestamp
+  for timestamp in "$completed_at" "$evaluated_at"; do
+    [[ "$timestamp" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z$ ]] || {
+      printf 'GET availability invalid UTC timestamp: %q\n' "$timestamp" >&2; return 1;
+    }
+  done
+  valid="$(query_check_runs "SELECT (completed_at = '$completed_at'::timestamptz AND '$evaluated_at'::timestamptz - completed_at BETWEEN interval '0 seconds' AND interval '120 seconds') AS availability_age_valid FROM monitoring.check_runs WHERE id = '$CHECK_RUN_ID'::uuid;")"
+  [[ "$valid" == t ]] || { printf 'GET availability completion or freshness does not match durable evidence\n' >&2; return 1; }
+  printf 'Public availability evidence: status=%s reason=%s check_id=%s completed_at=%s evaluated_at=%s\n' "$status" "$reason" "$check_id" "$completed_at" "$evaluated_at"
+}
+
 assert_checker_execution_events() {
   local logs
   local claimed_line
@@ -423,6 +500,7 @@ assert_monitor_get
 # Go claim -> Rust Checker -> production private-address policy -> Go result -> PostgreSQL terminal CheckRun.
 wait_for_policy_rejected_check_run
 assert_latest_result_public_read
+assert_availability_public_read
 assert_checker_execution_events
 
 compose exec -T db sh -lc \
