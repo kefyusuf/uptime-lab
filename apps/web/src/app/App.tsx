@@ -1,6 +1,7 @@
 import { useMemo, useSyncExternalStore } from 'react';
 import { createMonitorClient, type MonitorClient } from '../entities/monitor';
 import { CreateMonitorPage } from '../pages/CreateMonitorPage';
+import { MonitorDetailPage } from '../pages/MonitorDetailPage';
 import { navigate, parsePage, subscribeNavigation } from './router';
 export function App({
   client: providedClient,
@@ -47,10 +48,7 @@ export function App({
         {page.kind === 'create' ? (
           <CreateMonitorPage client={client} onNavigate={navigate} />
         ) : page.kind === 'detail' ? (
-          <section className="panel">
-            <h2>Monitor detail</h2>
-            <p>{page.id}</p>
-          </section>
+          <MonitorDetailPage key={page.id} id={page.id} client={client} />
         ) : (
           <section className="panel">
             <h2>Page not found</h2>

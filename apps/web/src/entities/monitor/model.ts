@@ -68,3 +68,8 @@ export interface MonitorClient {
     signal: AbortSignal,
   ): Promise<ReadResult<Availability>>;
 }
+export type LoadState<T> =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'success'; data: T }
+  | { kind: 'error'; error: ClientError };

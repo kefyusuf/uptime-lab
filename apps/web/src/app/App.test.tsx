@@ -12,16 +12,14 @@ const monitor = {
 const client: MonitorClient = {
   createMonitor: vi.fn().mockResolvedValue({ kind: 'created', monitor }),
   getMonitor: vi.fn().mockResolvedValue({ kind: 'success', data: monitor }),
-  getAvailability: vi
-    .fn()
-    .mockResolvedValue({
-      kind: 'success',
-      data: {
-        status: 'unknown',
-        reason: 'no_result',
-        evaluatedAt: '2026-10-02T12:00:00Z',
-      },
-    }),
+  getAvailability: vi.fn().mockResolvedValue({
+    kind: 'success',
+    data: {
+      status: 'unknown',
+      reason: 'no_result',
+      evaluatedAt: '2026-10-02T12:00:00Z',
+    },
+  }),
   getLatestResult: vi.fn().mockResolvedValue({ kind: 'success', data: null }),
 };
 afterEach(() => window.history.replaceState(null, '', '/'));

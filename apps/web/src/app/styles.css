@@ -188,6 +188,78 @@ footer {
   color: #68788d;
   padding: 32px 0;
 }
+.detail-layout {
+  display: grid;
+  gap: 24px;
+}
+.detail-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+}
+.detail-heading button {
+  margin: 0;
+}
+h2:focus-visible {
+  outline: 3px solid #1d57bc;
+  outline-offset: 4px;
+}
+.result-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+}
+h3 {
+  margin: 0 0 18px;
+  font-size: 18px;
+}
+dl {
+  margin: 20px 0 0;
+}
+dl > div {
+  margin-top: 16px;
+}
+dt {
+  font-size: 12px;
+  color: #59697d;
+  font-weight: 650;
+}
+dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+code {
+  font-size: 13px;
+}
+time {
+  font-size: 14px;
+}
+.assessment-status {
+  display: inline-block;
+  font-size: 21px;
+  font-weight: 700;
+  border-radius: 7px;
+  padding: 4px 12px;
+  margin: 0;
+}
+.available {
+  color: #12613a;
+  background: #e7f5ed;
+}
+.unavailable {
+  color: #982b2b;
+  background: #fff0f0;
+}
+.unknown {
+  color: #755417;
+  background: #fff5da;
+}
+.snapshot-note,
+.empty-state {
+  color: #59697d;
+  font-size: 13px;
+}
 @media (max-width: 760px) {
   .shell {
     padding: 0 18px;
@@ -196,7 +268,8 @@ footer {
     margin-bottom: 24px;
     padding: 18px 0;
   }
-  .create-layout {
+  .create-layout,
+  .result-layout {
     grid-template-columns: 1fr;
   }
   .panel {
