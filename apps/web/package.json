@@ -10,7 +10,7 @@
   },
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "generate:api": "openapi-typescript ../../contracts/openapi/public.yaml -o src/shared/api/public.generated.ts",
