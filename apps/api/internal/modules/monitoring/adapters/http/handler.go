@@ -59,7 +59,6 @@ func NewHandlerWithLatestResult(
 	return handler
 }
 
-// ServeHTTP recognizes only configured contracted Monitoring resource shapes.
 // NewHandlerWithAvailability adds the read-only product assessment capability.
 func NewHandlerWithAvailability(register registerMonitor, get getMonitor, getLatest getLatestCheckResult, getAvailability getMonitorAvailability) *Handler {
 	handler := NewHandlerWithLatestResult(register, get, getLatest)
