@@ -28,11 +28,16 @@ type getLatestCheckResult interface {
 	Execute(context.Context, domain.MonitorID) (application.LatestCheckResult, error)
 }
 
+type getMonitorAvailability interface {
+	Execute(context.Context, domain.MonitorID) (application.MonitorAvailability, error)
+}
+
 // Handler adapts the public Monitoring HTTP contract to the existing application use cases.
 type Handler struct {
-	register  registerMonitor
-	get       getMonitor
-	getLatest getLatestCheckResult
+	register        registerMonitor
+	get             getMonitor
+	getLatest       getLatestCheckResult
+	getAvailability getMonitorAvailability
 }
 
 // NewHandler constructs the isolated public Monitoring HTTP adapter.
@@ -55,9 +60,22 @@ func NewHandlerWithLatestResult(
 }
 
 // ServeHTTP recognizes only configured contracted Monitoring resource shapes.
+// NewHandlerWithAvailability adds the read-only product assessment capability.
+func NewHandlerWithAvailability(register registerMonitor, get getMonitor, getLatest getLatestCheckResult, getAvailability getMonitorAvailability) *Handler {
+	handler := NewHandlerWithLatestResult(register, get, getLatest)
+	handler.getAvailability = getAvailability
+	return handler
+}
+
+// ServeHTTP recognizes only configured contracted Monitoring resource shapes.
 func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	if request.URL.Path == monitorsPath {
 		handler.serveCollection(writer, request)
+		return
+	}
+
+	if rawID, ok := availabilityMonitorIDPathSegment(request.URL.Path); ok && handler.getAvailability != nil {
+		handler.serveAvailability(writer, request, rawID)
 		return
 	}
 
