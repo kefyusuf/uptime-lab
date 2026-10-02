@@ -191,6 +191,12 @@ DOC
   cat > "$TMP/repo/docs/architecture/runtime-flows.md" <<'DOC'
 # Runtime Flows
 
+GET /monitors/{monitorId}/availability
+```mermaid
+sequenceDiagram
+    Go->>Monitoring: Derive current availability
+```
+
 ## Create Monitor
 ```mermaid
 sequenceDiagram
@@ -300,7 +306,7 @@ expect_failure "missing Rust database prohibition fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
 sed -i '0,/^sequenceDiagram$/{/^sequenceDiagram$/d;}' "$TMP/repo/docs/architecture/runtime-flows.md"
-expect_failure "only four sequence diagrams fails" "$CHECKER" "$TMP/repo"
+expect_failure "only five sequence diagrams fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
 rm "$TMP/repo/docs/backend/go-control-plane.md"
@@ -373,6 +379,10 @@ expect_failure "missing Docker execution evidence marker fails" "$CHECKER" "$TMP
 make_fixture
 mkdir -p "$TMP/repo/docs/frontend"
 expect_failure "speculative frontend docs directory fails" "$CHECKER" "$TMP/repo"
+
+make_fixture
+sed -i '/GET \/monitors\/{monitorId}\/availability/d' "$TMP/repo/docs/architecture/runtime-flows.md"
+expect_failure "missing current availability flow fails" "$CHECKER" "$TMP/repo"
 
 printf '\nArchitecture documentation tests: %d passed, %d failed\n' "$PASS" "$FAIL"
 test "$FAIL" -eq 0

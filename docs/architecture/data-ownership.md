@@ -4,6 +4,8 @@
 
 **Implementation state:** Implemented for Monitor registration/read, latest terminal CheckRun read, and single-Checker execution persistence.
 
+Current availability is exposed by `GET /monitors/{monitorId}/availability` as a read-only assessment of the latest terminal CheckRun. It returns `status`, `reason`, UTC `evaluatedAt`, and terminal `evidence` (`checkId`, `completedAt`). A known Monitor without a terminal result returns `200 unknown/no_result` with evidence omitted; the raw latest-result route retains its empty `204`. Every matched availability response, including errors and `405`, uses `Cache-Control: no-store`; `HEAD` returns `405` with `Allow: GET`. No new persistence, reconciliation, history, or public deployment is introduced.
+
 ## Primary Ownership Rule
 
 Go exclusively owns durable product state in PostgreSQL.
@@ -72,6 +74,11 @@ Execution persistence supports atomic due claim and completion. Claim creates th
 
 A separate latest-result read port selects the latest terminal CheckRun without locks, writes, or reconciliation. Pending rows remain invisible.
 
+Availability reuses that same read port and samples the injected Go clock after
+row validation. The assessment is computed in memory under the
+[Go availability policy](../backend/go-control-plane.md#availability-policy);
+it introduces no status table, migration, materialized projection, or SQL policy.
+
 Late completion is resolved by Go into durable `worker_timeout` state using the stored deadline.
 
 ## Migrations
@@ -106,7 +113,7 @@ No Kafka, RabbitMQ, Redis broker, outbox, or event-sourcing infrastructure is in
 Still deferred:
 
 - mutable Monitor lifecycle;
-- full CheckRun history and derived availability/status projection;
+- full CheckRun history and materialized availability history projection;
 - retention/archival;
 - multi-worker leases/identity;
 - broker/outbox topology;

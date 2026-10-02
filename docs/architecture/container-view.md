@@ -4,6 +4,8 @@
 
 **Implementation state:** Go, PostgreSQL, and the Rust Checker are implemented for the Single-Checker Execution Vertical Slice. Web remains a placeholder and public network exposure remains deferred.
 
+Current availability is exposed by `GET /monitors/{monitorId}/availability` as a read-only assessment of the latest terminal CheckRun. It returns `status`, `reason`, UTC `evaluatedAt`, and terminal `evidence` (`checkId`, `completedAt`). A known Monitor without a terminal result returns `200 unknown/no_result` with evidence omitted; the raw latest-result route retains its empty `204`. Every matched availability response, including errors and `405`, uses `Cache-Control: no-store`; `HEAD` returns `405` with `Allow: GET`. No new persistence, reconciliation, history, or public deployment is introduced.
+
 ## Purpose
 
 This is the C4 Level 2 view for the current runtime.
@@ -96,7 +98,7 @@ flowchart LR
     DB[(PostgreSQL)]
     Target["External HTTP/HTTPS target"]
 
-    Caller -->|POST/GET Monitor + GET latest-result| Go
+    Caller -->|POST/GET Monitor + GET latest-result/availability| Go
     Checker -->|claim/result internal contract| Go
     Go -->|owned persistence| DB
     Checker -->|validated bounded probe| Target
@@ -132,13 +134,14 @@ GET  /readyz
 POST /monitors
 GET  /monitors/{monitorId}
 GET  /monitors/{monitorId}/latest-result
+GET  /monitors/{monitorId}/availability
 POST /internal/checks/claim
 PUT  /internal/checks/{checkId}/result
 ~~~
 
 `/livez` is database-independent. `/readyz` performs bounded PostgreSQL connectivity plus read-only exact migration compatibility checks.
 
-The public latest-result endpoint exposes one latest terminal execution fact only. Full CheckRun history and derived availability/status remain deferred.
+The public latest-result endpoint exposes one latest terminal execution fact only. Full CheckRun history and materialized availability history remain deferred.
 
 ## Ownership Rules
 

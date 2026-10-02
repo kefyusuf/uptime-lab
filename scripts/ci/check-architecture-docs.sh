@@ -139,8 +139,9 @@ require_text docs/testing/go-public-transport-adapter.md 'The readiness path is 
 require_text docs/testing/go-public-transport-adapter.md 'The internal Checker contract is implemented.'
 
 require_text docs/architecture/runtime-flows.md 'GET /monitors/{monitorId}/latest-result'
+require_text docs/architecture/runtime-flows.md 'GET /monitors/{monitorId}/availability'
 sequence_count="$(grep -c '^sequenceDiagram$' "$ROOT/docs/architecture/runtime-flows.md" || true)"
-[[ "$sequence_count" -eq 5 ]] || fail "runtime-flows.md must contain exactly five sequenceDiagram blocks (found $sequence_count)"
+[[ "$sequence_count" -eq 6 ]] || fail "runtime-flows.md must contain exactly six sequenceDiagram blocks (found $sequence_count)"
 
 require_text docs/architecture/change-flow.md 'Configure HTTP Request Timeout'
 

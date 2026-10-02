@@ -4,6 +4,8 @@
 
 **Implementation state:** The Go Monitoring execution boundary and Rust Checker runtime are implemented. React remains deferred.
 
+Current availability is exposed by `GET /monitors/{monitorId}/availability` as a read-only assessment of the latest terminal CheckRun. It returns `status`, `reason`, UTC `evaluatedAt`, and terminal `evidence` (`checkId`, `completedAt`). A known Monitor without a terminal result returns `200 unknown/no_result` with evidence omitted; the raw latest-result route retains its empty `204`. Every matched availability response, including errors and `405`, uses `Cache-Control: no-store`; `HEAD` returns `405` with `Allow: GET`. No new persistence, reconciliation, history, or public deployment is introduced.
+
 ## Purpose
 
 This document defines ownership boundaries inside each runtime and the seam between Go and Rust.
@@ -36,7 +38,8 @@ Monitoring domain owns:
 - CheckID;
 - TargetURL;
 - immutable Monitor;
-- normalized CheckResult vocabulary and invariants.
+- normalized CheckResult vocabulary and invariants;
+- pure Availability policy with explicit outcome and freshness reasons.
 
 Go registration-time TargetURL validation remains syntactic. Execution-time destination safety is Rust-owned.
 
@@ -48,10 +51,12 @@ Implemented capabilities include:
 2. GetMonitor
 3. ClaimDueCheck
 4. SubmitCheckResult
+5. GetLatestCheckResult
+6. GetMonitorAvailability
 
 Go application policy owns the fixed cadence, CheckRun deadline window, timeout/redirect work values, server-time decisions, no-work semantics, and completion/conflict mapping.
 
-No public list/update/delete/enable/disable/status/history use case exists.
+No public list/update/delete/enable/disable/history use case exists. Availability is derived on read, without a materialized status projection.
 
 ### Ports
 
@@ -67,7 +72,7 @@ Claim is transactionally bounded, uses row locking/`SKIP LOCKED`, reconciles exp
 
 ### HTTP Adapters
 
-The public adapter serves `POST /monitors` and `GET /monitors/{monitorId}`.
+The public adapter serves Monitor registration/read, latest terminal result, and current availability.
 
 The internal Checker adapter serves:
 

@@ -4,6 +4,8 @@
 
 **Implementation state:** Public Monitor create/read, latest terminal execution-result read, and the internal Go/Rust execution loop are implemented. React/public network exposure, full CheckRun history, and derived availability/status remain deferred.
 
+Current availability is exposed by `GET /monitors/{monitorId}/availability` as a read-only assessment of the latest terminal CheckRun. It returns `status`, `reason`, UTC `evaluatedAt`, and terminal `evidence` (`checkId`, `completedAt`). A known Monitor without a terminal result returns `200 unknown/no_result` with evidence omitted; the raw latest-result route retains its empty `204`. Every matched availability response, including errors and `405`, uses `Cache-Control: no-store`; `HEAD` returns `405` with `Allow: GET`. No new persistence, reconciliation, history, or public deployment is introduced.
+
 ## Purpose
 
 This document defines the current collaboration patterns between Go, Rust, PostgreSQL, and external targets while retaining the committed Web boundary.
@@ -100,6 +102,30 @@ sequenceDiagram
 ```
 
 Only `completed_at IS NOT NULL` rows participate. Pending CheckRuns are invisible, including a newer pending run when an older terminal result exists. `resultKind` is an execution fact, not an up/down verdict. `worker_timeout` exposes neither `httpStatus` nor `durationMs`. Full history remains deferred.
+
+## Current Availability Read
+
+```mermaid
+sequenceDiagram
+    participant Caller
+    participant Go as Monitoring HTTP
+    participant App as Monitoring Application
+    participant DB as PostgreSQL
+    Caller->>Go: GET /monitors/{monitorId}/availability
+    Go->>App: GetMonitorAvailability
+    App->>DB: Read latest terminal CheckRun (no locks or writes)
+    DB-->>App: terminal evidence or known Monitor/no result
+    App->>App: Validate evidence, sample clock once, apply freshness then outcome
+    App-->>Go: immutable assessment with its own evidence
+    Go-->>Caller: 200 assessment, Cache-Control no-store
+```
+
+Future evidence and age greater than 120 seconds take precedence over outcome;
+exactly 120 seconds is fresh. Unknown reasons distinguish missing, future,
+stale, policy-rejected, and execution-failed evidence. The complete mapping is
+documented in [Go availability policy](../backend/go-control-plane.md#availability-policy).
+Pending runs remain invisible and are never reconciled by this GET. Two separate
+raw-result and availability requests can legitimately read different CheckIDs.
 
 ## Failure Boundary
 
