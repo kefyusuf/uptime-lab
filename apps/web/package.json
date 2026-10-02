@@ -16,7 +16,7 @@
     "generate:api": "openapi-typescript ../../contracts/openapi/public.yaml -o src/shared/api/public.generated.ts",
     "check:generated": "node scripts/check-generated.mjs",
     "check:boundaries": "node ../../scripts/ci/check-web-architecture.mjs ../..",
-    "build": "vite build",
+    "build": "tsc -p tsconfig.server.json && vite build",
     "start": "node dist-server/main.js",
     "test:e2e": "playwright test"
   },
