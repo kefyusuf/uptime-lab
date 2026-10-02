@@ -14,6 +14,10 @@ Current availability is exposed by `GET /monitors/{monitorId}/availability` as a
 
 Design/spec/plan documents preserve the decision history for the phase in which they were written. Current implementation truth is described by the canonical architecture, backend, checker, testing, and devops documents below.
 
+## Roadmap Proposals
+
+- [Industry benchmark and launch roadmap (2026-10-02)](roadmap/2026-10-02-industry-benchmark-and-launch-roadmap.md): researched product comparison, implementation gaps, proposed milestones, and live-release evidence. This is a review candidate, not an approved implementation plan or production-readiness claim.
+
 ## Implemented Runtime
 
 - Go Control Plane: [backend/go-control-plane.md](backend/go-control-plane.md)

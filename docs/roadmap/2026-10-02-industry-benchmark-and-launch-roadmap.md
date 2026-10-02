@@ -1,0 +1,157 @@
+# Industry Benchmark and Launch Roadmap
+
+**Status:** Research-backed proposal; not an approved implementation plan
+**Researched:** 2026-10-02
+**Repository baseline:** local `main@6669aecaca4235c61e9367c6a518a163a3dcf276`
+**Working audience assumption:** invite-only, small-team beta before open registration
+
+## 1. Decision summary
+
+Preserve the existing Go/Rust/PostgreSQL architecture. Build toward a useful, bounded HTTP/HTTPS monitoring product through separate milestones for browser use, Monitor lifecycle/history, monitoring semantics, incident delivery, and operational readiness.
+
+GitHub discovery found the open [Current Availability scope PR #44](https://github.com/kefyusuf/uptime-lab/pull/44), which proposes current availability semantics before Web. This research is complementary and does not replace that scope decision. If #44 lands, its dedicated design and plan precede implementation; the local Web slice follows that bounded capability. A remote demonstration, a dependable monitoring beta, and an open-registration SaaS have different acceptance criteria.
+
+For this proposal, first launch means a protected, invite-only beta that can detect a defined target failure, notify its operator, show the evidence, and recover safely from an application or infrastructure failure. This audience is an explicit assumption awaiting confirmation. A single-owner self-hosted release can reduce account complexity; an open SaaS requires stronger isolation, abuse controls, support, and capacity evidence.
+
+## 2. Research method and limits
+
+Primary sources were read on the research date: official UptimeRobot, Better Stack, and Checkly product/documentation pages; OWASP security guidance; Google SRE guidance; and PostgreSQL documentation. This is a qualitative benchmark of representative products, not an exhaustive market survey, purchasing recommendation, compliance audit, or comparison of paid plan entitlements.
+
+Repository findings come from local code, contracts, migrations, Compose, CI configuration, and canonical documents. A subsequent GitHub check confirmed remote main matches this baseline and identified open PR #44 at `6c6cc4c44b2317ff9fe65f19d8883f327e402263`, with a successful `CI / gate` at inspection time. Runtime tests, infrastructure, external account settings, and actual deployed capacity were not verified for this research. Documentation verification is reported separately in the research PR. A feature documented by a vendor is evidence of that vendor's offering, not a universal industry requirement. The phases and launch gates below are project recommendations inferred from that evidence.
+
+## 3. What mature monitoring products cover
+
+| Capability family | Primary-source observation | Implication for uptime-lab |
+|---|---|---|
+| Core monitoring and operator workflow | UptimeRobot documents website/API checks, response-time monitoring, incidents, status pages, team access, and maintenance windows | A usable product needs management and communication around probe execution; matching every monitor type is unnecessary |
+| Failure confirmation | Better Stack documents checks from multiple locations and confirmation/recovery periods | A failed execution should not automatically become a confirmed target outage |
+| Actionable alerting | Checkly documents state transitions, failure thresholds, retries, escalation, recovery, notification channels, and notification logs | Incident state and delivery policy should be explicit and testable |
+| Safe public APIs | OWASP describes object authorization and resource-consumption risks | UUIDs and bounded probes do not replace access control, quotas, and aggregate abuse limits |
+| Service operation | Google SRE describes user-oriented SLOs and production readiness review | Measure the monitoring product's own reliability and decide who operates it |
+| Durable recovery | PostgreSQL documents backup/restore and WAL-based point-in-time recovery | A persistent Compose volume is not sufficient recovery evidence |
+
+The product scope observation uses [UptimeRobot's official feature overview](https://uptimerobot.com/). The confirmation comparison uses [Better Stack locations](https://betterstack.com/docs/uptime/locations-and-regions/) and [confirmation/recovery documentation](https://betterstack.com/docs/uptime/confirmation-and-recovery-period/). The alerting comparison uses [Checkly's official alerting documentation](https://www.checklyhq.com/docs/communicate/alerts/overview/).
+
+These examples justify separating execution facts, availability decisions, incidents, and notification delivery. Their exact retry counts or region thresholds should not be copied without defining this project's users, detection budget, and capacity.
+
+## 4. Repository gap analysis
+
+| Area | Verified local baseline | Proposed next capability | Release significance |
+|---|---|---|---|
+| Architecture | Go owns product/persistence; Rust owns execution; explicit contracts and narrow ports | Retain ownership; evolve contracts through dedicated designs | Foundation already exists |
+| Probe safety | Public-address policy, DNS pinning, redirect revalidation, TLS validation, bounded timeout/headers/concurrency | Review deployed egress, metadata access, destination fan-out, and abuse handling | Required before remote access |
+| Monitor management | Immutable create/read only; no list, ownership, pause, edit, or deletion | Bounded list and explicit lifecycle; define in-flight work behavior | Local Web can precede it; useful beta needs management |
+| Result visibility | Latest terminal result; exact failure vocabulary; no public history | Paginated bounded history and visible result age | Required for beta investigation |
+| Availability semantics | No up/down derivation | Expected HTTP response policy, confirmation/recovery, stale/unknown distinction | Required before claiming target availability |
+| Incidents/alerts | No incident state or notification delivery | Durable incident transitions and one reliable notification channel | Required for a monitoring beta |
+| Frontend | Web placeholder | React register/detail first; management/history later | Browser usability gap |
+| Access boundary | No authentication/authorization; public and internal adapters share one API listener | Identity/access boundary, explicit route exposure, internal caller protection | Required before remote beta |
+| Operations | Health checks, sanitized logs, graceful shutdown, explicit migrations | Metrics, independent alerts, backups/restore, runbooks, release/rollback | Required before dependable live use |
+| Capacity/data lifecycle | Four active probes in one logical Checker; fixed cadence; no retention | Load envelope, quotas, retention, growth and freshness measurement | Required before beta workload acceptance |
+| Delivery governance | PR/CI, immutable migrations, architecture checks and runtime smoke tests | Deployment evidence and production readiness gate | Strong development process; production evidence remains separate |
+
+Local evidence pointers:
+
+- `apps/api/internal/modules/monitoring/application/check_execution.go`: cadence, deadline, probe policy.
+- `apps/api/internal/modules/monitoring/adapters/postgres/check_execution.go`: due claims, completion, timeout reconciliation.
+- `apps/api/internal/modules/monitoring/adapters/postgres/latest_check_result.go`: terminal-only read.
+- `apps/checker/crates/probe-http/`: execution and destination safety.
+- `apps/checker/crates/checker-core/src/worker.rs`: bounded worker orchestration.
+- `apps/api/migrations/`: existing schema constraints/indexes.
+- `compose.yaml`: development-only topology, placeholder Web, unpublished application ports.
+- `docs/backend/go-control-plane.md`, `docs/checker/rust-checker.md`, and `docs/devops/local-development.md`: canonical current-state guidance.
+
+## 5. Important semantic and capacity decisions
+
+### Target outage versus monitoring-system failure
+
+An HTTP response is an execution fact, not necessarily success. A `500` response can satisfy connectivity while failing an expected-status policy. Define allowed statuses before deriving target health.
+
+`policy_rejected` should be explained as an unsupported/blocked destination rather than reported as target downtime. `worker_timeout` and `internal_error` require a monitoring-system failure policy; do not silently count them as evidence that the target is down. A stale previous result must not appear to be current evidence.
+
+The current implementation reconciles expired pending work during a claim or late completion. If the Checker stops claiming, latest-result reads do not reconcile pending rows. API readiness checks database/schema compatibility, while Checker readiness indicates loop startup. Neither proves that checks continue completing. Measure overdue work and result freshness independently; any reconciliation redesign belongs to a separate reviewed slice.
+
+The first availability design must define confirmation, recovery, unknown/stale state, maintenance exclusions, and the denominator/window for any uptime percentage. Sample-based and elapsed-time availability are different metrics. Missing observations must not silently count as healthy. Notification transport retries are also different from rechecking a target for failure confirmation.
+
+### Capacity and retention
+
+The fixed cadence makes a Monitor eligible 60 seconds after its latest terminal completion, rather than guaranteeing an exact wall-clock check every minute. Actual detection delay includes scheduling, execution, persistence, and confirmation.
+
+With four concurrent probes, an illustrative all-10-second workload has a theoretical probe service rate of 24 completions/minute before claim, delivery, database, and operational overhead. This is arithmetic, not a benchmark or a supported Monitor limit. Admission limits must come from measured sustained load, bursts, timeout-heavy targets, and recovery behavior with headroom.
+
+For storage planning, a nominal once-per-minute schedule produces roughly 1,440 records per Monitor/day; 1,000 such Monitors would imply roughly 1.44 million records/day. The current completion-based cadence differs. Measure row/index size, query latency, backup growth, and retention costs before selecting retention or introducing partitioning.
+
+Do not introduce multi-worker leases, brokers, Kubernetes, or partitioning as an automatic reaction to vendor feature breadth. They need concrete load or reliability evidence. Multiple public regions remain a later design because the current contract has no worker/region identity or regional aggregation semantics.
+
+## 6. Proposed roadmap and acceptance gates
+
+Phases represent capability dependencies, not calendar promises. Each phase needs its own reviewed design and implementation plan. Discovery for deployment and observability starts early even when its implementation lands later.
+
+| Phase | Deliverable | Exit evidence |
+|---|---|---|
+| R0 — Product and release brief | Confirm audience, supported targets, workload cap, detection expectations, data policy, operator, hosting constraints, and budget; agree proposed beta scope | Written decisions; measurable acceptance criteria; no unspecified public exposure |
+| R0a — Current availability read | Follow #44's scope review, then a dedicated design/plan for Go-owned current availability derived from execution evidence | Reviewed semantics, freshness and contract decisions; TDD evidence for the eventual implementation; no history/incidents/lifecycle scope expansion |
+| R1 — Local Web vertical slice | React registration/detail/latest-result on a bounded local access path; explicit empty/error/stale presentation | Real browser journey; public-route allowlist; internal routes inaccessible through Web; preserved deterministic runtime smoke |
+| R2 — Monitor management and evidence | List/pagination, pause/resume and deliberate edit/delete semantics; bounded CheckRun history; retention design | Lifecycle/in-flight race evidence; stable pagination; retention cannot corrupt incident/history semantics; no UI-owned scheduling |
+| R3 — Monitoring decisions | Expected-status policy, confirmation/recovery, stale/unknown handling; maintenance semantics; durable incident open/resolve | Deterministic state-transition and replay evidence; Checker outage does not masquerade as healthy target or confirmed target outage |
+| R4 — Reliable notifications | One channel, incident/recovery delivery, deduplication, bounded retry, failure visibility and manual retry policy | Provider outage/restart evidence; durable delivery tracking; acknowledged duplicates policy; no repeated probe on notification retry |
+| R5 — Protected beta deployment | Identity/access model, ownership when accounts are separate, quotas, HTTPS ingress, secrets, environment isolation, backup/restore, metrics, runbooks, controlled release | Production readiness checklist below; staging fault/load/security evidence; restricted invitations |
+| R6 — Broader public release | Open-registration abuse defenses, measured capacity, user data lifecycle, support process, selected public status-page scope; revisit regions | Beta reliability/cost evidence; no unresolved release blockers; public offering matches actual guarantees |
+| R7 — Evidence-driven expansion | Multi-region/checker failover, TLS-expiry/heartbeat/DNS/TCP or browser checks, richer integrations/team roles | Concrete user need; separate contract, security, operational and cost assessment |
+
+R0a is narrower than R3: a current availability read is not an incident confirmation, configurable expected-status policy, or notification system. R3 must explicitly reassess the landed semantics rather than invent incompatible duplicate state. R2 and R3 may be split into smaller PRs and design milestones. Maintenance is required before advertising maintenance-aware availability; it can be excluded from an initial beta only with an explicit product limitation and no misleading uptime report.
+
+R4 should first assess whether a PostgreSQL-backed durable delivery queue fits the workload. A transactional outbox is a candidate if incident-to-notification atomicity requires it; no broker is selected here. Any webhook channel introduces another user-controlled outbound destination and needs its own safety policy.
+
+R5 discovery starts in R0. Authentication must precede connecting shared users to a deployment; it is not a post-launch add-on. R1 may stay entirely local while later access/ownership semantics are designed. A read-only demonstration can launch earlier under a separate restricted scope but is not advertised as dependable monitoring.
+
+## 7. Production readiness checklist
+
+These are project-specific proposed launch gates, not a claim that every competitor uses the same implementation.
+
+| Gate | Evidence required before invite-only monitoring beta |
+|---|---|
+| Access and isolation | Intended users authenticated; account/object permissions tested where applicable; no UUID-as-permission assumption; `/internal/checks/*` blocked at public ingress and protected from unintended internal callers |
+| Abuse and resource control | Per-user/global Monitor and request quotas; bounded payloads, concurrent work, target fan-out and notifications; timeout-heavy load tests; actionable limit errors |
+| Probe/network safety | Existing SSRF regression suite plus deployed egress/metadata checks; no production private-network bypass; secrets and sensitive target data kept out of logs |
+| Browser/transport security | HTTPS and certificate renewal; session/token handling, CSRF/origin policy, explicit proxy routes, security headers, sanitized errors; CORS only when the chosen origin topology requires it |
+| Data protection | Production secrets separated from local defaults; least-privilege DB/runtime access; automated off-host backup; restore drill to an isolated environment; agreed recovery point/time objectives and retention/deletion behavior |
+| Deploy/migrate/rollback | Immutable release artifacts; staging promotion; explicit serialized migrations; compatibility between schema and application versions; readiness verification; rollback rehearsal; no automatic destructive database downgrade |
+| Monitoring the monitor | API error/latency signals, scheduling lag, overdue work, result age, Checker restarts, delivery lag/errors, DB saturation/storage, backup freshness; an external watchdog that does not rely exclusively on this service |
+| Operational ownership | Named operator, escalation path, incident and recovery runbooks, restore procedure, dependency update policy, release notes and change visibility |
+| Product reliability | Measured failure-to-notification latency, recovery behavior, stale/unknown display, confirmation/deduplication, known limitations and bounded target support |
+| Capacity/cost | Demonstrated admitted load with headroom; quotas based on evidence; retention/storage and notification cost bounds; defined overload behavior |
+
+Object-level authorization follows [OWASP API1](https://api-security.owasp.org/editions/2023/en/0xa1-broken-object-level-authorization/). Aggregate quotas and resource bounds are motivated by [OWASP API4](https://api-security.owasp.org/editions/2023/en/0xa4-unrestricted-resource-consumption/). Probe/network review is grounded in the [OWASP SSRF guidance](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html); this document does not certify the implementation against that guidance.
+
+For data recovery, select a backup method against agreed recovery needs. WAL archiving/PITR is a candidate when restoring to a recent point is required; a properly scheduled logical backup may suffice for a smaller declared recovery envelope. Test restoration rather than merely checking that a backup job ran. See [PostgreSQL backup/restore](https://www.postgresql.org/docs/current/backup.html) and [PITR](https://www.postgresql.org/docs/current/continuous-archiving.html).
+
+## 8. Deployment sequence
+
+1. Select hosting region/platform against budget, operator skills, workload and recovery requirements; no provider is chosen in this roadmap.
+2. Prepare staging with the intended ingress, network isolation, secrets, database and backup strategy. Keep development and production data/credentials separate.
+3. Run end-to-end registration, execution, confirmation, notification and recovery against controlled test targets. Include Checker loss, API/DB restart, notification outage, quota exhaustion, and restore drills.
+4. Verify the exact candidate release, schema compatibility, external ingress restrictions, deployment rollback, and independent alert delivery.
+5. Deploy a capped invite-only beta; verify live signals and real notification receipt. Observe against a declared evaluation window and workload rather than opening registration immediately.
+6. Expand only after reliability, cost, user isolation and support evidence supports the next audience.
+
+The API currently requires an exact repository-owned migration set for readiness. A rolling deployment across schema versions may therefore leave old instances unready. The deployment design must choose a controlled maintenance deployment or an explicitly redesigned compatibility strategy before claiming zero-downtime upgrades.
+
+Docker Compose is a valid candidate for a bounded single-host beta if its failure/recovery limitations are explicit and tested. Managed services are also candidates. Neither Compose nor Kubernetes is by itself evidence of production readiness.
+
+## 9. Reliability measures and open decisions
+
+Separate the reliability of monitored targets from the reliability of uptime-lab. Proposed internal indicators are API availability/latency, check scheduling lag, terminal-result freshness, confirmed-failure-to-notification latency, delivery success, and restore time/data loss. Define numeric targets and measurement windows after establishing audience/load; do not invent a 99.9% promise from a passing smoke test.
+
+This approach follows [Google SRE's user-centric SLO guidance](https://sre.google/workbook/implementing-slos/). A release review covering operational responsibility and reliability needs is informed by [Google's production readiness model](https://sre.google/sre-book/evolving-sre-engagement-model/); a small project need not reproduce Google's organizational process.
+
+Decisions still needed:
+
+- Single-owner self-hosted, invite-only shared team, or open-registration service?
+- Supported target count and detection/notification delay expectation?
+- Hosting budget, region and who responds when uptime-lab fails?
+- First notification channel and handling of sensitive target URLs?
+- History retention and acceptable recovery point/time?
+- Single-region limitation for beta, or an explicit requirement for regional confirmation before launch?
+
+The immediate product gate is #44. If it lands, write its dedicated Current Monitor Availability Read Slice design before an implementation plan or code. The later R1 design should incorporate the release brief and downstream constraints here. This research does not authorize runtime, contract, migration, dependency, deployment, or external-service changes and does not modify or merge #44.
