@@ -2,14 +2,14 @@
 
 **Status:** Research-backed proposal; not an approved implementation plan
 **Researched:** 2026-10-02
-**Repository baseline:** local `main@6669aecaca4235c61e9367c6a518a163a3dcf276`
+**Repository baseline:** `main@b4f0ae5e1372b77398013b94da37c0c8a6ecdf30`, refreshed after Current Monitor Availability Read landed
 **Working audience assumption:** invite-only, small-team beta before open registration
 
 ## 1. Decision summary
 
 Preserve the existing Go/Rust/PostgreSQL architecture. Build toward a useful, bounded HTTP/HTTPS monitoring product through separate milestones for browser use, Monitor lifecycle/history, monitoring semantics, incident delivery, and operational readiness.
 
-GitHub discovery found the open [Current Availability scope PR #44](https://github.com/kefyusuf/uptime-lab/pull/44), which proposes current availability semantics before Web. This research is complementary and does not replace that scope decision. If #44 lands, its dedicated design and plan precede implementation; the local Web slice follows that bounded capability. A remote demonstration, a dependable monitoring beta, and an open-registration SaaS have different acceptance criteria.
+The Current Availability gate is complete: scope [#44](https://github.com/kefyusuf/uptime-lab/pull/44), design [#46](https://github.com/kefyusuf/uptime-lab/pull/46), plan [#47](https://github.com/kefyusuf/uptime-lab/pull/47), and implementation [#48](https://github.com/kefyusuf/uptime-lab/pull/48) have landed. Local Web can now consume Go's current assessment as well as raw terminal evidence. A remote demonstration, a dependable monitoring beta, and an open-registration SaaS still have different acceptance criteria.
 
 For this proposal, first launch means a protected, invite-only beta that can detect a defined target failure, notify its operator, show the evidence, and recover safely from an application or infrastructure failure. This audience is an explicit assumption awaiting confirmation. A single-owner self-hosted release can reduce account complexity; an open SaaS requires stronger isolation, abuse controls, support, and capacity evidence.
 
@@ -17,7 +17,7 @@ For this proposal, first launch means a protected, invite-only beta that can det
 
 Primary sources were read on the research date: official UptimeRobot, Better Stack, and Checkly product/documentation pages; OWASP security guidance; Google SRE guidance; and PostgreSQL documentation. This is a qualitative benchmark of representative products, not an exhaustive market survey, purchasing recommendation, compliance audit, or comparison of paid plan entitlements.
 
-Repository findings come from local code, contracts, migrations, Compose, CI configuration, and canonical documents. A subsequent GitHub check confirmed remote main matches this baseline and identified open PR #44 at `6c6cc4c44b2317ff9fe65f19d8883f327e402263`, with a successful `CI / gate` at inspection time. Runtime tests, infrastructure, external account settings, and actual deployed capacity were not verified for this research. Documentation verification is reported separately in the research PR. A feature documented by a vendor is evidence of that vendor's offering, not a universal industry requirement. The phases and launch gates below are project recommendations inferred from that evidence.
+Repository findings come from local code, contracts, migrations, Compose, CI configuration, and canonical documents. The baseline was refreshed after #48 landed, and its [exact-main CI](https://github.com/kefyusuf/uptime-lab/actions/runs/36985739087) passed Go static/unit/race/vulnerability, real PostgreSQL integration, public-contract, real Docker smoke, and repository/documentation checks. This verifies the local development capability; it does not verify deployed infrastructure, external account settings, or admitted production capacity. Better Stack confirmation/recovery, Checkly alerting, and OWASP object-authorization sources were reread during this refresh; other benchmark observations retain the original research date. Documentation verification is reported separately in this PR. A feature documented by a vendor is evidence of that vendor's offering, not a universal industry requirement. The phases and launch gates below are project recommendations inferred from that evidence.
 
 ## 3. What mature monitoring products cover
 
@@ -42,9 +42,9 @@ These examples justify separating execution facts, availability decisions, incid
 | Probe safety | Public-address policy, DNS pinning, redirect revalidation, TLS validation, bounded timeout/headers/concurrency | Review deployed egress, metadata access, destination fan-out, and abuse handling | Required before remote access |
 | Monitor management | Immutable create/read only; no list, ownership, pause, edit, or deletion | Bounded list and explicit lifecycle; define in-flight work behavior | Local Web can precede it; useful beta needs management |
 | Result visibility | Latest terminal result; exact failure vocabulary; no public history | Paginated bounded history and visible result age | Required for beta investigation |
-| Availability semantics | No up/down derivation | Expected HTTP response policy, confirmation/recovery, stale/unknown distinction | Required before claiming target availability |
+| Availability semantics | Current read with fixed HTTP 200–299 success policy, explicit outcome reasons, future/stale precedence, and 120-second freshness | Configurable expected-status policy, confirmation/recovery and maintenance-aware incident semantics | Basic assessment landed; a confirmed outage and uptime percentage remain separate capabilities |
 | Incidents/alerts | No incident state or notification delivery | Durable incident transitions and one reliable notification channel | Required for a monitoring beta |
-| Frontend | Web placeholder | React register/detail first; management/history later | Browser usability gap |
+| Frontend | Web placeholder | React register/detail/current-availability/raw-result first; management/history later | Browser usability gap; consumes Go policy without reimplementing it |
 | Access boundary | No authentication/authorization; public and internal adapters share one API listener | Identity/access boundary, explicit route exposure, internal caller protection | Required before remote beta |
 | Operations | Health checks, sanitized logs, graceful shutdown, explicit migrations | Metrics, independent alerts, backups/restore, runbooks, release/rollback | Required before dependable live use |
 | Capacity/data lifecycle | Four active probes in one logical Checker; fixed cadence; no retention | Load envelope, quotas, retention, growth and freshness measurement | Required before beta workload acceptance |
@@ -55,6 +55,9 @@ Local evidence pointers:
 - `apps/api/internal/modules/monitoring/application/check_execution.go`: cadence, deadline, probe policy.
 - `apps/api/internal/modules/monitoring/adapters/postgres/check_execution.go`: due claims, completion, timeout reconciliation.
 - `apps/api/internal/modules/monitoring/adapters/postgres/latest_check_result.go`: terminal-only read.
+- `apps/api/internal/modules/monitoring/domain/availability.go`: Go-owned classification and freshness policy.
+- `apps/api/internal/modules/monitoring/application/get_monitor_availability.go`: one validated terminal read followed by one clock sample.
+- `apps/api/internal/modules/monitoring/adapters/http/availability.go`: closed assessment/evidence response and matched-route no-store behavior.
 - `apps/checker/crates/probe-http/`: execution and destination safety.
 - `apps/checker/crates/checker-core/src/worker.rs`: bounded worker orchestration.
 - `apps/api/migrations/`: existing schema constraints/indexes.
@@ -65,13 +68,13 @@ Local evidence pointers:
 
 ### Target outage versus monitoring-system failure
 
-An HTTP response is an execution fact, not necessarily success. A `500` response can satisfy connectivity while failing an expected-status policy. Define allowed statuses before deriving target health.
+An HTTP response is an execution fact, not necessarily success. The landed current assessment uses HTTP 200–299 as available and other valid statuses as unavailable; a `500` response therefore means `unavailable/unexpected_http_status`. This fixed policy is not configurable. Future completion produces `unknown/future_result`; evidence older than 120 seconds produces `unknown/stale_result`, with exactly 120 seconds fresh. No terminal result is `200 unknown/no_result` with evidence omitted. All matched availability responses use `Cache-Control: no-store`.
 
-`policy_rejected` should be explained as an unsupported/blocked destination rather than reported as target downtime. `worker_timeout` and `internal_error` require a monitoring-system failure policy; do not silently count them as evidence that the target is down. A stale previous result must not appear to be current evidence.
+Fresh `policy_rejected` is `unknown/policy_rejected`, not target downtime. Fresh `worker_timeout` and `internal_error` are `unknown/execution_failure`. DNS, timeout, connect, TLS and protocol probe failures are `unavailable/probe_failure`. The browser must present these Go-owned decisions and their evaluation/completion timestamps rather than inventing another policy. The raw latest-result read retains its empty `204` for a known Monitor without a terminal result. Separate raw-result and availability requests may legitimately observe different CheckIDs.
 
 The current implementation reconciles expired pending work during a claim or late completion. If the Checker stops claiming, latest-result reads do not reconcile pending rows. API readiness checks database/schema compatibility, while Checker readiness indicates loop startup. Neither proves that checks continue completing. Measure overdue work and result freshness independently; any reconciliation redesign belongs to a separate reviewed slice.
 
-The first availability design must define confirmation, recovery, unknown/stale state, maintenance exclusions, and the denominator/window for any uptime percentage. Sample-based and elapsed-time availability are different metrics. Missing observations must not silently count as healthy. Notification transport retries are also different from rechecking a target for failure confirmation.
+The current read is complete and deliberately excludes confirmation, recovery, maintenance exclusions, incident state, and any uptime percentage. A later incident/availability-history design must define these plus the denominator/window for any advertised uptime metric. Sample-based and elapsed-time availability are different metrics. Missing observations must not silently count as healthy. Notification transport retries are also different from rechecking a target for failure confirmation.
 
 ### Capacity and retention
 
@@ -90,8 +93,8 @@ Phases represent capability dependencies, not calendar promises. Each phase need
 | Phase | Deliverable | Exit evidence |
 |---|---|---|
 | R0 — Product and release brief | Confirm audience, supported targets, workload cap, detection expectations, data policy, operator, hosting constraints, and budget; agree proposed beta scope | Written decisions; measurable acceptance criteria; no unspecified public exposure |
-| R0a — Current availability read | Follow #44's scope review, then a dedicated design/plan for Go-owned current availability derived from execution evidence | Reviewed semantics, freshness and contract decisions; TDD evidence for the eventual implementation; no history/incidents/lifecycle scope expansion |
-| R1 — Local Web vertical slice | React registration/detail/latest-result on a bounded local access path; explicit empty/error/stale presentation | Real browser journey; public-route allowlist; internal routes inaccessible through Web; preserved deterministic runtime smoke |
+| R0a — Current availability read — complete | Go-owned current assessment landed through #44/#46/#47/#48, without new persistence or history/incidents/lifecycle | Contract 71 cases; domain/application/HTTP TDD; real PostgreSQL and Docker evidence; independent review fixes; exact-main CI green at b4f0ae5 |
+| R1 — Local Web vertical slice — next candidate | React registration/detail/current-availability/raw-result on a bounded local access path; explicit empty/error/unknown/stale presentation | Reviewed scope/design/plan; real browser journey; exact public-route allowlist; internal routes inaccessible through Web; preserved deterministic runtime smoke |
 | R2 — Monitor management and evidence | List/pagination, pause/resume and deliberate edit/delete semantics; bounded CheckRun history; retention design | Lifecycle/in-flight race evidence; stable pagination; retention cannot corrupt incident/history semantics; no UI-owned scheduling |
 | R3 — Monitoring decisions | Expected-status policy, confirmation/recovery, stale/unknown handling; maintenance semantics; durable incident open/resolve | Deterministic state-transition and replay evidence; Checker outage does not masquerade as healthy target or confirmed target outage |
 | R4 — Reliable notifications | One channel, incident/recovery delivery, deduplication, bounded retry, failure visibility and manual retry policy | Provider outage/restart evidence; durable delivery tracking; acknowledged duplicates policy; no repeated probe on notification retry |
@@ -154,4 +157,4 @@ Decisions still needed:
 - History retention and acceptable recovery point/time?
 - Single-region limitation for beta, or an explicit requirement for regional confirmation before launch?
 
-The immediate product gate is #44. If it lands, write its dedicated Current Monitor Availability Read Slice design before an implementation plan or code. The later R1 design should incorporate the release brief and downstream constraints here. This research does not authorize runtime, contract, migration, dependency, deployment, or external-service changes and does not modify or merge #44.
+R0a is complete. The immediate decision is R1's audience and local access scope; the recommended next artifact is a dedicated Local Web Monitoring Vertical Slice design after that scope is reviewed. It must consume all four existing public operations and preserve the landed availability semantics. R0's beta audience, workload, operator, budget and recovery decisions remain unresolved and must not be inferred from choosing a local browser slice. This research authorizes no runtime, contract, migration, dependency, deployment, or external-service change.
