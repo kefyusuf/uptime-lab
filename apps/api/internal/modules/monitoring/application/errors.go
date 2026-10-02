@@ -3,6 +3,8 @@ package application
 import "errors"
 
 var (
+	// ErrAvailabilityEvaluation is the stable invalid assessment or clock failure.
+	ErrAvailabilityEvaluation = errors.New("availability evaluation failed")
 	// ErrMonitorNotFound is the stable application-level not-found result.
 	ErrMonitorNotFound = errors.New("monitor not found")
 
