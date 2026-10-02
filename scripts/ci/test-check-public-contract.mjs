@@ -353,6 +353,7 @@ expectFixtureReject('availability null evidence fails', 'availability-unknown-po
 expectFixtureReject('availability extra field fails', 'availability-available.json', p => { p.extra = 1; }, 'keys');
 expectFixtureReject('availability extra evidence field fails', 'availability-available.json', p => { p.evidence.extra = 1; }, 'keys');
 expectFixtureReject('availability invalid timestamp fails', 'availability-available.json', p => { p.evaluatedAt = 'yesterday'; }, 'UTC timestamp');
+expectFixtureReject('availability impossible calendar date fails', 'availability-available.json', p => { p.evaluatedAt = '2026-02-30T12:00:00Z'; }, 'UTC timestamp');
 expectFixtureReject('availability invalid check ID fails', 'availability-available.json', p => { p.evidence.checkId = 'bad'; }, 'UUID');
 
 expectReject('OpenAPI version mismatch fails', (d) => { d.openapi = '3.2.1'; }, 'openapi must be exactly 3.1.2');

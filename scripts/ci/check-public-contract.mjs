@@ -494,7 +494,8 @@ const availabilityFixtureCases = [
 
 function assertUTCTimestamp(value, label) {
   assert(typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value)
-    && Number.isFinite(Date.parse(value)), `${label} must be a UTC timestamp`);
+    && Number.isFinite(Date.parse(value))
+    && new Date(value).toISOString().slice(0, 19) === value.slice(0, 19), `${label} must be a UTC timestamp`);
 }
 
 function validateAvailability(document, repositoryRoot) {
