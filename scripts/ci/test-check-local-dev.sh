@@ -105,7 +105,9 @@ mutate_service_line() {
 
 make_fixture() {
   rm -rf "$TMP/repo"
-  mkdir -p "$TMP/repo/deploy/docker/placeholder" "$TMP/repo/apps/api" "$TMP/repo/apps/checker" "$TMP/repo/contracts/openapi"
+  mkdir -p "$TMP/repo/deploy/docker/placeholder" "$TMP/repo/apps/api" "$TMP/repo/apps/checker" "$TMP/repo/apps/web" "$TMP/repo/contracts/openapi"
+  cp "$SCRIPT_DIR/../../apps/web/Dockerfile" "$TMP/repo/apps/web/Dockerfile"
+  printf '{}\n' > "$TMP/repo/apps/web/package-lock.json"
   printf 'module github.com/kefyusuf/uptime-lab/apps/api\n\ngo 1.27.1\n' > "$TMP/repo/apps/api/go.mod"
   : > "$TMP/repo/apps/api/go.sum"
   printf '[workspace]\n' > "$TMP/repo/apps/checker/Cargo.toml"
@@ -115,15 +117,17 @@ make_fixture() {
   cat > "$TMP/repo/compose.yaml" <<'YAML'
 services:
   web:
-    build: ./deploy/docker/placeholder
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
     environment:
-      SERVICE_NAME: web
+      UPTIME_LAB_WEB_PORT: ${UPTIME_LAB_WEB_PORT:-4173}
     init: true
     read_only: true
     tmpfs:
       - /run/uptime-lab:uid=10001,gid=10001,mode=0700
     healthcheck:
-      test: ["CMD-SHELL", "test -f /run/uptime-lab/ready"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 2s
       timeout: 1s
       retries: 10
@@ -312,17 +316,16 @@ insert_after_line "$TMP/repo/compose.yaml" "  web:" "    profiles: [dev]"
 expect_failure "Compose profiles fail" "$CHECKER" "$TMP/repo"
 
 make_fixture
-mkdir -p "$TMP/repo/apps/web"
-printf '{"private":true}\n' > "$TMP/repo/apps/web/package.json"
-expect_failure "future web runtime scaffold fails" "$CHECKER" "$TMP/repo"
+rm "$TMP/repo/apps/web/package-lock.json"
+expect_failure "Web missing frozen lock fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
 mutate_service_line "$TMP/repo/compose.yaml" web "    healthcheck:" "    x-healthcheck:"
 expect_failure "placeholder missing explicit healthcheck fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
-mutate_service_line "$TMP/repo/compose.yaml" web '      test: ["CMD-SHELL", "test -f /run/uptime-lab/ready"]' '      test: ["CMD-SHELL", "test -f /run/uptime-lab/not-ready"]'
-expect_failure "placeholder healthcheck without readiness marker fails" "$CHECKER" "$TMP/repo"
+mutate_service_line "$TMP/repo/compose.yaml" web '      test: ["CMD", "node", "-e", "fetch('\''http://127.0.0.1:8080/healthz'\'').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]' '      test: ["CMD-SHELL", "test -f /run/uptime-lab/ready"]'
+expect_failure "Web marker-only health fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
 replace_literal_once "$TMP/repo/compose.yaml" '      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]' '      test: ["CMD-SHELL", "test -f /tmp/db-ready"]'

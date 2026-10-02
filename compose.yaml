@@ -1,14 +1,14 @@
 services:
   web:
-    build: ./deploy/docker/placeholder
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
     environment:
-      SERVICE_NAME: web
+      UPTIME_LAB_WEB_PORT: ${UPTIME_LAB_WEB_PORT:-4173}
     init: true
     read_only: true
-    tmpfs:
-      - /run/uptime-lab:uid=10001,gid=10001,mode=0700
     healthcheck:
-      test: ["CMD-SHELL", "test -f /run/uptime-lab/ready"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 2s
       timeout: 1s
       retries: 10

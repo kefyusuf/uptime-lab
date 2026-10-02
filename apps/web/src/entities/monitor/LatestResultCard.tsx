@@ -62,7 +62,7 @@ export function LatestResultCard({
             {'durationMs' in value && (
               <div>
                 <dt>Duration</dt>
-                <dd>{value.durationMs} ms</dd>
+                <dd data-testid="raw-duration">{value.durationMs} ms</dd>
               </div>
             )}
           </dl>

@@ -1,0 +1,4 @@
+services:
+  web:
+    ports:
+      - "127.0.0.1:${UPTIME_LAB_WEB_PORT:-4173}:8080"
