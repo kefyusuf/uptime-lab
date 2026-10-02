@@ -1,0 +1,6 @@
+package-lock.json
+src/shared/api/public.generated.ts
+dist
+dist-server
+test-results
+playwright-report
