@@ -13,7 +13,8 @@ Current availability is exposed by `GET /monitors/{monitorId}/availability` as a
 - Local Web Monitoring Vertical Slice design: [superpowers/specs/2026-10-02-local-web-monitoring-vertical-slice-design.md](superpowers/specs/2026-10-02-local-web-monitoring-vertical-slice-design.md); approved in #49, implemented in #51, with permanent inbound deadline coverage in #52.
 - Implementation plans: [superpowers/plans/](superpowers/plans/)
 - Completed Local Web implementation plan: [superpowers/plans/2026-10-02-local-web-monitoring-vertical-slice.md](superpowers/plans/2026-10-02-local-web-monitoring-vertical-slice.md); historical TDD plan executed through #51; current evidence is in the Web verification guide and handoff.
-- Local Monitor Inventory written design candidate: [superpowers/specs/2026-10-05-local-monitor-inventory-design.md](superpowers/specs/2026-10-05-local-monitor-inventory-design.md); approved scope #53 translated into bounded collection/gateway/UI design; awaiting design review before planning.
+- Approved Local Monitor Inventory design: [superpowers/specs/2026-10-05-local-monitor-inventory-design.md](superpowers/specs/2026-10-05-local-monitor-inventory-design.md); approved and merged in #54, including oversized-item traversal limitation.
+- Local Monitor Inventory implementation plan candidate: [superpowers/plans/2026-10-05-local-monitor-inventory.md](superpowers/plans/2026-10-05-local-monitor-inventory.md); seven TDD tasks, awaiting plan review and execution-method confirmation.
 - Current continuation state: [devops/current-handoff.md](devops/current-handoff.md); verify its recorded base and live PR state before resuming.
 
 Design/spec/plan documents preserve the decision history for the phase in which they were written. Current implementation truth is described by the canonical architecture, backend, checker, testing, and devops documents below.
