@@ -86,6 +86,9 @@ assert_migration_metadata_absent() {
 
 apply_migrations() {
   compose exec -T api /usr/local/bin/uptime-lab-migrate up
+  local inventory_index
+  inventory_index="$(compose exec -T db sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"' sh "SELECT EXISTS (SELECT 1 FROM pg_index WHERE indexrelid = to_regclass('monitoring.monitors_inventory_order_idx') AND NOT indisunique AND pg_get_indexdef(indexrelid) LIKE '%USING btree (created_at DESC, id DESC)%');")"
+  [[ "$inventory_index" == t ]] || { printf 'Inventory ordering index is missing or incompatible\n' >&2; return 1; }
 }
 
 assert_api_operational_health() {
