@@ -18,6 +18,12 @@ At implementation commit `02f95b3`, CI run [37196147028](https://github.com/kefy
 
 ## Inventory Evidence
 Inventory artifact evidence adds21 unique canonical IDs and a selected ID to the existing id/target/raw/availability capture. The runner reads those actual Monitor rows separately; missing/wrong rows fail `verifyInventoryEvidence`. Later latest-result queries never replace captured CheckID proof. Actual Chromium RED3b5d4d3 in [CI37241929991](https://github.com/kefyusuf/uptime-lab/actions/runs/37241929991) expected20 rows but received1 before controlled preparation. GREEN1386e98 passed [CI37242623843](https://github.com/kefyusuf/uptime-lab/actions/runs/37242623843) with both real ports, canonical smoke and durable inventory evidence. Verify the final changed head separately.
+## Independent Inventory Review
+
+Fresh read-only review of `f50eca0..57e3ad7` found two important compatibility defects and no critical issue. The inventory decoder re-parsed Go-accepted target text with WHATWG URL rules; three Go acceptance cases and six browser decoder/client regressions reproduced the mismatch. The production ServeMux also redirected raw collection path aliases before product validation; an actual loopback server test with redirects disabled reproduced307/missing no-store and requires400, no redirect and zero repository reads. Both defects were fixed in one TDD pass. The complete Go suite/vet and227 Web tests/typecheck/lint/format passed afterward; final changed-head CI remains required.
+
+Deferred minor: the existing EXPLAIN check reads only the first text line from an empty fixture. It does not record a representative populated query plan; follow-up evidence should capture full JSON EXPLAIN without requiring index selection on a small fixture. Index existence, migration compatibility and real bounded SQL behavior are independently tested. No production query-capacity claim follows from this increment.
+
 ## Permanent Inbound Deadline Regressions
 
 `server/server.test.ts` sends incomplete headers through a real loopback TCP socket against `createWebServer`, with100ms header and2000ms request deadlines. `server/gateway.test.ts` sends a valid JSON POST header with an unfinished64-byte body against the gateway's100ms body timer. Both require connection closure before a1000ms watchdog and zero upstream requests; the POST also requires408 and no-store. Clients and servers are cleaned on success/failure; no fake clock or external target is used.

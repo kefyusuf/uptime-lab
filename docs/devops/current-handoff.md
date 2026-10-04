@@ -4,11 +4,11 @@
 **Verified landed base:** `f50eca01fd74b6636113a7c8afd6126f8aeed879` (approved plan55 after scope53/design54)
 **Active branch:** `feat/local-monitor-inventory`
 **Managed worktree:** `C:\Users\yukonit\.codex\worktrees\local-monitor-inventory\uptime-lab`
-**Implementation PR:** [#56](https://github.com/kefyusuf/uptime-lab/pull/56), draft until final documentation gates and fresh review finish
+**Implementation PR:** [#56](https://github.com/kefyusuf/uptime-lab/pull/56), draft until the review-fix head passes affected CI and the aggregate gate
 
 ## Current implementation
 
-The user approved merging plan55 and executing all seven dependent tasks through Native TDD. Tasks1–6 are complete:532db58 contract,4c20401 cursor/use case,666a6d3 SQL RED,336ce4b retrieval/index,0a1fb9c HTTP,96dc3cb maximum-row budget,21a8c70 gateway and1793e25 UI. Task7 adds independent durable Monitor evidence, a two-page browser journey and canonical index smoke.
+The user approved merging plan55 and executing all seven dependent tasks through Native TDD. All seven tasks are complete:532db58 contract,4c20401 cursor/use case,666a6d3 SQL RED,336ce4b retrieval/index,0a1fb9c HTTP,96dc3cb maximum-row budget,21a8c70 gateway,1793e25 UI and1386e98 durable Monitor/browser/index acceptance, followed by canonical documentation57e3ad7.
 
 Actual PostgreSQL RED in CI37239817150 detected the absent inventory migration. SQL GREEN336ce4b passed CI37240193666 and isolated local Linux-container integration. Actual Chromium RED3b5d4d3 in CI37241929991 expected20 rows and received1 before the controlled21-row preparation. GREEN code1386e98 passed [CI37242623843](https://github.com/kefyusuf/uptime-lab/actions/runs/37242623843), including actual default/custom-port browser inventory journeys, canonical Docker smoke, Go/PostgreSQL/race/vulnerability, public contract and Web quality gates. This evidence certifies that code checkpoint, not later changed heads.
 
@@ -16,13 +16,15 @@ Go now serves five public operations on this branch. Inventory is local-only, de
 
 Local Task6 evidence:221 Web tests, generated parity, typecheck, lint, package-context format, boundaries, build and zero-vulnerability audit passed. Task7 evidence mutation tests12, fake browser orchestration6 and fake smoke20 passed; fake CLI results are never browser/SQL proof. Existing creation/detail/availability/Checker behavior remains covered.
 
-## Remaining finish gates
+## Final review and remaining finish gates
 
-Refresh canonical docs and check their links, architecture, repository shape, immutable migration history and whitespace. Require the final implementation head's affected CI jobs and aggregate gate. Finish the Native task ledger, run a fresh whole-branch review, then finalize the same PR and request merge approval. Do not deploy or merge without the corresponding authorization.
+Documentation head57e3ad7 passed [CI37243527314](https://github.com/kefyusuf/uptime-lab/actions/runs/37243527314);83 relative document links, architecture/repository, immutable migration history, contract/generated parity and whitespace also passed. Fresh whole-branch review found no critical issue and two important defects: browser URL-policy mismatch and outer HTTP canonical redirects. Both were reproduced and fixed in one TDD pass; the Go suite/vet and227 Web tests/typecheck/lint/format passed. See [review evidence and deferred EXPLAIN minor](../testing/local-monitoring-web.md#independent-inventory-review).
+
+Require the final review-fix head's affected CI jobs and aggregate gate, then finalize the same PR and request merge approval. Preserve final evidence/rulings in the PR before deleting only this plan's ignored scratch directory. Keep the managed implementation worktree for PR feedback. Do not deploy or merge without the corresponding authorization.
 
 ## Resume verification
 
-Use the attached inventory worktree above. Run `git status --short`, `git branch --show-current`, `git log -1 --format='%H %s'`, `git merge-base --is-ancestor f50eca01fd74b6636113a7c8afd6126f8aeed879 HEAD`, and inspect PR56 plus exact-head checks. The ignored `.superpowers/sdd/2026-10-05-local-monitor-inventory/progress.md` records completed tasks until final cleanup; trust its completed-task lines and actual Git state. Preserve user-owned changes. The prior local Web worktree is archived; primary main at `E:\projects\uptime-lab` is separate from this implementation checkout.
+Use the attached inventory worktree above. Run `git status --short`, `git branch --show-current`, `git log -1 --format='%H %s'`, `git merge-base --is-ancestor f50eca01fd74b6636113a7c8afd6126f8aeed879 HEAD`, and inspect PR56 plus exact-head checks. All task checkpoints are recorded above; the finalized PR holds final review, CI and execution rulings after scratch cleanup. Preserve user-owned changes. The prior local Web worktree is archived; primary main at `E:\projects\uptime-lab` is separate from this implementation checkout.
 
 ## Runtime and rulings
 

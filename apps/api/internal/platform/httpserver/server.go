@@ -45,14 +45,21 @@ func New(addr string, readiness ReadinessChecker, product http.Handler) *Server 
 		product = http.NotFoundHandler()
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/livez", server.handleLivez)
-	mux.HandleFunc("/readyz", server.handleReadyz)
-	mux.Handle("/", product)
+	// Delegate original product paths without ServeMux's canonical redirects.
+	dispatch := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/livez":
+			server.handleLivez(writer, request)
+		case "/readyz":
+			server.handleReadyz(writer, request)
+		default:
+			product.ServeHTTP(writer, request)
+		}
+	})
 
 	server.httpServer = &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           dispatch,
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       readTimeout,
 		WriteTimeout:      writeTimeout,

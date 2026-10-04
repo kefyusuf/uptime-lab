@@ -7,6 +7,27 @@ const monitor = {
 };
 const signal = () => new AbortController().signal;
 describe('Monitor client', () => {
+  it.each([
+    'http://[fe80::1%25eth0]/',
+    'http://example.com:65536/',
+    'http://127.0.0.999/',
+  ])('reads a page containing Go-accepted target %s', async (targetUrl) => {
+    const item = { ...monitor, targetUrl };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        Response.json({ items: [item], nextCursor: 'A'.repeat(88) }),
+      );
+    expect(
+      await createMonitorClient(fetcher).listMonitors(
+        { limit: 20, cursor: null },
+        signal(),
+      ),
+    ).toEqual({
+      kind: 'success',
+      data: { items: [item], nextCursor: 'A'.repeat(88) },
+    });
+  });
   it('bounds inventory requests with the existing12s cancellation', async () => {
     vi.useFakeTimers();
     try {

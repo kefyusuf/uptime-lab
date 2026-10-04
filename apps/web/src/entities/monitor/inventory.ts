@@ -51,20 +51,7 @@ export function decodeInventoryPage(
       /^0001-01-01T00:00:00(?:\.0+)?Z$/.test(monitor.createdAt)
     )
       return fail();
-    let target: URL;
-    try {
-      target = new URL(monitor.targetUrl);
-    } catch {
-      return fail();
-    }
-    if (
-      !/^https?:\/\//i.test(monitor.targetUrl) ||
-      !target.hostname ||
-      target.username ||
-      target.password ||
-      target.hash
-    )
-      return fail();
+    // Target text is owned by Go; WHATWG URL rules differ from its parser.
     ids.add(monitor.id);
     return monitor;
   });

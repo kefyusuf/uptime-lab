@@ -8,6 +8,22 @@ const monitor = {
 };
 const token =
   'MXwyMDI2LTEwLTA1VDAwOjAwOjAwLjEyMzQ1Nlp8MDE4ZjIyZDMtMWQ2YS03Y2MwLWEzN2ItNDZmYzNmYWZkY2Iy';
+it.each([
+  'http://[fe80::1%25eth0]/',
+  'http://example.com:65536/',
+  'http://127.0.0.999/',
+])(
+  'preserves Go-accepted target text without browser URL policy: %s',
+  (targetUrl) => {
+    const item = { ...monitor, targetUrl };
+    expect(
+      decodeInventoryPage({ items: [item], nextCursor: token }, 20),
+    ).toEqual({
+      items: [item],
+      nextCursor: token,
+    });
+  },
+);
 it('decodes complete targets and keeps the opaque cursor', () => {
   expect(
     decodeInventoryPage({ items: [monitor], nextCursor: token }, 20),
@@ -40,7 +56,7 @@ it.each([
     items: [{ ...monitor, createdAt: '2026-10-05T00:00:00.1234567Z' }],
     nextCursor: null,
   },
-  { items: [{ ...monitor, targetUrl: 'file:///private' }], nextCursor: null },
+  { items: [{ ...monitor, targetUrl: 42 }], nextCursor: null },
 ])('rejects malformed inventory envelope %#', (value) => {
   expect(() => decodeInventoryPage(value, 20)).toThrow(ResponseDecodeError);
 });

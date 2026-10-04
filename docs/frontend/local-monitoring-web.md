@@ -14,6 +14,6 @@ The container runs as `10001:10001` with read-only storage and compiled assets/s
 
 ## Inventory on the start page
 
-A newly mounted start page loads one20-row inventory page. Next replaces it; Refresh returns to the first page; Retry uses the attempted cursor. Pending reads clear old rows and abort/generation guards suppress stale completions. Exact targets wrap as escaped text without outbound links. ID, UTC creation time and native local detail links remain usable by keyboard and modified clicks. List rows make no health/detail requests.
+A newly mounted start page loads one20-row inventory page. Next replaces it; Refresh returns to the first page; Retry uses the attempted cursor. Pending reads clear old rows and abort/generation guards suppress stale completions. Exact targets wrap as escaped text without outbound links. The decoder checks the existing string field and preserves Go-accepted text without imposing WHATWG URL policy. ID, UTC creation time and native local detail links remain usable by keyboard and modified clicks. List rows make no health/detail requests.
 
 First-page and cursor-page empty messages differ; a failed read remains an error. Only the closed approved oversized500 receives fixed client copy; arbitrary server details are hidden. That first-item error blocks older traversal without truncation or skipping. Creation and UUID reopen remain usable. No cursor history/localStorage, backward stack, polling, automatic POST retry or ownership boundary is introduced.

@@ -7,6 +7,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"path"
 	"strings"
 	"time"
 
@@ -69,6 +70,11 @@ func NewHandlerWithAvailability(register registerMonitor, get getMonitor, getLat
 
 // ServeHTTP recognizes only configured contracted Monitoring resource shapes.
 func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	// Recognize collection aliases only to reject their original raw target.
+	if handler.list != nil && request.Method == http.MethodGet && path.Clean(request.URL.Path) == monitorsPath {
+		handler.serveInventory(writer, request)
+		return
+	}
 	if request.URL.Path == monitorsPath {
 		handler.serveCollection(writer, request)
 		return
