@@ -11,3 +11,7 @@ Each captured CheckID and Monitor ID is verified against its own durable termina
 `test-run-web-browser-tests.sh` proves orchestration/cleanup and occupied-port failure using a fake Docker CLI. It is not Docker/browser acceptance. The required exact-head Linux Web CI job runs both default/custom port real journeys, existing runtime CI remains active, and failed Chromium traces are retained briefly. This host lacks Docker; local unit/build results must not be presented as image/Compose/Chromium evidence.
 
 Remote ingress/TLS, authentication/authorization, backup/restore, production monitoring and release drills remain separate roadmap gates. This slice is local browser access, not live-release readiness.
+
+## Recorded Linux Acceptance
+
+At implementation commit `02f95b3`, CI run [37196147028](https://github.com/kefyusuf/uptime-lab/actions/runs/37196147028) passed the Web job with real default/custom-port journeys and the canonical local-dev smoke job. This is commit-specific integration evidence; always verify the PR's current head and aggregate gate before merge. Fresh independent review found no blocking defect. Two permanent inbound-deadline socket regression tests remain a nonblocking coverage follow-up; current behavior passed independent HTTP probes.

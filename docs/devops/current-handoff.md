@@ -1,9 +1,10 @@
 # Current Project Handoff
 
-**Recorded:** 2026-10-02
+**Recorded:** 2026-10-04
 **Verified landed base:** `68c666172a6119e9110a2f08dcfe0e5b8813b016` (approved implementation plan #50)
 **Implementation branch:** `feat/local-web-monitoring`
-**Last recorded implementation commit:** `d10bf211c872d49325fa40004c7f3bfdb8296416` (Tasks1–6 complete)
+**Reviewed implementation commit:** `02f95b3bcae1623808389a68b51ba4ea6585e7a8` (Tasks1–7 complete)
+**Implementation PR:** [#51](https://github.com/kefyusuf/uptime-lab/pull/51)
 
 ## Completed state
 
@@ -16,7 +17,7 @@
 
 ## Next gate and artifact
 
-Task7 adds exact-head Web CI and current documentation. Required completion gates: exact implementation-head CI including real default/custom-port browser and canonical smoke, one fresh whole-branch reviewer, tested fixes, and explicit user merge approval. No production deployment is authorized. See the [plan](../superpowers/plans/2026-10-02-local-web-monitoring-vertical-slice.md), [Web ownership](../frontend/local-monitoring-web.md) and [verification](../testing/local-monitoring-web.md).
+Task7 adds exact-head Web CI and current documentation. A fresh whole-branch reviewer found no Critical/Important defects at the reviewed commit. In CI run [37196147028](https://github.com/kefyusuf/uptime-lab/actions/runs/37196147028), real default/custom-port browser journeys, canonical Docker smoke, Go and contract/repository jobs passed at that commit. Rust audit and the aggregate gate were still running when this handoff was recorded. Before merge, require all jobs and the aggregate gate to pass at the PR's actual latest head, including this documentation follow-up; inspect live checks rather than assuming the previous run covers a later commit. Explicit user merge approval remains required. No production deployment is authorized. See the [plan](../superpowers/plans/2026-10-02-local-web-monitoring-vertical-slice.md), [Web ownership](../frontend/local-monitoring-web.md) and [verification](../testing/local-monitoring-web.md).
 
 The user requires TDD, meaningful commits on a short-lived branch, a reviewable PR, and concise Turkish before/after explanations after completed actions. Code/docs/product copy remain English. Preserve user changes; persistent memory/configuration writes and global tooling installation are not authorized.
 
@@ -24,9 +25,17 @@ The user requires TDD, meaningful commits on a short-lived branch, a reviewable 
 
 Run `git status --short`, `git branch --show-current`, `git log -1 --format='%H %s'`, `git merge-base --is-ancestor 68c666172a6119e9110a2f08dcfe0e5b8813b016 HEAD`, and inspect the implementation PR's exact-head checks. The recorded implementation commit is a verified predecessor, not a guessed hash of this document's own commit. Refresh remote state and preserve user-owned changes.
 
-This host lacks Docker. Task-local Node24.21.0/npm11.19.1 supplies application parity; real image/Compose/Chromium acceptance remains pending Linux CI. Fake CLI results prove orchestration only.
+This host lacks Docker. Task-local Node24.21.0/npm11.19.1 supplies application parity; Linux CI supplies real image/Compose/Chromium evidence. Fake CLI results prove orchestration only. The reviewer independently verified incomplete-header closure, incomplete-body408 closure, partial-upstream504 and interrupted-upstream502 under pinned Node; current bounded behavior passed.
 
 ## Implementation rulings
 
 - Inbound creation-body deadline returns408 and closes the connection. The design pins the deadline without that status; unusual slow clients may receive conservative uncertain-creation feedback.
 - Root build context requires `apps/web/Dockerfile.dockerignore`. Incorrect patterns could enlarge build context; the final image copies compiled outputs only.
+- Remote authentication/TLS/multi-user release gates remain outside this approved local-only slice. Cost if this boundary is mistaken: premature public exposure; no remote deployment is performed.
+- Go/Rust domain source is unchanged; review covers integration and existing runtime CI covers the domain. Cost if mistaken: an existing domain defect could remain outside this patch review.
+- Asset replacement races require a mutable runtime filesystem, excluded by the verified read-only compiled image. Cost if that condition changes: containment assumptions must be revalidated.
+- Docker/Chromium behavior and ignore-rule execution require actual Linux CI, not local source review. That evidence passed at the reviewed commit and must pass at the final head; accepting fixture evidence would risk unverified runtime integration.
+
+## Deferred nonblocking review item
+
+- P3: Add permanent actual-socket regression tests for incomplete inbound headers and unfinished POST bodies. Current deadlines/closure were independently verified; committed tests cover header size/upstream deadlines but not these two inbound cases. Deferred as coverage hardening, not a known broken behavior.
