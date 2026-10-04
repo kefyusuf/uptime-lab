@@ -14,4 +14,10 @@ Remote ingress/TLS, authentication/authorization, backup/restore, production mon
 
 ## Recorded Linux Acceptance
 
-At implementation commit `02f95b3`, CI run [37196147028](https://github.com/kefyusuf/uptime-lab/actions/runs/37196147028) passed the Web job with real default/custom-port journeys and the canonical local-dev smoke job. This is commit-specific integration evidence; always verify the PR's current head and aggregate gate before merge. Fresh independent review found no blocking defect. Two permanent inbound-deadline socket regression tests remain a nonblocking coverage follow-up; current behavior passed independent HTTP probes.
+At implementation commit `02f95b3`, CI run [37196147028](https://github.com/kefyusuf/uptime-lab/actions/runs/37196147028) passed the Web job with real default/custom-port journeys and canonical smoke. After PR51 merged at `f17d2de`, [exact-main run37215662225](https://github.com/kefyusuf/uptime-lab/actions/runs/37215662225) passed all10 jobs/gate. Fresh independent review found no blocking defect. Evidence is commit-specific; always verify the active PR's current head and aggregate gate before merge.
+
+## Permanent Inbound Deadline Regressions
+
+`server/server.test.ts` sends incomplete headers through a real loopback TCP socket against `createWebServer`, with100ms header and2000ms request deadlines. `server/gateway.test.ts` sends a valid JSON POST header with an unfinished64-byte body against the gateway's100ms body timer. Both require connection closure before a1000ms watchdog and zero upstream requests; the POST also requires408 and no-store. Clients and servers are cleaned on success/failure; no fake clock or external target is used.
+
+Negative proof: temporarily disabling the server header deadline and extending the gateway body deadline to60000ms caused both tests to fail on the watchdog. Restoring unchanged production settings passed all144 app tests, typecheck, lint, formatting and boundaries. The committed change contains tests/documentation only; product behavior and configured production limits are unchanged.

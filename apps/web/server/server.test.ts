@@ -1,5 +1,6 @@
 import { createServer, request, type Server } from 'node:http';
 import { once } from 'node:events';
+import { connect } from 'node:net';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -116,6 +117,66 @@ it('rejects oversized headers with no-store', async () => {
     },
   );
   expect(result).toEqual({ status: 431, cache: 'no-store' });
+});
+it('closes incomplete inbound headers within a bounded deadline without forwarding', async () => {
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  let forwarded = 0;
+  const upstream = createServer((_req, res) => {
+    forwarded++;
+    res.end();
+  });
+  upstream.listen(0, '127.0.0.1');
+  await once(upstream, 'listening');
+  const upstreamAddress = upstream.address();
+  if (!upstreamAddress || typeof upstreamAddress === 'string')
+    throw Error('address');
+  server = createWebServer(
+    {
+      ...loadWebConfig({}),
+      headerTimeoutMs: 100,
+      requestTimeoutMs: 2000,
+      upstreamOrigin: 'http://127.0.0.1:' + upstreamAddress.port,
+    },
+    loadAssets(root),
+    () => {},
+  );
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw Error('address');
+  const socket = connect({ host: '127.0.0.1', port: address.port });
+  try {
+    const wire = await new Promise<string>((resolve, reject) => {
+      let response = '';
+      const watchdog = setTimeout(() => {
+        reject(Error('Incomplete headers stayed open beyond 1000ms.'));
+        socket.destroy();
+      }, 1000);
+      socket.on('data', (chunk) => {
+        response += chunk.toString();
+      });
+      socket.once('error', (error) => {
+        clearTimeout(watchdog);
+        reject(error);
+      });
+      socket.once('close', () => {
+        clearTimeout(watchdog);
+        resolve(response);
+      });
+      socket.once('connect', () =>
+        socket.write(
+          'GET /api/monitors/id HTTP/1.1\r\nHost: 127.0.0.1:4173\r\nX-Unfinished: ',
+        ),
+      );
+    });
+    expect(wire.toLowerCase()).toContain('connection: close');
+    expect(wire.toLowerCase()).toContain('cache-control: no-store');
+    expect(forwarded).toBe(0);
+  } finally {
+    socket.destroy();
+    upstream.closeAllConnections();
+    await new Promise<void>((resolve) => upstream.close(() => resolve()));
+  }
 });
 it('closes active requests after bounded shutdown grace', async () => {
   const hanging = createServer(() => {});

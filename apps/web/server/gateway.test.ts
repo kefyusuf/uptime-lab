@@ -5,6 +5,7 @@ import {
   type IncomingHttpHeaders,
 } from 'node:http';
 import { once } from 'node:events';
+import { connect } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { loadWebConfig, type WebConfig } from './config.js';
 import { createGateway } from './gateway.js';
@@ -262,6 +263,45 @@ describe('actual HTTP gateway', () => {
   it('bounds upstream body', async () => {
     body = 'x'.repeat(262145);
     expect((await call('/api/monitors/id')).status).toBe(502);
+  });
+  it('closes an unfinished POST body with408 before forwarding any request', async () => {
+    let forwarded = 0;
+    upstream.on('request', () => {
+      forwarded++;
+    });
+    const socket = connect({ host: '127.0.0.1', port });
+    try {
+      const wire = await new Promise<string>((resolve, reject) => {
+        let response = '';
+        const watchdog = setTimeout(() => {
+          reject(Error('Unfinished POST stayed open beyond 1000ms.'));
+          socket.destroy();
+        }, 1000);
+        socket.on('data', (chunk) => {
+          response += chunk.toString();
+        });
+        socket.once('error', (error) => {
+          clearTimeout(watchdog);
+          reject(error);
+        });
+        socket.once('close', () => {
+          clearTimeout(watchdog);
+          resolve(response);
+        });
+        socket.once('connect', () =>
+          socket.write(
+            'POST /api/monitors HTTP/1.1\r\nHost: 127.0.0.1:4173\r\nOrigin: http://127.0.0.1:4173\r\nContent-Type: application/json\r\nContent-Length: 64\r\n\r\n{"targetUrl":',
+          ),
+        );
+      });
+      expect(wire).toMatch(/^HTTP\/1\.1 408 /);
+      expect(wire.toLowerCase()).toContain('connection: close');
+      expect(wire.toLowerCase()).toContain('cache-control: no-store');
+      expect(forwarded).toBe(0);
+      expect(captured).toHaveLength(0);
+    } finally {
+      socket.destroy();
+    }
   });
   it('terminates slow upstream with sanitized504', async () => {
     hang = true;
