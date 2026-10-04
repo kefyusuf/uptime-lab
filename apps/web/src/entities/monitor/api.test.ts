@@ -7,6 +7,114 @@ const monitor = {
 };
 const signal = () => new AbortController().signal;
 describe('Monitor client', () => {
+  it('bounds inventory requests with the existing12s cancellation', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockImplementation(() => new Promise(() => {}));
+      const result = createMonitorClient(fetcher).listMonitors(
+        { limit: 20, cursor: null },
+        signal(),
+      );
+      await vi.advanceTimersByTimeAsync(12000);
+      expect(await result).toMatchObject({
+        kind: 'error',
+        error: { kind: 'transport' },
+      });
+      expect(fetcher.mock.calls[0][1]?.signal?.aborted).toBe(true);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('reads inventory through a canonical bounded query without credentials', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json({ items: [monitor], nextCursor: null }));
+    expect(
+      await createMonitorClient(fetcher).listMonitors(
+        { limit: 20, cursor: null },
+        signal(),
+      ),
+    ).toEqual({
+      kind: 'success',
+      data: { items: [monitor], nextCursor: null },
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      '/api/monitors?limit=20',
+      expect.objectContaining({
+        method: 'GET',
+        cache: 'no-store',
+        credentials: 'omit',
+        redirect: 'error',
+      }),
+    );
+    const cursor = 'A'.repeat(88);
+    await createMonitorClient(fetcher).listMonitors(
+      { limit: 20, cursor },
+      signal(),
+    );
+    expect(fetcher).toHaveBeenLastCalledWith(
+      '/api/monitors?limit=20&cursor=' + cursor,
+      expect.anything(),
+    );
+  });
+  it('rejects invalid inventory caller input before fetch', async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    for (const input of [
+      { limit: 0, cursor: null },
+      { limit: 51, cursor: null },
+      { limit: 1.5, cursor: null },
+      { limit: 20, cursor: 'invalid' },
+    ])
+      expect(
+        (await createMonitorClient(fetcher).listMonitors(input, signal())).kind,
+      ).toBe('error');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it('rejects inventory204 and arbitrary error details', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(
+        Response.json({ detail: 'secret' }, { status: 500 }),
+      );
+    const api = createMonitorClient(fetcher);
+    expect(
+      (await api.listMonitors({ limit: 20, cursor: null }, signal())).kind,
+    ).toBe('error');
+    expect(
+      JSON.stringify(
+        await api.listMonitors({ limit: 20, cursor: null }, signal()),
+      ),
+    ).not.toContain('secret');
+  });
+  it('shows fixed copy for the approved oversized500', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json(
+        {
+          type: 'about:blank',
+          title: 'Internal Server Error',
+          status: 500,
+          detail: 'A registered monitor exceeds the inventory response limit.',
+        },
+        { status: 500 },
+      ),
+    );
+    expect(
+      await createMonitorClient(fetcher).listMonitors(
+        { limit: 20, cursor: null },
+        signal(),
+      ),
+    ).toMatchObject({
+      kind: 'error',
+      error: {
+        status: 500,
+        message: 'A registered monitor exceeds the inventory response limit.',
+      },
+    });
+  });
   it('rejects200 JSON null as malformed raw result', async () => {
     const fetcher = vi
       .fn<typeof fetch>()

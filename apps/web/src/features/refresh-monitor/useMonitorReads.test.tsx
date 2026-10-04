@@ -30,6 +30,10 @@ function deferred<T>() {
 function client(): MonitorClient {
   return {
     createMonitor: vi.fn(),
+    listMonitors: vi.fn().mockResolvedValue({
+      kind: 'success',
+      data: { items: [], nextCursor: null },
+    }),
     getMonitor: vi.fn().mockResolvedValue({ kind: 'success', data: monitor }),
     getAvailability: vi
       .fn()

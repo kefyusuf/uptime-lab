@@ -1,4 +1,5 @@
 import { requestJson } from '../../shared/api/http';
+import { decodeInventoryPage, decodeInventoryProblem } from './inventory';
 import {
   decodeAvailability,
   decodeLatestResult,
@@ -57,6 +58,64 @@ export function createMonitorClient(fetchImpl: typeof fetch): MonitorClient {
   }
   const resource = (id: string) => '/api/monitors/' + encodeURIComponent(id);
   return {
+    async listMonitors(input, signal) {
+      if (
+        !Number.isInteger(input.limit) ||
+        input.limit < 1 ||
+        input.limit > 50 ||
+        (input.cursor !== null &&
+          (typeof input.cursor !== 'string' ||
+            input.cursor.length !== 88 ||
+            !/^[A-Za-z0-9_-]{88}$/.test(input.cursor)))
+      )
+        return {
+          kind: 'error',
+          error: {
+            kind: 'invalid_response',
+            message: 'The inventory query is invalid.',
+          },
+        };
+      const path =
+        '/api/monitors?limit=' +
+        input.limit +
+        (input.cursor === null ? '' : '&cursor=' + input.cursor);
+      try {
+        const response = await requestJson(fetchImpl, path, {
+          method: 'GET',
+          signal,
+        });
+        if (response.status === 204) throw new ResponseDecodeError();
+        if (response.status !== 200)
+          return {
+            kind: 'error',
+            error: {
+              kind: 'http',
+              status: response.status,
+              message:
+                response.status === 500 &&
+                decodeInventoryProblem(response.value) === 'oversized'
+                  ? 'A registered monitor exceeds the inventory response limit.'
+                  : 'The inventory read request failed.',
+            },
+          };
+        return {
+          kind: 'success',
+          data: decodeInventoryPage(response.value, input.limit),
+        };
+      } catch (error) {
+        return {
+          kind: 'error',
+          error: {
+            kind:
+              error instanceof ResponseDecodeError ||
+              error instanceof SyntaxError
+                ? 'invalid_response'
+                : 'transport',
+            message: 'Unable to read a valid server response.',
+          },
+        };
+      }
+    },
     async createMonitor(targetUrl, signal) {
       const body: components['schemas']['CreateMonitorRequest'] = { targetUrl };
       try {
