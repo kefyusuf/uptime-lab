@@ -2,7 +2,7 @@
 
 **Architecture state:** Committed
 
-**Implementation state:** The first Go/Rust monitoring execution slice is implemented. React and public network deployment remain deferred.
+**Implementation state:** The Go/Rust monitoring execution slice and local React browser journey are implemented. Remote public network deployment remains deferred.
 
 ## Purpose
 
@@ -14,7 +14,7 @@ This document is the C4 Level 1 view and intentionally hides package, crate, tab
 
 ### User / Operator
 
-The user/operator defines monitoring intent and can read the latest terminal execution fact. The current runtime exposes Monitor registration/read plus a terminal-only latest-result operation; full CheckRun history and derived availability/status remain deferred.
+The user/operator registers intent, reopens a Monitor by ID, and reads independent raw execution facts and current availability assessments. Go owns those assessments; the browser displays snapshots and refreshes only on request. Full CheckRun and availability history remain deferred.
 
 ### External HTTP/HTTPS Target
 
@@ -30,7 +30,7 @@ A monitored target is outside the `uptime-lab` trust boundary. Address resolutio
 - normalized result delivery from Rust to Go;
 - explicit PostgreSQL migrations and schema-aware readiness.
 
-React presentation, public deployment exposure, authentication/authorization, full CheckRun history, and derived availability/status remain outside the current implemented surface.
+Remote public deployment, authentication/authorization, full CheckRun history and availability history remain outside the current implemented surface. Local browser traffic passes through Web's restricted same-origin gateway; it cannot reach internal Checker routes or PostgreSQL.
 
 ## Trust Boundary
 

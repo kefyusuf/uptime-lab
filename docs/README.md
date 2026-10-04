@@ -24,6 +24,9 @@ Design/spec/plan documents preserve the decision history for the phase in which 
 
 ## Implemented Runtime
 
+- Local Monitoring Web: [frontend/local-monitoring-web.md](frontend/local-monitoring-web.md)
+- Web verification: [testing/local-monitoring-web.md](testing/local-monitoring-web.md)
+
 - Go Control Plane: [backend/go-control-plane.md](backend/go-control-plane.md)
 - Rust Checker: [checker/rust-checker.md](checker/rust-checker.md)
 - Go Monitoring verification: [testing/go-monitoring-foundation.md](testing/go-monitoring-foundation.md)
@@ -34,7 +37,7 @@ Design/spec/plan documents preserve the decision history for the phase in which 
 
 The Go runtime serves public Monitor create/read, latest terminal result, and current availability, alongside the internal Checker claim/result contract. Go owns due-work scheduling truth, availability policy, and durable `monitoring.check_runs`; Rust owns bounded probe execution and never accesses PostgreSQL. The canonical Docker smoke proves the real Go -> Rust -> `policy_rejected` -> Go -> PostgreSQL -> public latest-result and availability read path.
 
-The latest-result read is terminal-only: pending work is invisible, `204` means a known Monitor has no terminal result yet, and `resultKind` remains an execution fact rather than an up/down verdict. Full CheckRun history, materialized availability history, mutable Monitor lifecycle, React, authentication/authorization, CORS/rate limiting, ingress/TLS, and public network exposure remain deferred.
+The latest-result read is terminal-only: pending work is invisible, `204` means a known Monitor has no terminal result yet, and `resultKind` remains an execution fact rather than an up/down verdict. React now displays local snapshots through its restricted gateway. Full CheckRun history, materialized availability history, mutable Monitor lifecycle, authentication/authorization, ingress/TLS and remote network exposure remain deferred.
 
 ## Architecture
 

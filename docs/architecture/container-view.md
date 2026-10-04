@@ -2,7 +2,7 @@
 
 **Architecture state:** Committed
 
-**Implementation state:** Go, PostgreSQL, and the Rust Checker are implemented for the Single-Checker Execution Vertical Slice. Web remains a placeholder and public network exposure remains deferred.
+**Implementation state:** React/TypeScript Web, its restricted Node gateway, Go, PostgreSQL, and the Rust Checker are implemented. Remote public network exposure remains deferred.
 
 Current availability is exposed by `GET /monitors/{monitorId}/availability` as a read-only assessment of the latest terminal CheckRun. It returns `status`, `reason`, UTC `evaluatedAt`, and terminal `evidence` (`checkId`, `completedAt`). A known Monitor without a terminal result returns `200 unknown/no_result` with evidence omitted; the raw latest-result route retains its empty `204`. Every matched availability response, including errors and `405`, uses `Cache-Control: no-store`; `HEAD` returns `405` with `Allow: GET`. No new persistence, reconciliation, history, or public deployment is introduced.
 
@@ -14,7 +14,7 @@ This is the C4 Level 2 view for the current runtime.
 
 ### Web Client — React + TypeScript
 
-The React runtime is not implemented. The canonical `web` service remains a hardened placeholder.
+The React browser in `apps/web` owns registration, reopening by ID, independent assessment/result cards and manual refresh. Its non-root Node server serves compiled assets and proxies only the four public operations to fixed `http://api:8080`. It owns no product policy or persistence.
 
 The browser never accesses PostgreSQL directly.
 
@@ -77,13 +77,15 @@ Go registration validation remains syntactic. Execution-time safety belongs to R
 Canonical Compose runs exactly:
 
 ~~~text
-web      placeholder
+web      built React client + restricted Node gateway
 db       PostgreSQL
 api      real Go Control Plane
 checker  real Rust Checker
 ~~~
 
 No application host ports are published.
+
+This statement applies to canonical Compose. The explicit `compose.web-local.yaml` override publishes only Web on `127.0.0.1:${UPTIME_LAB_WEB_PORT:-4173}`. API, Checker and PostgreSQL remain private. Web starts independently; its `/healthz` verifies build assets, not Go readiness.
 
 API may be live but unready until migrations are explicitly applied. The real Checker starts after API readiness and uses `http://api:8080` as its internal control-plane endpoint.
 
@@ -92,13 +94,16 @@ API may be live but unready until migrations are explicitly applied. The real Ch
 ~~~mermaid
 flowchart LR
     Caller["Container-local caller"]
-    Web[Web placeholder]
+    Browser[Local browser]
+    Web[React assets + Node gateway]
     Go["Go Control Plane<br/>public + internal HTTP"]
     Checker["Rust Checker<br/>bounded execution"]
     DB[(PostgreSQL)]
     Target["External HTTP/HTTPS target"]
 
     Caller -->|POST/GET Monitor + GET latest-result/availability| Go
+    Browser -->|loopback same origin| Web
+    Web -->|four public operations only| Go
     Checker -->|claim/result internal contract| Go
     Go -->|owned persistence| DB
     Checker -->|validated bounded probe| Target
@@ -159,7 +164,7 @@ Three trust transitions remain material:
 2. internal work/result data crossing Go/Rust;
 3. target/DNS/network behavior entering Rust.
 
-The second and third transitions are now implemented and verified. Public authentication/authorization, CORS/rate limiting, ingress/TLS, and React remain deferred.
+The second and third transitions are implemented. React and its local gateway are now implemented; public authentication/authorization, ingress/TLS and remote release remain deferred.
 
 ## Related Decisions
 

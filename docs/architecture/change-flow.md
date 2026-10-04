@@ -89,3 +89,6 @@ A cross-area feature must be expressed through contracts and owned policies, not
 - [Dependency Rules](dependency-rules.md)
 - [Data Ownership](data-ownership.md)
 - [Runtime Flows](runtime-flows.md)
+## Local Web Implementation
+
+The browser decodes the public contract and displays Go-owned assessments without classifying status or time. Product changes flow through Go semantics and contract fixtures before the adapter/cards. The TypeScript boundary checker, component/HTTP tests and exact-head real browser CI verify the affected path. Local gateway safeguards and loopback exposure do not replace remote release gates.

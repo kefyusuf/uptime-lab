@@ -25,6 +25,8 @@ REQUIRED_FILES=(
   docs/testing/single-checker-execution-slice.md
   docs/testing/public-monitoring-contract.md
   docs/testing/go-public-transport-adapter.md
+  docs/frontend/local-monitoring-web.md
+  docs/testing/local-monitoring-web.md
 )
 
 fail() {
@@ -147,16 +149,19 @@ if grep -Fq 'Public Monitoring surface is limited to Monitor create/read plus la
   fail 'local-development.md must include the current availability operation'
 fi
 sequence_count="$(grep -c '^sequenceDiagram$' "$ROOT/docs/architecture/runtime-flows.md" || true)"
-[[ "$sequence_count" -eq 6 ]] || fail "runtime-flows.md must contain exactly six sequenceDiagram blocks (found $sequence_count)"
+[[ "$sequence_count" -eq 7 ]] || fail "runtime-flows.md must contain exactly seven sequenceDiagram blocks (found $sequence_count)"
+require_text docs/README.md 'frontend/local-monitoring-web.md'
+require_text docs/frontend/local-monitoring-web.md 'same-origin'
+require_text docs/frontend/local-monitoring-web.md 'Go owns'
+require_text docs/frontend/local-monitoring-web.md 'Snapshot; refresh to reassess'
+require_text docs/testing/local-monitoring-web.md 'Each captured CheckID and Monitor ID'
+require_text docs/architecture/runtime-flows.md 'Local Browser Read and Refresh'
+require_text docs/devops/local-development.md 'compose.web-local.yaml'
+for path in docs/architecture/container-view.md docs/architecture/system-context.md docs/architecture/module-boundaries.md docs/architecture/dependency-rules.md docs/devops/local-development.md;do
+  if grep -Ei 'Web remains a placeholder|React remains deferred|React is not implemented|React runtime is not implemented|frontend enforcement remains deferred' "$ROOT/$path";then fail "stale Web summary in $path";fi
+done
 
 require_text docs/architecture/change-flow.md 'Configure HTTP Request Timeout'
-
-FORBIDDEN_DIRS=(
-  docs/frontend
-)
-for path in "${FORBIDDEN_DIRS[@]}"; do
-  [[ ! -e "$ROOT/$path" ]] || fail "speculative documentation path exists: $path"
-done
 
 FORBIDDEN_FILES=(
   docs/architecture/component-view.md

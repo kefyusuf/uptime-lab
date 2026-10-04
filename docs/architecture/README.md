@@ -72,3 +72,6 @@ A pull request must update canonical architecture documentation when it material
 A new ADR is required only for material, expensive-to-reverse cross-boundary decisions.
 
 Architecture documentation and code must change together when implementation would otherwise make current-state documents false.
+## Local Web Ownership
+
+The implemented [React client and restricted gateway](../frontend/local-monitoring-web.md) preserve Go-owned semantics and independent snapshots. [Verification](../testing/local-monitoring-web.md) covers unit, HTTP, Docker and staged browser evidence. Canonical Compose remains private; the explicit override publishes only loopback Web. Remote release remains separate.

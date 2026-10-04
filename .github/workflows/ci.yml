@@ -61,7 +61,9 @@ jobs:
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
 
       - name: Run governance tests
-        run: ./scripts/ci/test-governance.sh
+        run: |
+          ./scripts/ci/test-governance.sh
+          ./scripts/ci/test-web-gate.sh
 
       - name: Run GitHub governance bootstrap tests
         run: ./scripts/github/test-configure-governance.sh
@@ -99,6 +101,7 @@ jobs:
       public_contract: ${{ steps.detect.outputs.public_contract }}
       internal_contract: ${{ steps.detect.outputs.internal_contract }}
       checker: ${{ steps.detect.outputs.checker }}
+      web: ${{ steps.detect.outputs.web }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -127,6 +130,9 @@ jobs:
       - name: Test Checker change detection
         run: ./scripts/ci/test-detect-checker-changes.sh
 
+      - name: Test Web change detection
+        run: ./scripts/ci/test-detect-web-changes.sh
+
       - name: Detect local-dev, Go API, public contract, internal contract, and Checker changes
         id: detect
         env:
@@ -138,11 +144,13 @@ jobs:
           public_contract="$(./scripts/ci/detect-public-contract-changes.sh "$BASE_SHA" "$HEAD_SHA")"
           internal_contract="$(./scripts/ci/detect-internal-contract-changes.sh "$BASE_SHA" "$HEAD_SHA")"
           checker="$(./scripts/ci/detect-checker-changes.sh "$BASE_SHA" "$HEAD_SHA")"
+          web="$(./scripts/ci/detect-web-changes.sh "$BASE_SHA" "$HEAD_SHA")"
           printf 'local_dev=%s\n' "$local_dev" >> "$GITHUB_OUTPUT"
           printf 'go_api=%s\n' "$go_api" >> "$GITHUB_OUTPUT"
           printf 'public_contract=%s\n' "$public_contract" >> "$GITHUB_OUTPUT"
           printf 'internal_contract=%s\n' "$internal_contract" >> "$GITHUB_OUTPUT"
           printf 'checker=%s\n' "$checker" >> "$GITHUB_OUTPUT"
+          printf 'web=%s\n' "$web" >> "$GITHUB_OUTPUT"
 
   local-dev:
     name: local-dev
@@ -399,6 +407,62 @@ jobs:
           cargo install cargo-audit --version 0.22.2 --locked
           cargo audit --file Cargo.lock
 
+  web:
+    name: web
+    needs: changes
+    if: ${{ needs.changes.outputs.web == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify checked-out revision
+        env:
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
+      - name: Set up pinned Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.21.0'
+          package-manager-cache: false
+      - name: Install pinned npm and frozen dependencies
+        working-directory: apps/web
+        run: |
+          npm install --global npm@11.19.1
+          test "$(node --version)" = v24.21.0
+          test "$(npm --version)" = 11.19.1
+          npm ci
+      - name: Verify Web application
+        working-directory: apps/web
+        run: |
+          npm run check:generated
+          npm run typecheck
+          npm run lint
+          npm run format:check
+          npm run check:boundaries
+          node ../../scripts/ci/test-check-web-architecture.mjs
+          node --test ../../scripts/ci/test-check-web-compose.mjs ../../scripts/ci/test-verify-web-evidence.mjs
+          npm test
+          npm run build
+          npm audit --audit-level=high
+          npm exec -- playwright install --with-deps chromium
+      - name: Verify orchestration and real browser composition
+        run: |
+          ./scripts/ci/test-run-web-browser-tests.sh
+          ./scripts/ci/run-web-browser-tests.sh
+          UPTIME_LAB_WEB_PORT=4817 ./scripts/ci/run-web-browser-tests.sh
+      - name: Upload failed browser traces
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: web-browser-traces
+          path: apps/web/test-results/
+          retention-days: 3
+
   gate:
     name: CI / gate
     if: ${{ always() }}
@@ -411,6 +475,7 @@ jobs:
       - public-contract
       - internal-contract
       - checker
+      - web
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
@@ -424,11 +489,19 @@ jobs:
           PUBLIC_CONTRACT_RESULT: ${{ needs.public-contract.result }}
           INTERNAL_CONTRACT_RESULT: ${{ needs.internal-contract.result }}
           CHECKER_RESULT: ${{ needs.checker.result }}
+          WEB_RESULT: ${{ needs.web.result }}
+          WEB_REQUIRED: ${{ needs.changes.outputs.web }}
         run: |
           set -euo pipefail
           test "$POLICY_RESULT" = "success"
           test "$REPOSITORY_RESULT" = "success"
           test "$CHANGES_RESULT" = "success"
+          if [[ "$WEB_REQUIRED" == true ]]; then
+            test "$WEB_RESULT" = success
+          else
+            test "$WEB_REQUIRED" = false
+            test "$WEB_RESULT" = skipped
+          fi
           case "$LOCAL_DEV_RESULT" in
             success|skipped) ;;
             *) exit 1 ;;

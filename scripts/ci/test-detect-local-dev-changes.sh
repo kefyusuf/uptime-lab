@@ -130,6 +130,14 @@ ZERO_SHA="0000000000000000000000000000000000000000"
 expect_value "zero base is conservative" "true"   bash -c "cd '$TMP' && '$DETECT' '$ZERO_SHA' '$HEAD'"
 expect_value "unavailable base is conservative" "true"   bash -c "cd '$TMP' && '$DETECT' '1111111111111111111111111111111111111111' '$HEAD'"
 
+for path in apps/web/Dockerfile compose.web-local.yaml;do
+  reset_base
+  mkdir -p "$TMP/$(dirname "$path")"
+  printf 'fixture\n' > "$TMP/$path"
+  git -C "$TMP" add .;git -C "$TMP" commit -q -m 'build(web): add fixture'
+  HEAD="$(git -C "$TMP" rev-parse HEAD)"
+  expect_value "$path triggers local-dev" true bash -c "cd '$TMP' && '$DETECT' '$BASE' '$HEAD'"
+done
 printf '\nLocal-dev change detection tests: %d passed, %d failed\n' "$PASS" "$FAIL"
-test "$PASS" -eq 10
+test "$PASS" -eq 12
 test "$FAIL" -eq 0

@@ -1,0 +1,13 @@
+# Local Monitoring Web Verification
+
+Use exact Node24.21.0 and npm11.19.1 from `apps/web`. The app-local lockfile and `.npmrc` require parity. Run `npm ci`, `npm run check:generated`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run check:boundaries`, `npm test`, `npm run build` and `npm audit --audit-level=high`.
+
+Vitest separates Node actual-HTTP gateway/server tests from jsdom component tests. Contract fixtures cover all reasons/raw variants, invalid responses, UTC preservation and cancellation. Component tests cover uncertain creation, independent cards, manual refresh, current Monitor404 precedence and late-response suppression. Boundary, resolved Compose and durable evidence mutation tests run through the root `scripts/ci/*web*.mjs` harnesses.
+
+Install the app-pinned browser with `npm exec -- playwright install --with-deps chromium`. From the repository run `./scripts/ci/run-web-browser-tests.sh`. It owns a unique Compose project and fresh database volume and cleans on exit/signals. Before migration it asserts API unready; migration is explicit. Browser phase1 registers `http://web/` with Checker stopped and proves raw empty plus unknown/no_result. Phase2 starts real Checker, reopens the browser-created ID and manually refreshes with a bounded 60s test wait. Production destination policy must return `policy_rejected` before connecting.
+
+Each captured CheckID and Monitor ID is verified against its own durable terminal row, with displayed completion times and raw duration preserved. A newer completion or different card IDs are valid; neither snapshot is compared to a later latest query. The runner also checks resolved JSON topology, non-root/read-only compiled runtime, styles, narrow card stacking, back/forward/reload and rejected gateway requests. A custom-port run uses `UPTIME_LAB_WEB_PORT=4817`; collision fails before build.
+
+`test-run-web-browser-tests.sh` proves orchestration/cleanup and occupied-port failure using a fake Docker CLI. It is not Docker/browser acceptance. The required exact-head Linux Web CI job runs both default/custom port real journeys, existing runtime CI remains active, and failed Chromium traces are retained briefly. This host lacks Docker; local unit/build results must not be presented as image/Compose/Chromium evidence.
+
+Remote ingress/TLS, authentication/authorization, backup/restore, production monitoring and release drills remain separate roadmap gates. This slice is local browser access, not live-release readiness.

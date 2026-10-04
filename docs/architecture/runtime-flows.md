@@ -2,7 +2,7 @@
 
 **Architecture state:** Committed
 
-**Implementation state:** Public Monitor create/read, latest terminal execution-result read, current availability assessment, and the internal Go/Rust execution loop are implemented. React/public network exposure, full CheckRun history, and materialized availability history remain deferred.
+**Implementation state:** Public Monitor create/read, latest result, current availability, the internal Go/Rust loop and local browser journey are implemented. Remote exposure, full CheckRun history and materialized availability history remain deferred.
 
 Current availability is exposed by `GET /monitors/{monitorId}/availability` as a read-only assessment of the latest terminal CheckRun. It returns `status`, `reason`, UTC `evaluatedAt`, and terminal `evidence` (`checkId`, `completedAt`). A known Monitor without a terminal result returns `200 unknown/no_result` with evidence omitted; the raw latest-result route retains its empty `204`. Every matched availability response, including errors and `405`, uses `Cache-Control: no-store`; `HEAD` returns `405` with `Allow: GET`. No new persistence, reconciliation, history, or public deployment is introduced.
 
@@ -29,7 +29,7 @@ sequenceDiagram
     Go-->>Web: 201 Monitor
 ```
 
-`POST /monitors` is implemented. React and public host exposure are not.
+`POST /monitors` is implemented and consumed by the local React client through the restricted gateway. Remote public exposure remains deferred.
 
 ## Execute Due Check
 
@@ -149,6 +149,30 @@ Raw library errors, response bodies, headers, resolved addresses, stack traces, 
 A late result is rejected and Go owns the durable `worker_timeout` transition.
 
 ## Correlation Context
+
+## Local Browser Read and Refresh
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant Web as Restricted Node gateway
+    participant Go as Go Control Plane
+    Browser->>Web: GET /api/monitors/{id}
+    Web->>Go: GET /monitors/{id}
+    Go-->>Browser: immutable Monitor
+    par Independent assessment
+        Browser->>Web: GET /api/monitors/{id}/availability
+        Web->>Go: GET /monitors/{id}/availability
+        Go-->>Browser: status/reason/evaluatedAt + optional evidence
+    and Independent execution fact
+        Browser->>Web: GET /api/monitors/{id}/latest-result
+        Web->>Go: GET /monitors/{id}/latest-result
+        Go-->>Browser: terminal result or 204
+    end
+    Browser->>Browser: manual Refresh clears old cards and starts new generation
+```
+
+The two CheckIDs may differ. No client-side timer reclassifies status or changes `evaluatedAt`; no polling, persisted inventory or joined result/assessment is introduced. Current Monitor errors hide subordinate cards. Navigation and refresh cancel previous reads and suppress late responses. An unconfirmed creation warns that the Monitor may already exist; only an explicit user retry can submit again.
 
 CheckID and MonitorID are stable cross-runtime correlation identifiers for the implemented execution path. No tracing backend or concrete distributed-tracing propagation contract is introduced by this milestone.
 

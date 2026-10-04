@@ -11,11 +11,27 @@ The current topology runs:
 - real PostgreSQL;
 - real Go Control Plane;
 - real Rust Checker;
-- placeholder Web.
+- compiled React Web and restricted Node gateway.
 
 This is a development topology, not a production deployment contract.
 
 No application host ports are published.
+
+## Explicit Local Browser Access
+
+Canonical Compose publishes no application ports. Start and migrate the real stack explicitly, then opt in to loopback Web access:
+
+```bash
+docker compose -f compose.yaml -f compose.web-local.yaml up -d db api web
+docker compose -f compose.yaml -f compose.web-local.yaml exec -T api /usr/local/bin/uptime-lab-migrate up
+docker compose -f compose.yaml -f compose.web-local.yaml up -d --wait --wait-timeout 60
+```
+
+Open `http://127.0.0.1:4173`. Only Web is published; API, Checker and DB remain private. For a custom port, export `UPTIME_LAB_WEB_PORT=4817` before every paired Compose command and use the matching URL. `.env.example` documents this optional value. An occupied port is an error; do not substitute a wildcard address. Web's `/healthz` verifies assets and remains independent of Go schema readiness. Normal `down` preserves data; `down -v` destroys this project's database.
+
+Create a Monitor or reopen a saved ID. Availability is a server snapshot; Refresh refetches Monitor and both independent cards. Their CheckIDs can differ. Unknown/no_result differs from raw empty `204`. Unconfirmed creation warns of possible success and duplicate retry; no automatic retry occurs. No browser persistence or polling exists.
+
+Run `./scripts/ci/run-web-browser-tests.sh` for the staged real browser journey and `UPTIME_LAB_WEB_PORT=4817 ./scripts/ci/run-web-browser-tests.sh` for custom-port acceptance. The runner owns and cleans isolated projects/volumes. See [Web verification](../testing/local-monitoring-web.md). Loopback access does not establish remote deployment readiness.
 
 ## Prerequisites
 
@@ -44,7 +60,7 @@ Go Control Plane (api)
       v
 Rust Checker (checker)
 
-Web placeholder starts independently
+Web asset server starts independently
 ~~~
 
 The Checker uses the real repository image and:
@@ -285,7 +301,7 @@ Use a distinct `COMPOSE_PROJECT_NAME`.
 
 ## Current Limitations
 
-- Web remains a placeholder; React is not implemented.
+- Web serves the React client and proxies only four public Go operations. It starts independently with build-asset health.
 - Public Monitoring surface is limited to Monitor create/read, latest terminal result, and current availability assessment.
 - Full CheckRun history and materialized availability history remain unavailable.
 - No mutable Monitor lifecycle exists.
