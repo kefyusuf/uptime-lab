@@ -38,6 +38,7 @@ type Handler struct {
 	get             getMonitor
 	getLatest       getLatestCheckResult
 	getAvailability getMonitorAvailability
+	list            listMonitors
 }
 
 // NewHandler constructs the isolated public Monitoring HTTP adapter.
@@ -91,8 +92,24 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 	http.NotFound(writer, request)
 }
 
+// NewHandlerWithInventory adds the bounded local collection read capability.
+func NewHandlerWithInventory(register registerMonitor, get getMonitor, latest getLatestCheckResult, availability getMonitorAvailability, list listMonitors) *Handler {
+	handler := NewHandlerWithAvailability(register, get, latest, availability)
+	handler.list = list
+	return handler
+}
+
 func (handler *Handler) serveCollection(writer http.ResponseWriter, request *http.Request) {
+	if handler.list != nil && request.Method == http.MethodGet {
+		handler.serveInventory(writer, request)
+		return
+	}
 	if request.Method != http.MethodPost {
+		if handler.list != nil {
+			writer.Header().Set("Cache-Control", "no-store")
+			methodNotAllowed(writer, "GET, POST")
+			return
+		}
 		methodNotAllowed(writer, http.MethodPost)
 		return
 	}
