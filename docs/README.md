@@ -13,6 +13,7 @@ Current availability is exposed by `GET /monitors/{monitorId}/availability` as a
 - Local Web Monitoring Vertical Slice design: [superpowers/specs/2026-10-02-local-web-monitoring-vertical-slice-design.md](superpowers/specs/2026-10-02-local-web-monitoring-vertical-slice-design.md); approved in #49, implemented in #51, with permanent inbound deadline coverage in #52.
 - Implementation plans: [superpowers/plans/](superpowers/plans/)
 - Completed Local Web implementation plan: [superpowers/plans/2026-10-02-local-web-monitoring-vertical-slice.md](superpowers/plans/2026-10-02-local-web-monitoring-vertical-slice.md); historical TDD plan executed through #51; current evidence is in the Web verification guide and handoff.
+- Local Monitor Inventory written design candidate: [superpowers/specs/2026-10-05-local-monitor-inventory-design.md](superpowers/specs/2026-10-05-local-monitor-inventory-design.md); approved scope #53 translated into bounded collection/gateway/UI design; awaiting design review before planning.
 - Current continuation state: [devops/current-handoff.md](devops/current-handoff.md); verify its recorded base and live PR state before resuming.
 
 Design/spec/plan documents preserve the decision history for the phase in which they were written. Current implementation truth is described by the canonical architecture, backend, checker, testing, and devops documents below.
@@ -21,7 +22,7 @@ Design/spec/plan documents preserve the decision history for the phase in which 
 
 - [Industry benchmark and launch roadmap (2026-10-02)](roadmap/2026-10-02-industry-benchmark-and-launch-roadmap.md): researched product comparison, implementation gaps, proposed milestones, and live-release gates, refreshed after Local Web landed. Later phases remain proposals, not approved implementation plans or production-readiness claims.
 - [Local Web and exposure scope](superpowers/specs/2026-10-02-web-public-exposure-scope-reassessment.md): historical selection of the implemented local browser journey; remote release remains a separate decision.
-- [Local Monitor Inventory scope candidate](superpowers/specs/2026-10-04-local-monitor-inventory-scope-reassessment.md): first proposed R2 increment for bounded durable discovery and existing detail navigation; written design and implementation are not approved.
+- [Local Monitor Inventory scope](superpowers/specs/2026-10-04-local-monitor-inventory-scope-reassessment.md): approved first R2 increment through #53 for bounded durable discovery and existing detail navigation; written design/plan review and implementation remain separate gates.
 
 ## Implemented Runtime
 
