@@ -72,6 +72,9 @@ func TestProductionMonitoringCompositionAgainstPostgreSQL(t *testing.T) {
 	if _, err := provider.Down(ctx); err != nil {
 		t.Fatalf("provider.Down() error = %v", err)
 	}
+	if _, err := provider.Down(ctx); err != nil {
+		t.Fatalf("provider.Down() for CheckRuns error = %v", err)
+	}
 
 	var checkRunsExists bool
 	if err := pool.QueryRow(

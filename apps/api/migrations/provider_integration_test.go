@@ -34,10 +34,15 @@ func TestProviderMigratesMonitoringSchemaUpDownUp(t *testing.T) {
 		t.Fatalf("first Down() error = %v", err)
 	}
 	assertMonitoringSchemaUp(t, ctx, db)
+	assertCheckRunsColumns(t, ctx, db)
+	if _, err := provider.Down(ctx); err != nil {
+		t.Fatalf("second Down() error = %v", err)
+	}
+	assertMonitoringSchemaUp(t, ctx, db)
 	assertCheckRunsTableDown(t, ctx, db)
 
 	if _, err := provider.Down(ctx); err != nil {
-		t.Fatalf("second Down() error = %v", err)
+		t.Fatalf("third Down() error = %v", err)
 	}
 	assertMonitoringSchemaDown(t, ctx, db)
 
