@@ -2,7 +2,7 @@
 
 **Status:** Research-backed proposal; not an approved implementation plan
 **Researched:** 2026-10-02
-**Repository baseline:** `main@b4f0ae5e1372b77398013b94da37c0c8a6ecdf30`, refreshed after Current Monitor Availability Read landed
+**Repository baseline:** `main@75200ab969369d4a1d300c31558c0b3e1cc06fd4`, refreshed on 2026-10-04 after Local Web #51 and deadline coverage #52 landed
 **Working audience assumption:** invite-only, small-team beta before open registration
 
 ## 1. Decision summary
@@ -11,13 +11,15 @@ Preserve the existing Go/Rust/PostgreSQL architecture. Build toward a useful, bo
 
 The Current Availability gate is complete: scope [#44](https://github.com/kefyusuf/uptime-lab/pull/44), design [#46](https://github.com/kefyusuf/uptime-lab/pull/46), plan [#47](https://github.com/kefyusuf/uptime-lab/pull/47), and implementation [#48](https://github.com/kefyusuf/uptime-lab/pull/48) have landed. Local Web can now consume Go's current assessment as well as raw terminal evidence. A remote demonstration, a dependable monitoring beta, and an open-registration SaaS still have different acceptance criteria.
 
+R1's local browser capability is also complete through design #49, plan #50, implementation #51 and deadline tests #52. [Exact-main CI](https://github.com/kefyusuf/uptime-lab/actions/runs/37221902477) passed applicable Web/repository checks, real Docker smoke and default/custom-port browser journeys; unchanged Go/Rust/contracts were skipped in that run. The next recommendation is a [Local Monitor Inventory scope](../superpowers/specs/2026-10-04-local-monitor-inventory-scope-reassessment.md) as the first bounded R2 increment. It does not complete R2 or resolve R0's release assumptions.
+
 For this proposal, first launch means a protected, invite-only beta that can detect a defined target failure, notify its operator, show the evidence, and recover safely from an application or infrastructure failure. This audience is an explicit assumption awaiting confirmation. A single-owner self-hosted release can reduce account complexity; an open SaaS requires stronger isolation, abuse controls, support, and capacity evidence.
 
 ## 2. Research method and limits
 
 Primary sources were read on the research date: official UptimeRobot, Better Stack, and Checkly product/documentation pages; OWASP security guidance; Google SRE guidance; and PostgreSQL documentation. This is a qualitative benchmark of representative products, not an exhaustive market survey, purchasing recommendation, compliance audit, or comparison of paid plan entitlements.
 
-Repository findings come from local code, contracts, migrations, Compose, CI configuration, and canonical documents. The baseline was refreshed after #48 landed, and its [exact-main CI](https://github.com/kefyusuf/uptime-lab/actions/runs/36985739087) passed Go static/unit/race/vulnerability, real PostgreSQL integration, public-contract, real Docker smoke, and repository/documentation checks. This verifies the local development capability; it does not verify deployed infrastructure, external account settings, or admitted production capacity. Better Stack confirmation/recovery, Checkly alerting, and OWASP object-authorization sources were reread during this refresh; other benchmark observations retain the original research date. Documentation verification is reported separately in this PR. A feature documented by a vendor is evidence of that vendor's offering, not a universal industry requirement. The phases and launch gates below are project recommendations inferred from that evidence.
+Repository findings come from local code, contracts, migrations, Compose, CI configuration, and canonical documents. The original #48 baseline's [exact-main CI](https://github.com/kefyusuf/uptime-lab/actions/runs/36985739087) passed Go static/unit/race/vulnerability, real PostgreSQL integration, public-contract, real Docker smoke, and repository/documentation checks. The 2026-10-04 refresh updates current Web and continuation state against the baseline recorded above; its narrower main-CI scope is described in the decision summary. This verifies local development capability; it does not verify deployed infrastructure, external account settings, or admitted production capacity. Better Stack confirmation/recovery, Checkly alerting, and OWASP object-authorization sources were reread in the original #48 refresh; the new inventory proposal separately cites the collection/pause sources read on 2026-10-04. Other benchmark observations retain the original research date. A feature documented by a vendor is evidence of that vendor's offering, not a universal industry requirement. The phases and launch gates below are project recommendations inferred from that evidence.
 
 ## 3. What mature monitoring products cover
 
@@ -44,7 +46,7 @@ These examples justify separating execution facts, availability decisions, incid
 | Result visibility | Latest terminal result; exact failure vocabulary; no public history | Paginated bounded history and visible result age | Required for beta investigation |
 | Availability semantics | Current read with fixed HTTP 200–299 success policy, explicit outcome reasons, future/stale precedence, and 120-second freshness | Configurable expected-status policy, confirmation/recovery and maintenance-aware incident semantics | Basic assessment landed; a confirmed outage and uptime percentage remain separate capabilities |
 | Incidents/alerts | No incident state or notification delivery | Durable incident transitions and one reliable notification channel | Required for a monitoring beta |
-| Frontend | Web placeholder | React register/detail/current-availability/raw-result first; management/history later | Browser usability gap; consumes Go policy without reimplementing it |
+| Frontend | Implemented React registration, reopen by UUID, detail, current assessment/raw result and manual refresh; restricted loopback gateway | Bounded durable inventory and detail navigation first; management/history later | Local browser journey complete; consumes Go policy without reimplementing it |
 | Access boundary | No authentication/authorization; public and internal adapters share one API listener | Identity/access boundary, explicit route exposure, internal caller protection | Required before remote beta |
 | Operations | Health checks, sanitized logs, graceful shutdown, explicit migrations | Metrics, independent alerts, backups/restore, runbooks, release/rollback | Required before dependable live use |
 | Capacity/data lifecycle | Four active probes in one logical Checker; fixed cadence; no retention | Load envelope, quotas, retention, growth and freshness measurement | Required before beta workload acceptance |
@@ -61,7 +63,8 @@ Local evidence pointers:
 - `apps/checker/crates/probe-http/`: execution and destination safety.
 - `apps/checker/crates/checker-core/src/worker.rs`: bounded worker orchestration.
 - `apps/api/migrations/`: existing schema constraints/indexes.
-- `compose.yaml`: development-only topology, placeholder Web, unpublished application ports.
+- `compose.yaml` and `compose.web-local.yaml`: compiled Web, canonical unpublished ports and opt-in loopback-only Web exposure.
+- `apps/web/` and `docs/testing/local-monitoring-web.md`: implemented local browser/gateway and composed acceptance evidence.
 - `docs/backend/go-control-plane.md`, `docs/checker/rust-checker.md`, and `docs/devops/local-development.md`: canonical current-state guidance.
 
 ## 5. Important semantic and capacity decisions
@@ -94,8 +97,8 @@ Phases represent capability dependencies, not calendar promises. Each phase need
 |---|---|---|
 | R0 — Product and release brief | Confirm audience, supported targets, workload cap, detection expectations, data policy, operator, hosting constraints, and budget; agree proposed beta scope | Written decisions; measurable acceptance criteria; no unspecified public exposure |
 | R0a — Current availability read — complete | Go-owned current assessment landed through #44/#46/#47/#48, without new persistence or history/incidents/lifecycle | Contract 71 cases; domain/application/HTTP TDD; real PostgreSQL and Docker evidence; independent review fixes; exact-main CI green at b4f0ae5 |
-| R1 — Local Web vertical slice — next candidate | React registration/detail/current-availability/raw-result on a bounded local access path; explicit empty/error/unknown/stale presentation | Reviewed scope/design/plan; real browser journey; exact public-route allowlist; internal routes inaccessible through Web; preserved deterministic runtime smoke |
-| R2 — Monitor management and evidence | List/pagination, pause/resume and deliberate edit/delete semantics; bounded CheckRun history; retention design | Lifecycle/in-flight race evidence; stable pagination; retention cannot corrupt incident/history semantics; no UI-owned scheduling |
+| R1 — Local Web vertical slice — complete | React registration/detail/current-availability/raw-result on a loopback access path; explicit empty/error/unknown/stale presentation | #49/#50/#51/#52; reviewed implementation; real browser journey on4173/4817; four-operation gateway allowlist; internal routes inaccessible through Web; deterministic runtime smoke and inbound deadline regression coverage |
+| R2 — Monitor management and evidence — next phase candidate | First propose bounded durable inventory/detail navigation; then separate pause/resume and deliberate edit/delete semantics, bounded CheckRun history and retention design | Stable pagination and response-byte bounds first; lifecycle/in-flight race evidence for later mutations; retention cannot corrupt incident/history semantics; no UI-owned scheduling |
 | R3 — Monitoring decisions | Expected-status policy, confirmation/recovery, stale/unknown handling; maintenance semantics; durable incident open/resolve | Deterministic state-transition and replay evidence; Checker outage does not masquerade as healthy target or confirmed target outage |
 | R4 — Reliable notifications | One channel, incident/recovery delivery, deduplication, bounded retry, failure visibility and manual retry policy | Provider outage/restart evidence; durable delivery tracking; acknowledged duplicates policy; no repeated probe on notification retry |
 | R5 — Protected beta deployment | Identity/access model, ownership when accounts are separate, quotas, HTTPS ingress, secrets, environment isolation, backup/restore, metrics, runbooks, controlled release | Production readiness checklist below; staging fault/load/security evidence; restricted invitations |
@@ -157,4 +160,4 @@ Decisions still needed:
 - History retention and acceptable recovery point/time?
 - Single-region limitation for beta, or an explicit requirement for regional confirmation before launch?
 
-R0a is complete. The immediate decision is R1's audience and local access scope; the recommended next artifact is a dedicated Local Web Monitoring Vertical Slice design after that scope is reviewed. It must consume all four existing public operations and preserve the landed availability semantics. R0's beta audience, workload, operator, budget and recovery decisions remain unresolved and must not be inferred from choosing a local browser slice. This research authorizes no runtime, contract, migration, dependency, deployment, or external-service change.
+R0a and R1 are complete for their stated local scopes. The immediate recommendation is the [Local Monitor Inventory scope proposal](../superpowers/specs/2026-10-04-local-monitor-inventory-scope-reassessment.md), followed by written design and a reviewed TDD plan after scope approval. Its 2026-10-04 source refresh covers Better Stack collection pagination and pause semantics only; the original broader benchmark retains its 2026-10-02 research date. Inventory must preserve existing availability/detail behavior and local access constraints. R0's beta audience, workload, operator, budget and recovery decisions remain unresolved and must not be inferred from local browser use. This research authorizes no runtime, contract, migration, dependency, deployment, or external-service change.
