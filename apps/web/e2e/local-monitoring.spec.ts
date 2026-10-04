@@ -75,6 +75,36 @@ test('built local monitor journey', async ({ page, request }) => {
       headers: { Host: 'foreign.invalid' },
     });
     expect(wrongHost.status()).toBe(403);
+    // Discover the registered inventory through a fresh start-page load.
+    await page.goto('/');
+    await page.reload();
+    const inventoryRows = page.getByTestId('inventory-row');
+    await expect(inventoryRows).toHaveCount(20);
+    const ids = await inventoryRows
+      .locator('a')
+      .evaluateAll((links) =>
+        links.map((link) => link.getAttribute('href')!.split('/').at(-1)!),
+      );
+    await page.getByRole('button', { name: 'Next page' }).click();
+    await expect(inventoryRows).toHaveCount(1);
+    const selected = inventoryRows.getByRole('link');
+    const selectedId = (await selected.getAttribute('href'))!
+      .split('/')
+      .at(-1)!;
+    ids.push(selectedId);
+    expect(new Set(ids).size).toBe(21);
+    await selected.click();
+    await expect(page.getByTestId('monitor-id')).toHaveText(selectedId);
+    await expect(page.getByTestId('monitor-target')).toHaveText(target);
+    await expect(page.getByTestId('availability-reason')).toHaveAttribute(
+      'data-reason',
+      'no_result',
+    );
+    await expect(page.getByText('No completed result yet')).toHaveCount(2);
+    writeFileSync(
+      artifact,
+      JSON.stringify({ id, target, inventory: { ids, selectedId } }),
+    );
   } else if (process.env.WEB_BROWSER_PHASE === 'result') {
     const saved = JSON.parse(readFileSync(artifact, 'utf8')) as {
       id: string;
