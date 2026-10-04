@@ -8,6 +8,77 @@ info:
     execution facts only and does not derive Monitor availability status.
 paths:
   /monitors:
+    get:
+      operationId: listMonitors
+      summary: List registered monitors
+      description: >
+        Local inventory ordered by persisted creation time descending, then UUID
+        descending. A cursor is a strict position, not an authorization or snapshot.
+        Pages may contain fewer items than the requested limit to stay within the
+        245760-byte compact JSON budget. A first eligible item that cannot fit
+        returns 500; records are never truncated or skipped. Only optional limit
+        and cursor query keys, each once in either order, are accepted. Reject
+        noncanonical decimal limits, empty queries/values, duplicate or unknown
+        keys, percent escapes, plus signs, semicolons, whitespace and query bodies.
+        Raw queries are at most 128 ASCII bytes. HEAD is unsupported.
+      x-max-body-bytes: 245760
+      x-max-query-bytes: 128
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Canonical decimal integer without signs or leading zeroes.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: cursor
+          in: query
+          required: false
+          description: >
+            Unpadded base64url of version1, persisted UTC microsecond creation
+            time and nonzero canonical UUID. No client time reconstruction.
+          schema:
+            type: string
+            minLength: 88
+            maxLength: 88
+            pattern: '^[A-Za-z0-9_-]{88}$'
+      responses:
+        '200':
+          description: Bounded inventory page; empty inventory is a successful empty page.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorInventoryPage'
+        '400':
+          description: Invalid collection request or cursor.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          description: Persistence/mapping failure or first item exceeds inventory response limit.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '405':
+          description: Unsupported collection method; no response body.
+          headers:
+            Allow:
+              schema: { type: string, const: 'GET, POST' }
+            Cache-Control:
+              schema: { type: string, const: no-store }
     post:
       operationId: registerMonitor
       summary: Register a monitor
@@ -202,6 +273,29 @@ paths:
       "description": "Read-only assessment from the latest terminal result. Future or older-than-120-second evidence is unknown; exactly 120 seconds is fresh. HTTP 200–299 is available; other valid HTTP statuses and probe failures are unavailable. Policy and execution failures are unknown. No terminal result returns unknown/no_result without evidence. All matched responses use no-store."
 components:
   schemas:
+    MonitorInventoryPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/Monitor'
+        nextCursor:
+          type: [string, 'null']
+          minLength: 88
+          maxLength: 88
+          pattern: '^[A-Za-z0-9_-]{88}$'
+          description: Last included key when more candidates exist, otherwise null.
+      allOf:
+        - if:
+            properties:
+              items: { maxItems: 0 }
+          then:
+            properties:
+              nextCursor: { const: null }
     CreateMonitorRequest:
       type: object
       additionalProperties: false

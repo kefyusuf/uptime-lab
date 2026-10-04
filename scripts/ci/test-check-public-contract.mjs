@@ -26,6 +26,7 @@ function problemResponse() {
 
 function canonicalPublicFixtures() {
   return {
+    ...inventoryFixtures(),
     ...availabilityFixtures(),
     'latest-result-http-response.json': {
       checkId: '7d9b2eb0-52bb-4dd7-8934-c5ce30d5c675',
@@ -233,7 +234,48 @@ function validDocument() {
   };
   document.paths['/monitors/{monitorId}/availability'] = availabilityPath();
   Object.assign(document.components.schemas, availabilitySchemas());
+  document.paths['/monitors'].get = inventoryOperation();
+  document.components.schemas.MonitorInventoryPage = inventorySchema();
   return document;
+}
+
+function inventoryOperation() {
+  const responses = {
+    '200': { description: 'Page.', content: { 'application/json': { schema: { $ref: '#/components/schemas/MonitorInventoryPage' } } } },
+    '400': problemResponse(), '500': problemResponse(),
+    '405': { description: 'Method.', headers: { Allow: { schema: { type: 'string', const: 'GET, POST' } } } },
+  };
+  for (const response of Object.values(responses)) {
+    response.headers = { ...response.headers, 'Cache-Control': { schema: { type: 'string', const: 'no-store' } } };
+  }
+  return {
+    operationId: 'listMonitors', 'x-max-body-bytes': 245760, 'x-max-query-bytes': 128,
+    parameters: [
+      { name: 'limit', in: 'query', required: false, schema: { type: 'integer', minimum: 1, maximum: 50, default: 20 } },
+      { name: 'cursor', in: 'query', required: false, schema: { type: 'string', minLength: 88, maxLength: 88, pattern: '^[A-Za-z0-9_-]{88}$' } },
+    ], responses,
+  };
+}
+
+function inventorySchema() {
+  return {
+    type: 'object', additionalProperties: false, required: ['items', 'nextCursor'],
+    properties: {
+      items: { type: 'array', maxItems: 50, items: { $ref: '#/components/schemas/Monitor' } },
+      nextCursor: { type: ['string', 'null'], minLength: 88, maxLength: 88, pattern: '^[A-Za-z0-9_-]{88}$' },
+    },
+    allOf: [{ if: { properties: { items: { maxItems: 0 } } }, then: { properties: { nextCursor: { const: null } } } }],
+  };
+}
+
+function inventoryFixtures() {
+  const monitor = { id: '018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2', targetUrl: 'http://web/', createdAt: '2026-10-05T00:00:00.123456Z' };
+  const cursor = Buffer.from('1|' + monitor.createdAt + '|' + monitor.id).toString('base64url');
+  return {
+    'monitor-inventory-page.json': { items: [monitor], nextCursor: cursor },
+    'monitor-inventory-empty.json': { items: [], nextCursor: null },
+    'monitor-inventory-final.json': { items: [monitor], nextCursor: null },
+  };
 }
 
 function availabilityPath() {
@@ -338,6 +380,25 @@ function expectFixtureReject(name, filename, mutate, expected) {
 
 expectPass('canonical fixture passes');
 
+expectReject('inventoryEnvelopeIsClosed', d => { d.components.schemas.MonitorInventoryPage.additionalProperties = true; }, 'MonitorInventoryPage.additionalProperties');
+expectReject('inventory nextCursor is required', d => { d.components.schemas.MonitorInventoryPage.required = ['items']; }, 'MonitorInventoryPage.required');
+expectReject('inventoryQueryBoundsAreExact', d => { d.paths['/monitors'].get.parameters[0].schema.maximum = 51; }, 'inventory limit');
+expectReject('inventory default limit is exact', d => { d.paths['/monitors'].get.parameters[0].schema.default = 50; }, 'inventory limit');
+expectReject('inventory cursor length is exact', d => { d.paths['/monitors'].get.parameters[1].schema.maxLength = 89; }, 'inventory cursor');
+expectReject('inventory body budget is exact', d => { d.paths['/monitors'].get['x-max-body-bytes'] = 262144; }, 'inventory body budget');
+expectReject('inventory query budget is exact', d => { d.paths['/monitors'].get['x-max-query-bytes'] = 129; }, 'inventory query budget');
+expectReject('inventory method set is exact', d => { d.paths['/monitors'].head = d.paths['/monitors'].get; }, '/monitors operations');
+expectReject('inventoryPreservesExistingOperations', d => { delete d.paths['/monitors'].post; }, '/monitors operations');
+expectReject('inventory no-store is required', d => { delete d.paths['/monitors'].get.responses['500'].headers; }, 'inventory 500 Cache-Control');
+expectReject('inventory Allow is exact', d => { d.paths['/monitors'].get.responses['405'].headers.Allow.schema.const = 'GET'; }, 'inventory 405 Allow');
+expectReject('inventory status set is exact', d => { d.paths['/monitors'].get.responses['404'] = problemResponse(); }, 'inventory responses');
+expectReject('inventory empty cannot continue schema', d => { delete d.components.schemas.MonitorInventoryPage.allOf; }, 'inventory empty continuation rule');
+expectFixtureReject('inventory empty cannot continue', 'monitor-inventory-empty.json', f => { f.nextCursor = inventoryFixtures()['monitor-inventory-page.json'].nextCursor; }, 'inventory empty continuation');
+expectFixtureReject('inventory target remains exact shape', 'monitor-inventory-page.json', f => { f.items[0].status = 'available'; }, 'inventory Monitor keys');
+expectFixtureReject('inventory continuation names included key', 'monitor-inventory-page.json', f => { f.nextCursor = Buffer.from('1|2026-10-05T00:00:00.123456Z|018f22d3-1d6a-7cc0-a37b-46fc3fafdcb3').toString('base64url'); }, 'inventory continuation key');
+expectFixtureReject('inventory duplicate IDs rejected', 'monitor-inventory-page.json', f => { f.items.push({ ...f.items[0] }); }, 'inventory duplicate ID');
+expectFixtureReject('inventory cursor representation rejected', 'monitor-inventory-page.json', f => { f.nextCursor += '='; }, 'inventory cursor');
+
 expectReject('availability path missing fails', d => { delete d.paths['/monitors/{monitorId}/availability']; }, 'public path set');
 expectReject('availability operation ID fails', d => { d.paths['/monitors/{monitorId}/availability'].get.operationId = 'wrong'; }, 'operationId must be getMonitorAvailability');
 expectReject('availability response set fails', d => { d.paths['/monitors/{monitorId}/availability'].get.responses['204'] = {}; }, 'availability responses');
@@ -365,7 +426,7 @@ expectReject('missing latest-result path fails', (d) => {
 expectReject('POST latest-result fails', (d) => {
   d.paths['/monitors/{monitorId}/latest-result'].post = {};
 }, '/monitors/{monitorId}/latest-result operations');
-expectReject('GET /monitors fails', (d) => { d.paths['/monitors'].get = {}; }, '/monitors operations');
+expectReject('empty inventory GET operation fails', (d) => { d.paths['/monitors'].get = {}; }, 'inventory operationId must be listMonitors');
 expectReject('PUT lifecycle mutation fails', (d) => { d.paths['/monitors/{monitorId}'].put = {}; }, '/monitors/{monitorId} operations');
 expectReject('PATCH lifecycle mutation fails', (d) => { d.paths['/monitors/{monitorId}'].patch = {}; }, '/monitors/{monitorId} operations');
 expectReject('DELETE lifecycle mutation fails', (d) => { d.paths['/monitors/{monitorId}'].delete = {}; }, '/monitors/{monitorId} operations');
