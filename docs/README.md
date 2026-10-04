@@ -10,17 +10,18 @@ Current availability is exposed by `GET /monitors/{monitorId}/availability` as a
 - Go Monitoring Foundation design: [superpowers/specs/2026-09-20-go-monitoring-foundation-design.md](superpowers/specs/2026-09-20-go-monitoring-foundation-design.md)
 - Public Monitoring API Contract design: [superpowers/specs/2026-09-22-public-monitoring-api-contract-design.md](superpowers/specs/2026-09-22-public-monitoring-api-contract-design.md)
 - Single-Checker Execution Vertical Slice design: [superpowers/specs/2026-09-26-single-checker-execution-vertical-slice-design.md](superpowers/specs/2026-09-26-single-checker-execution-vertical-slice-design.md)
-- Local Web Monitoring Vertical Slice design: [superpowers/specs/2026-10-02-local-web-monitoring-vertical-slice-design.md](superpowers/specs/2026-10-02-local-web-monitoring-vertical-slice-design.md); approved and merged in #49, with runtime implementation still pending.
+- Local Web Monitoring Vertical Slice design: [superpowers/specs/2026-10-02-local-web-monitoring-vertical-slice-design.md](superpowers/specs/2026-10-02-local-web-monitoring-vertical-slice-design.md); approved in #49, implemented in #51, with permanent inbound deadline coverage in #52.
 - Implementation plans: [superpowers/plans/](superpowers/plans/)
-- Local Web implementation plan candidate: [superpowers/plans/2026-10-02-local-web-monitoring-vertical-slice.md](superpowers/plans/2026-10-02-local-web-monitoring-vertical-slice.md); reviewed design translated into TDD tasks, awaiting plan approval and execution-method selection.
+- Completed Local Web implementation plan: [superpowers/plans/2026-10-02-local-web-monitoring-vertical-slice.md](superpowers/plans/2026-10-02-local-web-monitoring-vertical-slice.md); historical TDD plan executed through #51; current evidence is in the Web verification guide and handoff.
 - Current continuation state: [devops/current-handoff.md](devops/current-handoff.md); verify its recorded base and live PR state before resuming.
 
 Design/spec/plan documents preserve the decision history for the phase in which they were written. Current implementation truth is described by the canonical architecture, backend, checker, testing, and devops documents below.
 
 ## Roadmap Proposals
 
-- [Industry benchmark and launch roadmap (2026-10-02)](roadmap/2026-10-02-industry-benchmark-and-launch-roadmap.md): researched product comparison, implementation gaps, proposed milestones, and live-release evidence, refreshed after Current Availability landed. This is a review candidate, not an approved implementation plan or production-readiness claim.
-- [Local Web and exposure scope candidate](superpowers/specs/2026-10-02-web-public-exposure-scope-reassessment.md): next-scope recommendation for a local browser journey consuming the four existing public operations; remote release remains a separate decision.
+- [Industry benchmark and launch roadmap (2026-10-02)](roadmap/2026-10-02-industry-benchmark-and-launch-roadmap.md): researched product comparison, implementation gaps, proposed milestones, and live-release gates, refreshed after Local Web landed. Later phases remain proposals, not approved implementation plans or production-readiness claims.
+- [Local Web and exposure scope](superpowers/specs/2026-10-02-web-public-exposure-scope-reassessment.md): historical selection of the implemented local browser journey; remote release remains a separate decision.
+- [Local Monitor Inventory scope candidate](superpowers/specs/2026-10-04-local-monitor-inventory-scope-reassessment.md): first proposed R2 increment for bounded durable discovery and existing detail navigation; written design and implementation are not approved.
 
 ## Implemented Runtime
 
