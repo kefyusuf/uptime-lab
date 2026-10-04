@@ -190,3 +190,36 @@ func TestInventoryErrorsAreSanitizedAndPOSTQueryIsPreserved(t *testing.T) {
 		t.Fatal(rec.Code, register.calls)
 	}
 }
+
+func TestInventoryFiftyRowCommaBoundary(t *testing.T) {
+	items := make([]ports.InventoryCandidate, 50)
+	used := 128 + 49
+	for i := range items {
+		items[i] = httpInventoryCandidate(t, i, "http://web/")
+		raw, err := json.Marshal(monitorResponse{ID: items[i].ID.String(), TargetURL: items[i].TargetURL, CreatedAt: items[i].CreatedAt})
+		if err != nil {
+			t.Fatal(err)
+		}
+		used += len(raw)
+	}
+	items[0].TargetURL += strings.Repeat("x", 245760-used)
+	items[0].TargetBytes = int64(len(items[0].TargetURL))
+	var page struct {
+		Items      []monitorResponse
+		NextCursor *string
+	}
+	body, err := encodeInventoryPage(items, 50)
+	if err != nil || json.Unmarshal(body, &page) != nil || len(page.Items) != 50 || page.NextCursor != nil || len(body) > 245760 {
+		t.Fatal(len(page.Items), err)
+	}
+	items[0].TargetURL += "x"
+	items[0].TargetBytes++
+	body, err = encodeInventoryPage(items, 50)
+	if err != nil || json.Unmarshal(body, &page) != nil || len(page.Items) != 49 || page.NextCursor == nil {
+		t.Fatal(len(page.Items), err)
+	}
+	key, err := application.DecodeInventoryCursor(*page.NextCursor)
+	if err != nil || key.ID != items[48].ID {
+		t.Fatal(key, err)
+	}
+}
