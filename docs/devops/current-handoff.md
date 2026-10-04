@@ -1,43 +1,42 @@
 # Current Project Handoff
 
 **Recorded:** 2026-10-05
-**Verified landed base:** `d93194358fb779e81bddaeb4add95e4aeb81b0b8` (approved inventory design #54 after scope #53)
-**Active plan branch:** `docs/local-monitor-inventory-plan`
-**Reviewed implementation commit:** `02f95b3bcae1623808389a68b51ba4ea6585e7a8` (Tasks1–7 complete)
-**Implementation PR:** [#51](https://github.com/kefyusuf/uptime-lab/pull/51)
+**Verified landed base:** `f50eca01fd74b6636113a7c8afd6126f8aeed879` (approved plan55 after scope53/design54)
+**Active branch:** `feat/local-monitor-inventory`
+**Managed worktree:** `C:\Users\yukonit\.codex\worktrees\local-monitor-inventory\uptime-lab`
+**Implementation PR:** [#56](https://github.com/kefyusuf/uptime-lab/pull/56), draft until final documentation gates and fresh review finish
 
-## Completed state
+## Current implementation
 
-- Current Availability implementation #48 is merged; Go serves four public operations.
-- Industry roadmap #45 is merged at `873c1a3`.
-- Local Web design #49 is approved and merged at the base above.
-- Historical pre-implementation main CI run [37023576947](https://github.com/kefyusuf/uptime-lab/actions/runs/37023576947) passed; it is not evidence for the current landed base.
-- The approved Native workflow now implements React registration/reopen/refresh, contract decoding, bounded same-origin gateway, non-root compiled runtime, loopback Compose override and staged real browser acceptance. Canonical Compose publishes no ports.
-- Task1–6 commits: `1dace19`, `4ab7c3e`, `0c080b7`, `adb06c5`, `d3e46c3`, `d10bf21`. Pinned local Node evidence:142 app tests,49 topology cases,19 smoke orchestration cases,22 resolved Compose/durable evidence cases,5 browser orchestration/collision cases and10 architecture cases passed. Typecheck, lint, formatting and build passed; installation audit reported zero vulnerabilities.
+The user approved merging plan55 and executing all seven dependent tasks through Native TDD. Tasks1–6 are complete:532db58 contract,4c20401 cursor/use case,666a6d3 SQL RED,336ce4b retrieval/index,0a1fb9c HTTP,96dc3cb maximum-row budget,21a8c70 gateway and1793e25 UI. Task7 adds independent durable Monitor evidence, a two-page browser journey and canonical index smoke.
 
-## Next gate and artifact
+Actual PostgreSQL RED in CI37239817150 detected the absent inventory migration. SQL GREEN336ce4b passed CI37240193666 and isolated local Linux-container integration. Actual Chromium RED3b5d4d3 in CI37241929991 expected20 rows and received1 before the controlled21-row preparation. GREEN code1386e98 passed [CI37242623843](https://github.com/kefyusuf/uptime-lab/actions/runs/37242623843), including actual default/custom-port browser inventory journeys, canonical Docker smoke, Go/PostgreSQL/race/vulnerability, public contract and Web quality gates. This evidence certifies that code checkpoint, not later changed heads.
 
-PR51 and PR52 are merged. Exact-main CI run [37215662225](https://github.com/kefyusuf/uptime-lab/actions/runs/37215662225) passed all10 jobs/gate at PR51's merged head, including real default/custom-port Chromium, canonical Docker smoke, Go/Rust and contracts. Fresh implementation review found no Critical/Important defects. PR52 closed its P3 item with permanent actual-socket tests; disabling header/body deadlines made both fail at their1000ms watchdog, and restoring unchanged production code passed144 app tests plus typecheck/lint/format/boundary checks. PR52's tested tree equaled its merged runtime head75200ab; later documentation commits differ in documentation only. That runtime head's [exact-main CI](https://github.com/kefyusuf/uptime-lab/actions/runs/37221902477) passed applicable checks, Docker smoke and real browser journeys on4173/4817; unchanged Go/Rust/contracts were skipped by scope. No production deployment is authorized. See [Web ownership](../frontend/local-monitoring-web.md) and [verification](../testing/local-monitoring-web.md).
+Go now serves five public operations on this branch. Inventory is local-only, default20/max50,128 raw query bytes and245760 JSON bytes, ordered by persisted microsecond creation time/UUID. A first oversized item returns fixed500 and blocks older traversal without truncation/skipping. Cursors provide no authorization, ownership or snapshot guarantee. Lifecycle/history, aggregation and remote release remain separate.
 
-R1 is complete for local browser use. Inventory scope #53 and [written design #54](../superpowers/specs/2026-10-05-local-monitor-inventory-design.md) are approved and merged. The user accepted the first-oversized-item500/traversal-blocking limitation and authorized preparing the TDD plan. The tested design tree equals this landed base. [Exact-main CI](https://github.com/kefyusuf/uptime-lab/actions/runs/37237401208) passed documentation/policy checks; unchanged runtime/contract jobs were skipped. The next artifact is the [inventory implementation plan](../superpowers/plans/2026-10-05-local-monitor-inventory.md), seven sequential tasks with concrete interfaces/RED-GREEN checks and mandatory real PostgreSQL/browser evidence. Native execution is recommended, not selected by this artifact. Lifecycle/history, health aggregation and remote access remain separate. Plan review and execution-method confirmation precede implementation; no inventory product code exists yet.
+Local Task6 evidence:221 Web tests, generated parity, typecheck, lint, package-context format, boundaries, build and zero-vulnerability audit passed. Task7 evidence mutation tests12, fake browser orchestration6 and fake smoke20 passed; fake CLI results are never browser/SQL proof. Existing creation/detail/availability/Checker behavior remains covered.
 
-The user requires TDD, meaningful commits on a short-lived branch, a reviewable PR, and concise Turkish before/after explanations after completed actions. Code/docs/product copy remain English. Preserve user changes; persistent memory/configuration writes and global tooling installation are not authorized.
+## Remaining finish gates
+
+Refresh canonical docs and check their links, architecture, repository shape, immutable migration history and whitespace. Require the final implementation head's affected CI jobs and aggregate gate. Finish the Native task ledger, run a fresh whole-branch review, then finalize the same PR and request merge approval. Do not deploy or merge without the corresponding authorization.
 
 ## Resume verification
 
-Run `git status --short`, `git branch --show-current`, `git log -1 --format='%H %s'`, `git merge-base --is-ancestor d93194358fb779e81bddaeb4add95e4aeb81b0b8 HEAD`, and inspect open PRs and their exact-head checks. The recorded implementation commit is historical review evidence, not the current branch head. The prior managed Web worktree is archived; use the primary checkout at `E:\projects\uptime-lab`. Refresh remote state and preserve user-owned changes.
+Use the attached inventory worktree above. Run `git status --short`, `git branch --show-current`, `git log -1 --format='%H %s'`, `git merge-base --is-ancestor f50eca01fd74b6636113a7c8afd6126f8aeed879 HEAD`, and inspect PR56 plus exact-head checks. The ignored `.superpowers/sdd/2026-10-05-local-monitor-inventory/progress.md` records completed tasks until final cleanup; trust its completed-task lines and actual Git state. Preserve user-owned changes. The prior local Web worktree is archived; primary main at `E:\projects\uptime-lab` is separate from this implementation checkout.
 
-This host lacks Docker. Task-local Node24.21.0/npm11.19.1 supplies application parity; Linux CI supplies real image/Compose/Chromium evidence. Fake CLI results prove orchestration only. The reviewer independently verified incomplete-header closure, incomplete-body408 closure, partial-upstream504 and interrupted-upstream502 under pinned Node; current bounded behavior passed.
+## Runtime and rulings
 
-## Implementation rulings
+- Docker is now available. Task-local Node24.21.0/npm11.19.1 provides Web parity.
+- Git Bash Docker path conversion prevented the original PostgreSQL wrapper invocation. An ignored native PowerShell equivalent uses the same pinned Linux Go/PostgreSQL images, read-only source, suite order, isolated project and cleanup. Linux CI independently passes the direct integration suites. No global tooling change or historical migration edit was made.
+- Windows race requires CGO; actual Linux CI supplies race and pinned govulncheck evidence.
+- The failed Docker mount conversion created an empty `apps/api;C` directory. Its creation time and empty contents were verified; that exact session artifact was removed. Existing topology rules were preserved.
+- Historical specs/plans retain their approval-stage wording. Canonical runtime/testing documents describe implemented behavior; the approved oversized-item traversal limitation remains binding.
+- No new dependencies, remote exposure, persistent configuration or memory writes were authorized.
 
-- Inbound creation-body deadline returns408 and closes the connection. The design pins the deadline without that status; unusual slow clients may receive conservative uncertain-creation feedback.
-- Root build context requires `apps/web/Dockerfile.dockerignore`. Incorrect patterns could enlarge build context; the final image copies compiled outputs only.
-- Remote authentication/TLS/multi-user release gates remain outside this approved local-only slice. Cost if this boundary is mistaken: premature public exposure; no remote deployment is performed.
-- Go/Rust domain source is unchanged; review covers integration and existing runtime CI covers the domain. Cost if mistaken: an existing domain defect could remain outside this patch review.
-- Asset replacement races require a mutable runtime filesystem, excluded by the verified read-only compiled image. Cost if that condition changes: containment assumptions must be revalidated.
-- Docker/Chromium behavior and ignore-rule execution require actual Linux CI, not local source review. That evidence passed at the reviewed commit and must pass at the final head; accepting fixture evidence would risk unverified runtime integration.
+## Historical local Web baseline
 
-## Inbound Deadline Coverage Follow-Up
+R1 local browser capability landed through PR51 atf17d2de, then permanent inbound deadline coverage through PR52 at75200ab. Exact-main CI37215662225 passed all10 jobs at the PR51 runtime; CI37221902477 passed applicable Web/repository checks plus real Docker/default/custom-port journeys at the follow-up runtime, while unchanged Go/Rust/contracts were skipped. These are historical checkpoint evidence.
 
-- The prior P3 item now has two permanent socket tests in `server.test.ts` and `gateway.test.ts`. An incomplete header must close without reaching upstream; an unfinished JSON POST must return408/no-store, close the connection and forward zero requests. A1000ms watchdog destroys the test socket on failure; shortened100ms deadlines keep checks fast without fake timers. Mutation RED proves disabled timers are detected. The follow-up landed through PR52; no pending deadline work remains.
+Registration remains conservative for uncertain creation: it warns that the Monitor may exist and never retries automatically. Independent raw/availability CheckIDs and UTC snapshots remain separate. Permanent actual-socket deadline tests detect missing incomplete-header closure and unfinished-body408/no-store closure before upstream work. No pending R1 deadline task remains.
+
+The user requires TDD, meaningful branch commits, a reviewable PR and concise Turkish before/after explanations. Code, docs and product copy remain English. See [Web ownership](../frontend/local-monitoring-web.md) and [verification](../testing/local-monitoring-web.md).

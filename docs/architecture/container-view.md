@@ -14,7 +14,7 @@ This is the C4 Level 2 view for the current runtime.
 
 ### Web Client — React + TypeScript
 
-The React browser in `apps/web` owns registration, reopening by ID, independent assessment/result cards and manual refresh. Its non-root Node server serves compiled assets and proxies only the four public operations to fixed `http://api:8080`. It owns no product policy or persistence.
+The React browser in `apps/web` owns registration, bounded inventory, local detail navigation, reopening by ID, independent assessment/result cards and manual refresh. Its non-root Node server serves compiled assets and proxies only the five public operations to fixed `http://api:8080`. It owns no product policy or persistence.
 
 The browser never accesses PostgreSQL directly.
 
@@ -103,7 +103,7 @@ flowchart LR
 
     Caller -->|POST/GET Monitor + GET latest-result/availability| Go
     Browser -->|loopback same origin| Web
-    Web -->|four public operations only| Go
+    Web -->|five public operations only| Go
     Checker -->|claim/result internal contract| Go
     Go -->|owned persistence| DB
     Checker -->|validated bounded probe| Target

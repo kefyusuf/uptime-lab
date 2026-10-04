@@ -3,7 +3,7 @@ info:
   title: uptime-lab Public API
   version: 0.1.0
   description: >
-    Pre-stable public contract for Monitoring registration, get-by-ID, and the
+    Pre-stable public contract for Monitoring registration, bounded inventory, get-by-ID, and the
     latest terminal execution-result read and current availability assessment. The latest-result operation exposes
     execution facts only and does not derive Monitor availability status.
 paths:

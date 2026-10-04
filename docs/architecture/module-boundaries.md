@@ -53,14 +53,17 @@ Implemented capabilities include:
 4. SubmitCheckResult
 5. GetLatestCheckResult
 6. GetMonitorAvailability
+7. ListMonitors
 
 Go application policy owns the fixed cadence, CheckRun deadline window, timeout/redirect work values, server-time decisions, no-work semantics, and completion/conflict mapping.
 
-No public list/update/delete/enable/disable/history use case exists. Availability is derived on read, without a materialized status projection.
+ListMonitors reads a bounded durable inventory through its own port. No public update/delete/enable/disable/history use case exists. Availability is derived on read, without a materialized status projection.
 
 ### Ports
 
 Monitoring defines narrow persistence contracts rather than a generic repository abstraction.
+
+The inventory port returns at most51 descending candidates, including explicit oversized-target markers. The application validates persisted keys, order and anchor bounds; the HTTP adapter owns exact JSON budgeting. Inventory never reads or mutates CheckRuns. Web owns one replacing page and cancellation, without classification, health fan-out or ownership guarantees.
 
 The execution port exposes only atomic claim/completion capabilities needed by the application layer.
 
