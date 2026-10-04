@@ -24,3 +24,12 @@ tmp/
 # Local tooling
 .coverage/
 .cache/
+
+# Web build and dependency output
+node_modules/
+apps/web/dist/
+apps/web/dist-server/
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/test-results/
+apps/web/playwright-report/

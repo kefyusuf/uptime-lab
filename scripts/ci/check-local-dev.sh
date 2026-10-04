@@ -90,12 +90,20 @@ require_placeholder_service() {
   grep -Fqx '      test: ["CMD-SHELL", "test -f /run/uptime-lab/ready"]' <<<"$block" || fail "$service healthcheck must evaluate readiness marker"
 }
 
-require_placeholder_service web
-
 WEB_BLOCK="$(extract_service_block web)"
 API_BLOCK="$(extract_service_block api)"
 CHECKER_BLOCK="$(extract_service_block checker)"
 DB_BLOCK="$(extract_service_block db)"
+
+[[ -f "$ROOT/apps/web/Dockerfile" && -f "$ROOT/apps/web/package-lock.json" ]] || fail "Web runtime manifests are missing"
+grep -Fqx '      dockerfile: apps/web/Dockerfile' <<<"$WEB_BLOCK" || fail "web must use the built Web image"
+grep -Fqx '      context: .' <<<"$WEB_BLOCK" || fail "web context must be repository root"
+grep -Fqx '      UPTIME_LAB_WEB_PORT: ${UPTIME_LAB_WEB_PORT:-4173}' <<<"$WEB_BLOCK" || fail "web origin port is missing"
+grep -Fqx '    init: true' <<<"$WEB_BLOCK" || fail "web must enable init"
+grep -Fqx '    read_only: true' <<<"$WEB_BLOCK" || fail "web must be read-only"
+grep -Fqx '    healthcheck:' <<<"$WEB_BLOCK" || fail "web healthcheck is missing"
+grep -Fqx "      test: [\"CMD\", \"node\", \"-e\", \"fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"]" <<<"$WEB_BLOCK" || fail "web must check HTTP asset health"
+grep -Fqx 'USER 10001:10001' "$ROOT/apps/web/Dockerfile" || fail "web must run as non-root"
 
 if grep -Fq '    depends_on:' <<<"$WEB_BLOCK"; then
   fail "web must start independently"
@@ -150,7 +158,7 @@ if [[ -d "$ROOT/apps" ]]; then
   while IFS= read -r app_path; do
     app_name="$(basename "$app_path")"
     case "$app_name" in
-      api|checker) ;;
+      api|checker|web) ;;
       *) fail "phase-forbidden app path exists: apps/$app_name" ;;
     esac
   done < <(find "$ROOT/apps" -mindepth 1 -maxdepth 1 -print)

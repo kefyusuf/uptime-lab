@@ -2,7 +2,7 @@
 
 **Architecture state:** Committed
 
-**Implementation state:** Go and Rust dependency fitness is implemented. Frontend enforcement remains deferred until React source exists.
+**Implementation state:** Go, Rust and frontend dependency fitness are implemented.
 
 ## Purpose
 
@@ -60,7 +60,7 @@ The committed frontend direction remains:
 shared <- entities <- features <- widgets <- pages <- app
 ```
 
-This remains conceptual until React exists.
+The implemented AST checker enforces this direction, public feature/entity entrypoints, dynamic imports and browser isolation from Node/server code. No widget layer is needed for this slice.
 
 ## Cross-Runtime Boundary
 
@@ -71,7 +71,7 @@ Current sources:
 - public: `contracts/openapi/public.yaml`;
 - internal: `contracts/openapi/internal.yaml`.
 
-The public Go adapter implements exactly Monitor create/read.
+The public Go adapter implements Monitor create/read, latest terminal result and current availability. Web forwards only these four operations.
 
 The internal Go/Rust contract implements exactly:
 
@@ -93,7 +93,7 @@ Repository fitness currently enforces:
 - local Compose topology;
 - documentation current-state markers.
 
-Frontend lint/import-boundary enforcement remains deferred with the frontend runtime.
+Frontend lint/import-boundary enforcement runs in the required Web CI job through `scripts/ci/check-web-architecture.mjs` and its mutation harness.
 
 ## Related Decisions
 

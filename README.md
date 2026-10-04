@@ -21,15 +21,15 @@ The **Single-Checker Execution Vertical Slice is implemented**. The repository n
 - a real four-service Docker Compose topology;
 - cross-runtime Docker evidence from claim through terminal CheckRun persistence and public latest-result readback.
 
-The public Monitoring contract at `contracts/openapi/public.yaml` remains intentionally small: `POST /monitors`, `GET /monitors/{monitorId}`, `GET /monitors/{monitorId}/latest-result`, and `GET /monitors/{monitorId}/availability`. The latest-result route exposes only the latest terminal execution fact: pending work is invisible, `204` means a known Monitor has no terminal result yet, and `resultKind` is not an up/down availability verdict. Full CheckRun history, materialized availability history, mutable Monitor lifecycle, React runtime, authentication/authorization, CORS/rate limiting, public ingress, and application host ports remain deferred.
+The public Monitoring contract at `contracts/openapi/public.yaml` remains intentionally small: `POST /monitors`, `GET /monitors/{monitorId}`, `GET /monitors/{monitorId}/latest-result`, and `GET /monitors/{monitorId}/availability`. The local React browser displays independent snapshots through a restricted same-origin gateway. Pending work is invisible; raw `204` differs from availability `unknown/no_result`. Full history, mutable Monitor lifecycle, authentication/authorization and remote ingress/TLS remain deferred. See [local browser startup](docs/devops/local-development.md).
 
 ## Architecture
 
-- **React + TypeScript** owns presentation and browser interaction. Its runtime remains deferred.
+- **React + TypeScript** owns the implemented local registration, reopen and manual-refresh browser journey in `apps/web`; its Node gateway forwards only four public Go operations.
 - **Go** owns product/domain coordination, public and internal API semantics, scheduling truth, PostgreSQL persistence, migrations, readiness, and CheckRun completion semantics.
 - **Rust** owns bounded network execution, destination validation, HTTP/HTTPS probing, transport normalization, and result delivery. Rust never accesses PostgreSQL directly.
 - **PostgreSQL** holds durable product state owned exclusively through Go. The Monitoring namespace contains `monitoring.monitors` and `monitoring.check_runs`.
-- **Docker Compose** is the canonical local-development substrate. It runs PostgreSQL, the real Go API, the real Rust Checker, and a Web placeholder without publishing application host ports.
+- **Docker Compose** runs PostgreSQL, Go, Rust and compiled Web without canonical host ports. The explicit `compose.web-local.yaml` override exposes only Web on `127.0.0.1:4173` (configurable).
 
 Start with the [architecture index](docs/architecture/README.md), the [Go Control Plane guide](docs/backend/go-control-plane.md), and the [Rust Checker guide](docs/checker/rust-checker.md).
 

@@ -279,6 +279,12 @@ Consequences.
 Related docs.
 DOC
   done
+  mkdir -p "$TMP/repo/docs/frontend"
+  printf 'Go owns product policy. The same-origin client displays Snapshot; refresh to reassess.\n' > "$TMP/repo/docs/frontend/local-monitoring-web.md"
+  printf 'Each captured CheckID and Monitor ID is verified independently.\n' > "$TMP/repo/docs/testing/local-monitoring-web.md"
+  printf '\nfrontend/local-monitoring-web.md\n' >> "$TMP/repo/docs/README.md"
+  printf '\ncompose.web-local.yaml\n' >> "$TMP/repo/docs/devops/local-development.md"
+  printf '\n## Local Browser Read and Refresh\n```mermaid\nsequenceDiagram\nBrowser->>Web: refresh\n```\n' >> "$TMP/repo/docs/architecture/runtime-flows.md"
 }
 
 make_fixture
@@ -377,8 +383,8 @@ sed -i '/Go -> Rust -> policy_rejected -> Go -> PostgreSQL/d' "$TMP/repo/docs/te
 expect_failure "missing Docker execution evidence marker fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
-mkdir -p "$TMP/repo/docs/frontend"
-expect_failure "speculative frontend docs directory fails" "$CHECKER" "$TMP/repo"
+printf 'React remains deferred.\n' >> "$TMP/repo/docs/architecture/container-view.md"
+expect_failure "stale React deferred summary fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
 sed -i '/GET \/monitors\/{monitorId}\/availability/d' "$TMP/repo/docs/architecture/runtime-flows.md"
@@ -392,5 +398,14 @@ make_fixture
 printf '\n- Public Monitoring surface is limited to Monitor create/read plus latest terminal result read.\n' >> "$TMP/repo/docs/devops/local-development.md"
 expect_failure "stale public operation limit fails" "$CHECKER" "$TMP/repo"
 
+make_fixture
+rm "$TMP/repo/docs/frontend/local-monitoring-web.md"
+expect_failure "missing implemented Web ownership fails" "$CHECKER" "$TMP/repo"
+make_fixture
+sed -i '/Local Browser Read and Refresh/d' "$TMP/repo/docs/architecture/runtime-flows.md"
+expect_failure "missing browser read flow fails" "$CHECKER" "$TMP/repo"
+make_fixture
+sed -i 's/same-origin/unrestricted/' "$TMP/repo/docs/frontend/local-monitoring-web.md"
+expect_failure "missing browser access boundary fails" "$CHECKER" "$TMP/repo"
 printf '\nArchitecture documentation tests: %d passed, %d failed\n' "$PASS" "$FAIL"
 test "$FAIL" -eq 0

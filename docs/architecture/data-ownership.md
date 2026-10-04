@@ -16,7 +16,7 @@ PostgreSQL is not a shared integration surface between Web, Go, and Rust.
 
 ### Web Client
 
-React is not implemented. A future browser consumes public Go APIs and never accesses PostgreSQL directly.
+React consumes the public Go contract through Web's fixed same-origin gateway and never accesses PostgreSQL directly. Its card states are temporary snapshots, not durable product state or a client-side availability policy.
 
 ### Rust Checker
 
