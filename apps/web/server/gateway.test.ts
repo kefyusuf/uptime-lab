@@ -94,6 +94,54 @@ afterEach(async () => {
   }
 });
 describe('actual HTTP gateway', () => {
+  it('forwards bounded inventory queries without changing bytes', async () => {
+    const cursor = 'A'.repeat(88);
+    for (const path of [
+      '/api/monitors',
+      '/api/monitors?limit=20',
+      `/api/monitors?limit=20&cursor=${cursor}`,
+      `/api/monitors?cursor=${cursor}&limit=20`,
+    ]) {
+      expect((await call(path)).body).toBe(body);
+      expect(captured.at(-1)?.path).toBe(path.slice(4));
+    }
+  });
+  it.each([
+    '/api/monitors?',
+    '/api/monitors?limit=020',
+    '/api/monitors?limit=20&limit=20',
+    '/api/monitors?limit=%32%30',
+    '/api/monitors?limit=20+',
+    '/api/monitors?limit=20;',
+    '/api/monitors?unknown=1',
+  ])('rejects inventory query before upstream %s', async (path) => {
+    expect((await call(path)).status).toBe(400);
+    expect(captured).toHaveLength(0);
+  });
+  it('keeps inventory body and browser boundary guards', async () => {
+    expect(
+      (await call('/api/monitors', 'GET', { 'Content-Length': '2' }, '{}'))
+        .status,
+    ).toBe(400);
+    expect(
+      (await call('/api/monitors', 'GET', { Origin: 'http://foreign.invalid' }))
+        .status,
+    ).toBe(403);
+    expect(
+      (await call('/api/monitors', 'GET', { Host: 'foreign.invalid' })).status,
+    ).toBe(403);
+    expect(
+      (
+        await call('/api/monitors', 'GET', [
+          'Host',
+          '127.0.0.1:4173',
+          'Host',
+          'foreign.invalid',
+        ])
+      ).status,
+    ).toBe(403);
+    expect(captured).toHaveLength(0);
+  });
   it('rejects unexpected GET request bodies before upstream work', async () => {
     const result = await call(
       '/api/monitors/id',

@@ -2,6 +2,8 @@ import { expect, it } from 'vitest';
 import { matchApiRoute } from './routes.js';
 it.each([
   ['/api/monitors', 'POST', '/monitors'],
+  ['/api/monitors', 'GET', '/monitors'],
+  ['/api/monitors?limit=20', 'GET', '/monitors?limit=20'],
   ['/api/monitors/ABC-invalid', 'GET', '/monitors/ABC-invalid'],
   ['/api/monitors/id/latest-result', 'GET', '/monitors/id/latest-result'],
   ['/api/monitors/id/availability', 'GET', '/monitors/id/availability'],
@@ -46,9 +48,31 @@ it('rejects HEAD and other methods with exact Allow', () => {
     status: 405,
     allow: 'GET',
   });
-  expect(matchApiRoute('/api/monitors', 'GET')).toEqual({
+  expect(matchApiRoute('/api/monitors', 'HEAD')).toEqual({
     kind: 'reject',
     status: 405,
-    allow: 'POST',
+    allow: 'GET, POST',
+  });
+});
+
+it.each([
+  '/api/monitors?',
+  '/api/monitors?limit=020',
+  '/api/monitors?limit=20?limit=1',
+  '/api/monitors?limit=20&limit=20',
+  '/api/monitors?cursor=' + 'A'.repeat(89),
+  '/api/monitors?unknown=1',
+  '/api/monitors?limit=%32%30',
+])('rejects collection query tricks %s', (path) => {
+  expect(matchApiRoute(path, 'GET')).toEqual({ kind: 'reject', status: 400 });
+});
+it('keeps POST and resource query bans', () => {
+  expect(matchApiRoute('/api/monitors?limit=20', 'POST')).toEqual({
+    kind: 'reject',
+    status: 400,
+  });
+  expect(matchApiRoute('/api/monitors/id?limit=20', 'GET')).toEqual({
+    kind: 'reject',
+    status: 400,
   });
 });

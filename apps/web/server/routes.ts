@@ -1,3 +1,4 @@
+import { validateInventoryQuery } from './inventory-query.js';
 export type RouteDecision =
   | { kind: 'forward'; path: string; method: 'GET' | 'POST' }
   | { kind: 'reject'; status: number; allow?: string }
@@ -6,13 +7,28 @@ export function matchApiRoute(
   rawTarget: string,
   method: string,
 ): RouteDecision {
+  const queryAt = rawTarget.indexOf('?');
+  const rawPath = queryAt === -1 ? rawTarget : rawTarget.slice(0, queryAt);
   if (
     !rawTarget.startsWith('/') ||
-    /[%\\?#]/.test(rawTarget) ||
-    rawTarget.includes('//') ||
-    rawTarget.split('/').some((segment) => segment === '.' || segment === '..')
+    /[%\\#]/.test(rawTarget) ||
+    rawPath.includes('//') ||
+    rawPath.split('/').some((segment) => segment === '.' || segment === '..')
   )
     return { kind: 'reject', status: 400 };
+  if (
+    queryAt !== -1 &&
+    (rawPath !== '/api/monitors' ||
+      method !== 'GET' ||
+      queryAt === rawTarget.length - 1 ||
+      !validateInventoryQuery(rawTarget.slice(queryAt + 1)))
+  )
+    return { kind: 'reject', status: 400 };
+  if (rawPath === '/api/monitors') {
+    if (method !== 'GET' && method !== 'POST')
+      return { kind: 'reject', status: 405, allow: 'GET, POST' };
+    return { kind: 'forward', path: rawTarget.slice(4), method };
+  }
   if (rawTarget !== '/api' && !rawTarget.startsWith('/api/'))
     return { kind: 'not_api' };
   if (rawTarget.endsWith('/')) return { kind: 'reject', status: 400 };
