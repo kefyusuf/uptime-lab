@@ -184,6 +184,9 @@ function validateLatestResultFixtures(repositoryRoot) {
       'latest-result-failure.json',
       'latest-result-http-response.json',
       'latest-result-worker-timeout.json',
+      'monitor-inventory-page.json',
+      'monitor-inventory-empty.json',
+      'monitor-inventory-final.json',
       ...availabilityFixtureCases.map(([name]) => `availability-${name}.json`),
     ],
     'public fixture file set',
@@ -252,6 +255,7 @@ export function validatePublicContract(document, repositoryRoot = '.') {
       'LatestHTTPResponseResult',
       'LatestWorkerTimeoutResult',
       'Monitor',
+      'MonitorInventoryPage',
       'Problem',
       'MonitorAvailability', 'AvailableMonitorAvailability', 'UnavailableMonitorAvailability',
       'UnknownMonitorAvailability', 'NoResultMonitorAvailability', 'MonitorAvailabilityEvidence',
@@ -276,7 +280,7 @@ export function validatePublicContract(document, repositoryRoot = '.') {
   assert(!own(createPath, 'servers'), '/monitors path item must not define servers');
   assert(!own(getPath, 'servers'), '/monitors/{monitorId} path item must not define servers');
   assert(!own(latestResultPath, 'servers'), '/monitors/{monitorId}/latest-result path item must not define servers');
-  assertExactSet(operationMethods(createPath), ['post'], '/monitors operations');
+  assertExactSet(operationMethods(createPath), ['get', 'post'], '/monitors operations');
   assertExactSet(operationMethods(getPath), ['get'], '/monitors/{monitorId} operations');
   assertExactSet(operationMethods(latestResultPath), ['get'], '/monitors/{monitorId}/latest-result operations');
 
@@ -483,6 +487,60 @@ export function validatePublicContract(document, repositoryRoot = '.') {
 
   validateLatestResultFixtures(repositoryRoot);
   validateAvailability(document, repositoryRoot);
+  validateInventory(document, repositoryRoot);
+}
+
+function validateInventory(document, repositoryRoot) {
+  const operation = document.paths['/monitors'].get;
+  assert(isObject(operation) && operation.operationId === 'listMonitors', 'inventory operationId must be listMonitors');
+  assertNoOperationSecurityOrServers(operation, 'inventory');
+  assert(operation['x-max-body-bytes'] === 245760, 'inventory body budget must be 245760');
+  assert(operation['x-max-query-bytes'] === 128, 'inventory query budget must be 128');
+  assert(Array.isArray(operation.parameters) && operation.parameters.length === 2, 'inventory requires limit/cursor parameters');
+  const [limit, cursor] = operation.parameters;
+  assert(limit.name === 'limit' && limit.in === 'query' && limit.required === false, 'inventory limit parameter');
+  assertIntegerRange(limit.schema, 1, 50, 'inventory limit');
+  assert(limit.schema.default === 20, 'inventory limit default must be 20');
+  assert(cursor.name === 'cursor' && cursor.in === 'query' && cursor.required === false, 'inventory cursor parameter');
+  assert(isDeepStrictEqual(cursor.schema, { type: 'string', minLength: 88, maxLength: 88, pattern: '^[A-Za-z0-9_-]{88}$' }), 'inventory cursor schema must be exact');
+  assertExactKeys(operation.responses, ['200', '400', '405', '500'], 'inventory responses');
+  assertResponseContent(document, operation.responses['200'], 'application/json', 'MonitorInventoryPage', 'inventory 200');
+  assertProblemResponses(document, operation, ['400', '500'], 'inventory');
+  assert(!own(operation.responses['405'], 'content'), 'inventory 405 has no body');
+  assertStringConst(operation.responses['405'].headers?.Allow?.schema, 'GET, POST', 'inventory 405 Allow');
+  for (const [code, response] of Object.entries(operation.responses)) {
+    assertStringConst(response.headers?.['Cache-Control']?.schema, 'no-store', 'inventory ' + code + ' Cache-Control');
+  }
+  const page = document.components.schemas.MonitorInventoryPage;
+  assertObjectShape(page, ['items', 'nextCursor'], ['items', 'nextCursor'], 'MonitorInventoryPage');
+  assert(page.properties.items.type === 'array' && page.properties.items.maxItems === 50, 'inventory items cap must be 50');
+  assertSchemaTarget(document, page.properties.items.items, 'Monitor', 'inventory item');
+  const { description: cursorDescription, ...cursorShape } = page.properties.nextCursor;
+  assert(isDeepStrictEqual(cursorShape, { type: ['string', 'null'], minLength: 88, maxLength: 88, pattern: '^[A-Za-z0-9_-]{88}$' }), 'inventory cursor nullable schema must be exact');
+  assert(isDeepStrictEqual(page.allOf, [{ if: { properties: { items: { maxItems: 0 } } }, then: { properties: { nextCursor: { const: null } } } }]), 'inventory empty continuation rule must be exact');
+  for (const name of ['page', 'empty', 'final']) {
+    const value = readJSONFixture(repositoryRoot, 'monitor-inventory-' + name + '.json');
+    assertExactKeys(value, ['items', 'nextCursor'], 'inventory page fixture');
+    assert(Array.isArray(value.items) && value.items.length <= 50, 'inventory item count');
+    assert(value.nextCursor === null || (typeof value.nextCursor === 'string' && /^[A-Za-z0-9_-]{88}$/.test(value.nextCursor)), 'inventory cursor representation');
+    assert(value.items.length > 0 || value.nextCursor === null, 'inventory empty continuation must be null');
+    const ids = new Set();
+    for (const monitor of value.items) {
+      assertExactKeys(monitor, ['id', 'targetUrl', 'createdAt'], 'inventory Monitor');
+      assert(typeof monitor.id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(monitor.id) && monitor.id !== '00000000-0000-0000-0000-000000000000', 'inventory Monitor ID');
+      assert(!ids.has(monitor.id), 'inventory duplicate ID');
+      ids.add(monitor.id);
+      assert(typeof monitor.targetUrl === 'string' && /^https?:\/\//i.test(monitor.targetUrl), 'inventory target text');
+      assertUTCTimestamp(monitor.createdAt, 'inventory createdAt');
+    }
+    if (value.nextCursor !== null) {
+      const last = value.items.at(-1);
+      const match = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d{1,6}))?Z$/.exec(last.createdAt);
+      assert(match, 'inventory persisted microsecond time');
+      const payload = '1|' + match[1] + '.' + (match[2] || '').padEnd(6, '0') + 'Z|' + last.id;
+      assert(value.nextCursor === Buffer.from(payload).toString('base64url'), 'inventory continuation key must equal last included Monitor');
+    }
+  }
 }
 
 const availabilityFixtureCases = [

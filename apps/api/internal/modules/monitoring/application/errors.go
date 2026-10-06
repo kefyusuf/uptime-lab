@@ -3,6 +3,8 @@ package application
 import "errors"
 
 var (
+	// ErrInvalidInventoryQuery is the stable invalid inventory input result.
+	ErrInvalidInventoryQuery = errors.New("invalid monitor inventory query")
 	// ErrAvailabilityEvaluation is the stable invalid assessment or clock failure.
 	ErrAvailabilityEvaluation = errors.New("availability evaluation failed")
 	// ErrMonitorNotFound is the stable application-level not-found result.

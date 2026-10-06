@@ -1,6 +1,7 @@
 import type { MonitorClient } from '../entities/monitor';
 import { useRef, useState, type FormEvent } from 'react';
 import { CreateMonitorForm } from '../features/create-monitor';
+import { MonitorInventory } from '../features/monitor-inventory';
 export function CreateMonitorPage({
   client,
   onNavigate,
@@ -67,6 +68,7 @@ export function CreateMonitorPage({
           <button type="submit">Open monitor</button>
         </form>
       </aside>
+      <MonitorInventory client={client} onNavigate={onNavigate} />
     </div>
   );
 }

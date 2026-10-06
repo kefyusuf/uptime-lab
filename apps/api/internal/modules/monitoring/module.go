@@ -11,6 +11,7 @@ type Module struct {
 	GetMonitor             application.GetMonitor
 	GetLatestCheckResult   application.GetLatestCheckResult
 	GetMonitorAvailability application.GetMonitorAvailability
+	ListMonitors           application.ListMonitors
 }
 
 // NewModule composes Monitoring use cases from their inward-facing dependencies.
@@ -26,6 +27,13 @@ func NewModule(
 		GetLatestCheckResult:   application.NewGetLatestCheckResult(latestResultRepository),
 		GetMonitorAvailability: application.NewGetMonitorAvailability(latestResultRepository, clock),
 	}
+}
+
+// NewModuleWithInventory composes the bounded read without changing legacy construction.
+func NewModuleWithInventory(repository ports.MonitorRepository, latest ports.LatestCheckResultRepository, inventory ports.MonitorInventoryRepository, idGenerator application.IDGenerator, clock application.Clock) Module {
+	module := NewModule(repository, latest, idGenerator, clock)
+	module.ListMonitors = application.NewListMonitors(inventory)
+	return module
 }
 
 // ExecutionModule groups the internal Checker execution use cases without owning infrastructure.

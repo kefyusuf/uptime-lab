@@ -75,6 +75,61 @@ test('built local monitor journey', async ({ page, request }) => {
       headers: { Host: 'foreign.invalid' },
     });
     expect(wrongHost.status()).toBe(403);
+    const registeredIds = [id!];
+    for (let index = 0; index < 20; index++) {
+      const response = await request.post('/api/monitors', {
+        headers: { Origin: new URL(page.url()).origin },
+        data: { targetUrl: target },
+      });
+      expect(response.status()).toBe(201);
+      const monitor = (await response.json()) as {
+        id: string;
+        targetUrl: string;
+      };
+      expect(monitor.targetUrl).toBe(target);
+      expect(monitor.id).toMatch(/^[0-9a-f-]{36}$/);
+      registeredIds.push(monitor.id);
+    }
+    // Discover the registered inventory through a fresh start-page load.
+    await page.goto('/');
+    await page.reload();
+    const inventoryRows = page.getByTestId('inventory-row');
+    await expect(inventoryRows).toHaveCount(20);
+    await expect(inventoryRows.locator('.inventory-target')).toHaveText(
+      Array<string>(20).fill(target),
+    );
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    const ids = await inventoryRows
+      .locator('a')
+      .evaluateAll((links) =>
+        links.map((link) => link.getAttribute('href')!.split('/').at(-1)!),
+      );
+    await page.getByRole('button', { name: 'Next page' }).click();
+    await expect(inventoryRows).toHaveCount(1);
+    const selected = inventoryRows.getByRole('link');
+    const selectedId = (await selected.getAttribute('href'))!
+      .split('/')
+      .at(-1)!;
+    ids.push(selectedId);
+    expect(new Set(ids).size).toBe(21);
+    expect(new Set(ids)).toEqual(new Set(registeredIds));
+    await selected.focus();
+    await selected.press('Enter');
+    await expect(page.getByTestId('monitor-id')).toHaveText(selectedId);
+    await expect(page.getByTestId('monitor-target')).toHaveText(target);
+    await expect(page.getByTestId('availability-reason')).toHaveAttribute(
+      'data-reason',
+      'no_result',
+    );
+    await expect(page.getByText('No completed result yet')).toHaveCount(2);
+    writeFileSync(
+      artifact,
+      JSON.stringify({ id, target, inventory: { ids, selectedId } }),
+    );
   } else if (process.env.WEB_BROWSER_PHASE === 'result') {
     const saved = JSON.parse(readFileSync(artifact, 'utf8')) as {
       id: string;

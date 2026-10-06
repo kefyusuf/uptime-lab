@@ -4,6 +4,7 @@ export type {
   Evidence,
   LatestResult,
   Monitor,
+  MonitorInventoryPage,
   ClientError,
   ReadResult,
   CreateOutcome,

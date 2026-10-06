@@ -7,6 +7,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"path"
 	"strings"
 	"time"
 
@@ -38,6 +39,7 @@ type Handler struct {
 	get             getMonitor
 	getLatest       getLatestCheckResult
 	getAvailability getMonitorAvailability
+	list            listMonitors
 }
 
 // NewHandler constructs the isolated public Monitoring HTTP adapter.
@@ -68,6 +70,11 @@ func NewHandlerWithAvailability(register registerMonitor, get getMonitor, getLat
 
 // ServeHTTP recognizes only configured contracted Monitoring resource shapes.
 func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	// Recognize collection aliases only to reject their original raw target.
+	if handler.list != nil && request.Method == http.MethodGet && path.Clean(request.URL.Path) == monitorsPath {
+		handler.serveInventory(writer, request)
+		return
+	}
 	if request.URL.Path == monitorsPath {
 		handler.serveCollection(writer, request)
 		return
@@ -91,8 +98,24 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 	http.NotFound(writer, request)
 }
 
+// NewHandlerWithInventory adds the bounded local collection read capability.
+func NewHandlerWithInventory(register registerMonitor, get getMonitor, latest getLatestCheckResult, availability getMonitorAvailability, list listMonitors) *Handler {
+	handler := NewHandlerWithAvailability(register, get, latest, availability)
+	handler.list = list
+	return handler
+}
+
 func (handler *Handler) serveCollection(writer http.ResponseWriter, request *http.Request) {
+	if handler.list != nil && request.Method == http.MethodGet {
+		handler.serveInventory(writer, request)
+		return
+	}
 	if request.Method != http.MethodPost {
+		if handler.list != nil {
+			writer.Header().Set("Cache-Control", "no-store")
+			methodNotAllowed(writer, "GET, POST")
+			return
+		}
 		methodNotAllowed(writer, http.MethodPost)
 		return
 	}

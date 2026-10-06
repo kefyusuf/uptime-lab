@@ -92,3 +92,5 @@ A cross-area feature must be expressed through contracts and owned policies, not
 ## Local Web Implementation
 
 The browser decodes the public contract and displays Go-owned assessments without classifying status or time. Product changes flow through Go semantics and contract fixtures before the adapter/cards. The TypeScript boundary checker, component/HTTP tests and exact-head real browser CI verify the affected path. Local gateway safeguards and loopback exposure do not replace remote release gates.
+
+The approved inventory scope53/design54/plan55 flows through one Native branch/PR56: contract RED/GREEN, Go port/use case, real PostgreSQL retrieval/index, HTTP byte budgeting, exact gateway allowance and replacing-page UI. Browser acceptance captures21 inventory IDs across two pages and verifies their own durable Monitor rows separately from CheckRun evidence. Immutable migration00003 must be applied explicitly before readiness and Checker startup. Fresh whole-branch review and exact-head CI precede merge approval.

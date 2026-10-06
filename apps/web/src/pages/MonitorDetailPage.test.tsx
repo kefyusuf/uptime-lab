@@ -9,6 +9,10 @@ const evaluatedAt = '2026-10-02T12:00:00.123456789Z';
 function client(): MonitorClient {
   return {
     createMonitor: vi.fn(),
+    listMonitors: vi.fn().mockResolvedValue({
+      kind: 'success',
+      data: { items: [], nextCursor: null },
+    }),
     getMonitor: vi.fn().mockResolvedValue({
       kind: 'success',
       data: {

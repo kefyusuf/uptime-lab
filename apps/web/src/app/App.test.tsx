@@ -11,6 +11,10 @@ const monitor = {
 };
 const client: MonitorClient = {
   createMonitor: vi.fn().mockResolvedValue({ kind: 'created', monitor }),
+  listMonitors: vi.fn().mockResolvedValue({
+    kind: 'success',
+    data: { items: [], nextCursor: null },
+  }),
   getMonitor: vi.fn().mockResolvedValue({ kind: 'success', data: monitor }),
   getAvailability: vi.fn().mockResolvedValue({
     kind: 'success',

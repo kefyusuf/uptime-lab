@@ -42,7 +42,7 @@ func TestCompatibilityCheckerAgainstPostgreSQL(t *testing.T) {
 		}
 	})
 
-	t.Run("version one only is incompatible when repository expects version two", func(t *testing.T) {
+	t.Run("version one only is incompatible with the full repository migration set", func(t *testing.T) {
 		resetMigrationState(t, db)
 
 		provider, err := NewProvider(db)
