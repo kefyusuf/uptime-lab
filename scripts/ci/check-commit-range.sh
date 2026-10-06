@@ -16,7 +16,8 @@ HEAD_SHA="$2"
 if [[ "$BASE_SHA" =~ ^0{40}$ ]]; then
   mapfile -t SUBJECTS < <(git log -1 --format=%s "$HEAD_SHA")
 else
-  mapfile -t SUBJECTS < <(git log --format=%s "$BASE_SHA..$HEAD_SHA")
+  # Base updates add generated merge messages; validate authored branch commits.
+  mapfile -t SUBJECTS < <(git log --no-merges --format=%s "$BASE_SHA..$HEAD_SHA")
 fi
 
 if [[ "${#SUBJECTS[@]}" -eq 0 ]]; then

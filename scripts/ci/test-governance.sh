@@ -87,5 +87,23 @@ git -C "$TMP_GIT" commit -q -m "build(deps-dev): bump test dependency"
 DEVELOPMENT_HEAD="$(git -C "$TMP_GIT" rev-parse HEAD)"
 expect_success "accept development dependency commit" bash -c "cd '$TMP_GIT' && '$SCRIPT_DIR/check-commit-range.sh' '$DEPENDENCY_HEAD' '$DEVELOPMENT_HEAD'"
 
+git -C "$TMP_GIT" branch dependency-update
+printf 'base guidance\n' > "$TMP_GIT/guidance.txt"
+git -C "$TMP_GIT" add guidance.txt
+git -C "$TMP_GIT" commit -q -m "docs: update base guidance"
+UPDATED_BASE="$(git -C "$TMP_GIT" rev-parse HEAD)"
+git -C "$TMP_GIT" checkout -q dependency-update
+printf 'next dependency\n' >> "$TMP_GIT/file.txt"
+git -C "$TMP_GIT" add file.txt
+git -C "$TMP_GIT" commit -q -m "build(deps): bump next dependency"
+git -C "$TMP_GIT" merge -q --no-ff "$UPDATED_BASE" -m "Merge branch 'main' into dependency-update"
+UPDATED_DEPENDENCY_HEAD="$(git -C "$TMP_GIT" rev-parse HEAD)"
+expect_success "allow GitHub base-update merge while validating PR commits" bash -c "cd '$TMP_GIT' && '$SCRIPT_DIR/check-commit-range.sh' '$UPDATED_BASE' '$UPDATED_DEPENDENCY_HEAD'"
+printf 'invalid after update\n' >> "$TMP_GIT/file.txt"
+git -C "$TMP_GIT" add file.txt
+git -C "$TMP_GIT" commit -q -m "Added invalid dependency change"
+INVALID_AFTER_UPDATE="$(git -C "$TMP_GIT" rev-parse HEAD)"
+expect_failure "reject invalid non-merge commit after base update" bash -c "cd '$TMP_GIT' && '$SCRIPT_DIR/check-commit-range.sh' '$UPDATED_BASE' '$INVALID_AFTER_UPDATE'"
+
 printf '\nGovernance tests: %d passed, %d failed\n' "$PASS" "$FAIL"
 test "$FAIL" -eq 0
