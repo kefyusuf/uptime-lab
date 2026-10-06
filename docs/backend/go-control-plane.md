@@ -47,6 +47,7 @@ The public runtime surface is:
 
 ~~~text
 POST /monitors
+GET  /monitors
 GET  /monitors/{monitorId}
 GET  /monitors/{monitorId}/latest-result
 GET  /monitors/{monitorId}/availability
@@ -231,11 +232,15 @@ Go architecture tests: 24 passed, 0 failed
 
 Cross-runtime Docker acceptance is documented separately in [../testing/single-checker-execution-slice.md](../testing/single-checker-execution-slice.md).
 
+## Bounded inventory read
+
+ListMonitors uses a dedicated bounded port and an88-character raw-base64url position containing version1, a fixed microsecond UTC timestamp and a lowercase nonzero UUID. Separate parameterized first/continuation queries use `(created_at DESC,id DESC)` and the nonunique `monitoring.monitors_inventory_order_idx`, added by00003. Raw targets are projected only at most245760 bytes; larger values return explicit metadata markers. The use case validates at most51 candidates, order and strict anchor bounds. HTTP accounts for escaped JSON,128 framing bytes and all commas, returning complete-prefix continuation or the approved first-item500. A cursor requires no anchor-row lookup and provides no ownership, authentication or snapshot guarantee. CheckRun state is unchanged.
+
 ## Deferred
 
 Still deferred:
 
-- public Monitor operations beyond create/read/latest-result/availability;
+- public Monitor operations beyond create/inventory/read/latest-result/availability;
 - full CheckRun history and materialized availability history;
 - mutable Monitor lifecycle;
 - multi-worker coordination/leases;

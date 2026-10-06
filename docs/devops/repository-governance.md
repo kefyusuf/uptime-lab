@@ -75,6 +75,10 @@ Required approvals are intentionally `0` while there is one active maintainer. P
 
 Dependency automation is added only for ecosystems that exist in the repository. The repository baseline starts with GitHub Actions updates; npm, Go modules, Cargo, and Docker updates are introduced with the manifests they own.
 
+Configured Dependabot ecosystems explicitly use `commit-message.prefix: build` and `include: scope`. GitHub generates `build(deps): ...` or `build(deps-dev): ...` for both PR titles and commit subjects. These dependency scopes are accepted by the same Conventional Commit predicate as product scopes; unknown types/scopes remain rejected. See the [official commit-message reference](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference#commit-message).
+
+Existing dependency PRs must incorporate the corrected policy from `main` before rerunning CI. Renaming only the PR title cannot repair an incompatible commit subject; keep the title and branch commits consistent.
+
 ## Bootstrap Exception
 
 The empty repository had no Git ref, so the canonical foundation design was allowed to become the initial root commit on `main`. That was the only planned direct-to-main bootstrap exception. All normal implementation changes use branches and pull requests.

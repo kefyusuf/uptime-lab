@@ -10,8 +10,10 @@ The authoritative public contract is `contracts/openapi/public.yaml`.
 
 ~~~text
 POST /monitors
+GET  /monitors
 GET  /monitors/{monitorId}
 GET  /monitors/{monitorId}/latest-result
+GET  /monitors/{monitorId}/availability
 ~~~
 
 Operational health is separate:
@@ -125,12 +127,16 @@ go test -count=1 -tags=integration ./cmd/api
 
 The aggregate remains `CI / gate`.
 
+## Inventory transport acceptance
+
+Inventory tests cover raw query grammar, GET-body rejection, no-store,405/Allow and unchanged legacy POST queries. Byte tests measure complete escaped JSON, Unicode/HTML expansion, the128-byte reserve and all49 commas for50 rows. A fitting prefix continues from its last included key; oversized count lookahead does not fail that page. An oversized first item returns fixed500 without target/ID or partial200 body. Actual PostgreSQL composition verifies create/detail/inventory identity, target and timestamp readback. Windows CGO limits do not count as race success; exact Linux Go CI runs race and pinned govulncheck.
+
 ## Deferred
 
 This public transport still does not add:
 
 - full CheckRun history or derived availability/status;
-- list/search/update/delete/enable/disable Monitor operations;
+- search/update/delete/enable/disable Monitor operations;
 - mutable Monitor lifecycle;
 - React;
 - authentication/authorization;

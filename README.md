@@ -21,11 +21,13 @@ The **Single-Checker Execution Vertical Slice is implemented**. The repository n
 - a real four-service Docker Compose topology;
 - cross-runtime Docker evidence from claim through terminal CheckRun persistence and public latest-result readback.
 
-The public Monitoring contract at `contracts/openapi/public.yaml` remains intentionally small: `POST /monitors`, `GET /monitors/{monitorId}`, `GET /monitors/{monitorId}/latest-result`, and `GET /monitors/{monitorId}/availability`. The local React browser displays independent snapshots through a restricted same-origin gateway. Pending work is invisible; raw `204` differs from availability `unknown/no_result`. Full history, mutable Monitor lifecycle, authentication/authorization and remote ingress/TLS remain deferred. See [local browser startup](docs/devops/local-development.md).
+The public Monitoring contract at `contracts/openapi/public.yaml` contains five operations: `POST /monitors`, `GET /monitors`, `GET /monitors/{monitorId}`, `GET /monitors/{monitorId}/latest-result`, and `GET /monitors/{monitorId}/availability`. The local browser discovers durable registrations and displays independent detail snapshots through a restricted same-origin gateway. Pending work is invisible; raw `204` differs from availability `unknown/no_result`. Full history, mutable Monitor lifecycle, authentication/authorization and remote ingress/TLS remain deferred. See [local browser startup](docs/devops/local-development.md).
+
+Inventory uses persisted creation-time/UUID keyset positions, default20/max50 rows and a245760-byte JSON budget. The start page replaces one20-row page at a time, with Next, Refresh and manual Retry. Targets remain complete text. A first eligible target that cannot fit returns fixed500 and blocks older traversal without truncation or skipping. Listing provides no ownership or authorization boundary and remains local-only.
 
 ## Architecture
 
-- **React + TypeScript** owns the implemented local registration, reopen and manual-refresh browser journey in `apps/web`; its Node gateway forwards only four public Go operations.
+- **React + TypeScript** owns local registration, bounded inventory, reopen and manual refresh in `apps/web`; its Node gateway forwards only five public Go operations.
 - **Go** owns product/domain coordination, public and internal API semantics, scheduling truth, PostgreSQL persistence, migrations, readiness, and CheckRun completion semantics.
 - **Rust** owns bounded network execution, destination validation, HTTP/HTTPS probing, transport normalization, and result delivery. Rust never accesses PostgreSQL directly.
 - **PostgreSQL** holds durable product state owned exclusively through Go. The Monitoring namespace contains `monitoring.monitors` and `monitoring.check_runs`.

@@ -11,7 +11,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List registered monitors
+         * @description Local inventory ordered by persisted creation time descending, then UUID descending. A cursor is a strict position, not an authorization or snapshot. Pages may contain fewer items than the requested limit to stay within the 245760-byte compact JSON budget. A first eligible item that cannot fit returns 500; records are never truncated or skipped. Only optional limit and cursor query keys, each once in either order, are accepted. Reject noncanonical decimal limits, empty queries/values, duplicate or unknown keys, percent escapes, plus signs, semicolons, whitespace and query bodies. Raw queries are at most 128 ASCII bytes. HEAD is unsupported.
+         */
+        get: operations["listMonitors"];
         put?: never;
         /**
          * Register a monitor
@@ -85,6 +89,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        MonitorInventoryPage: {
+            items: components["schemas"]["Monitor"][];
+            /** @description Last included key when more candidates exist, otherwise null. */
+            nextCursor: string | null;
+        } & unknown;
         CreateMonitorRequest: {
             /**
              * @description Exact target text to register. The Monitoring domain accepts an absolute HTTP or HTTPS target with a hostname, rejects embedded userinfo and fragments, permits query strings and explicit ports, and preserves accepted input text. The public contract intentionally does not apply RFC 3986 format: uri because the existing domain parser can accept and preserve values outside that syntax. Registration validation is syntactic only and is not SSRF or execution-safety approval.
@@ -215,6 +224,61 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listMonitors: {
+        parameters: {
+            query?: {
+                /** @description Canonical decimal integer without signs or leading zeroes. */
+                limit?: number;
+                /** @description Unpadded base64url of version1, persisted UTC microsecond creation time and nonzero canonical UUID. No client time reconstruction. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded inventory page; empty inventory is a successful empty page. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonitorInventoryPage"];
+                };
+            };
+            /** @description Invalid collection request or cursor. */
+            400: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unsupported collection method; no response body. */
+            405: {
+                headers: {
+                    Allow?: "GET, POST";
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Persistence/mapping failure or first item exceeds inventory response limit. */
+            500: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     registerMonitor: {
         parameters: {
             query?: never;

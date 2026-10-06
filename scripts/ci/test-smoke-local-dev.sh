@@ -58,6 +58,11 @@ if [[ "$joined" == *"exec -T api /usr/local/bin/uptime-lab-migrate up"* ]]; then
   exit 0
 fi
 
+if [[ "$joined" == *"monitors_inventory_order_idx"* ]]; then
+  if [[ "${FAKE_INVENTORY_INDEX_MODE:-valid}" == missing ]]; then printf 'f\n'; else printf 't\n'; fi
+  exit 0
+fi
+
 if [[ "$joined" == *"up -d --wait --wait-timeout 60"* ]]; then
   [[ -f "$migrated" ]] || exit 43
   exit 0
@@ -423,6 +428,14 @@ done
 for mode in extra-evidence-key expired-age future-age wrong-completion dotted-top-level flattened-evidence; do
   if case_availability_rejects "$mode"; then pass "availability rejects $mode"; else fail "availability rejects $mode"; fi
 done
+case_inventory_index_missing() {
+  reset_state
+  if DOCKER_LOG="$DOCKER_LOG" FAKE_STATE_DIR="$FAKE_STATE_DIR" DOCKER_BIN="$FAKE_DOCKER" FAKE_INVENTORY_INDEX_MODE=missing "$SMOKE" >/dev/null 2>&1; then return 1; fi
+  grep -Fq 'monitors_inventory_order_idx' "$DOCKER_LOG" || return 1
+  grep -Fq 'down -v --remove-orphans' "$DOCKER_LOG" || return 1
+}
+if case_inventory_index_missing; then pass "missing inventory index fails smoke and cleans up"; else fail "missing inventory index fails smoke and cleans up"; fi
+
 printf '\nLocal-dev smoke tests: %d passed, %d failed\n' "$PASS" "$FAIL"
-test "$PASS" -eq 19
+test "$PASS" -eq 20
 test "$FAIL" -eq 0

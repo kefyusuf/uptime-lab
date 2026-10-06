@@ -18,12 +18,15 @@ The milestone contract is OpenAPI 3.1.2 with `info.version: 0.1.0` and exactly:
 
 ~~~text
 POST /monitors
+GET  /monitors
 GET  /monitors/{monitorId}
 GET  /monitors/{monitorId}/latest-result
 GET  /monitors/{monitorId}/availability
 ~~~
 
-The Go runtime serves these four public operations through the Monitoring HTTP adapter in addition to `GET /livez` and schema-aware `GET /readyz`. The latest-result operation is terminal-only: `204` means a known Monitor has no terminal result, pending CheckRuns are not exposed, and the result vocabulary is an execution fact rather than an availability verdict. Canonical Compose publishes no application host ports, so this does not imply public network deployment. The internal Checker contract remains separate at `contracts/openapi/internal.yaml`.
+The Go runtime serves these five public operations through the Monitoring HTTP adapter in addition to `GET /livez` and schema-aware `GET /readyz`. The latest-result operation is terminal-only: `204` means a known Monitor has no terminal result, pending CheckRuns are not exposed, and the result vocabulary is an execution fact rather than an availability verdict. Canonical Compose publishes no application host ports, so this does not imply public network deployment. The internal Checker contract remains separate at `contracts/openapi/internal.yaml`.
+
+Inventory regression checks pin GET+POST collection, the closed required items/nullable nextCursor envelope, limit default20/min1/max50, cursor88 characters,128 raw query bytes,245760 body bytes, no-store and405 Allow GET, POST. Page/empty/final fixtures preserve complete Monitor fields; empty pages cannot continue and fixture continuation equals the last included persisted key. Mutation tests retain existing operation checks. Run pinned Redocly lint/bundle before the bundled checker and regenerate/check TypeScript consumer types.
 
 ## Verification Layers
 

@@ -301,7 +301,7 @@ Use a distinct `COMPOSE_PROJECT_NAME`.
 
 ## Current Limitations
 
-- Web serves the React client and proxies only four public Go operations. It starts independently with build-asset health.
+- Web serves the React client and proxies only five public Go operations. It starts independently with build-asset health.
 - Public Monitoring surface is limited to Monitor create/read, latest terminal result, and current availability assessment.
 - Full CheckRun history and materialized availability history remain unavailable.
 - No mutable Monitor lifecycle exists.
@@ -320,3 +320,9 @@ Use a distinct `COMPOSE_PROJECT_NAME`.
 - [Rust Checker](../checker/rust-checker.md)
 - [Single-Checker Execution Testing](../testing/single-checker-execution-slice.md)
 - [Repository Governance](repository-governance.md)
+
+## Inventory migration and discovery
+
+New immutable00003 adds the nonunique `(created_at DESC,id DESC)` Monitor index. Start API live but unready, explicitly migrate, verify readiness, then start Checker. Canonical smoke checks the index after each explicit migration; a missing/wrong index fails with task-owned cleanup. Exact migration-set readiness is not rolling-upgrade compatibility.
+
+The loopback start page lists registered targets in one replacing20-row page. Inventory introduces no CheckRun mutation, ownership boundary or remote release configuration. A first target exceeding245760 escaped JSON bytes returns fixed500 and can block traversal; direct UUID reopen remains available. Canonical Compose remains four services without published ports.

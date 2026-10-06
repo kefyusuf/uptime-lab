@@ -3,6 +3,10 @@ export interface Monitor {
   targetUrl: string;
   createdAt: string;
 }
+export interface MonitorInventoryPage {
+  items: Monitor[];
+  nextCursor: string | null;
+}
 export interface Evidence {
   checkId: string;
   completedAt: string;
@@ -57,6 +61,10 @@ export type CreateOutcome =
   | { kind: 'rejected'; message: string }
   | { kind: 'uncertain'; message: string };
 export interface MonitorClient {
+  listMonitors(
+    input: { limit: number; cursor: string | null },
+    signal: AbortSignal,
+  ): Promise<ReadResult<MonitorInventoryPage>>;
   createMonitor(targetUrl: string, signal: AbortSignal): Promise<CreateOutcome>;
   getMonitor(id: string, signal: AbortSignal): Promise<ReadResult<Monitor>>;
   getLatestResult(

@@ -1,0 +1,10 @@
+{
+  "items": [
+    {
+      "id": "018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2",
+      "targetUrl": "http://web/",
+      "createdAt": "2026-10-05T00:00:00.123456Z"
+    }
+  ],
+  "nextCursor": null
+}

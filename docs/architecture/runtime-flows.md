@@ -172,7 +172,13 @@ sequenceDiagram
     Browser->>Browser: manual Refresh clears old cards and starts new generation
 ```
 
-The two CheckIDs may differ. No client-side timer reclassifies status or changes `evaluatedAt`; no polling, persisted inventory or joined result/assessment is introduced. Current Monitor errors hide subordinate cards. Navigation and refresh cancel previous reads and suppress late responses. An unconfirmed creation warns that the Monitor may already exist; only an explicit user retry can submit again.
+The two CheckIDs may differ. No client-side timer reclassifies status or changes `evaluatedAt`; no polling, browser inventory persistence or joined result/assessment is introduced. Current Monitor errors hide subordinate cards. Navigation and refresh cancel previous reads and suppress late responses. An unconfirmed creation warns that the Monitor may already exist; only an explicit user retry can submit again.
+
+## Local inventory read
+
+The start page sends one bounded collection GET through the exact same-origin gateway. Go validates the raw query and canonical persisted cursor before storage. PostgreSQL reads `limit+1` candidates in `(created_at DESC,id DESC)` order using a strict tuple lower bound without finding an anchor row. Oversized targets become metadata markers. Go includes complete items within245760 JSON bytes; continuation names the last included row. Web replaces one20-row page and opens the existing detail route without health fan-out. Refresh resets the anchor; Retry repeats the failed anchor; cancellation/generation checks suppress late responses.
+
+An oversized first item returns the approved500 and blocks that traversal position. Inventory provides local discovery without authorization, snapshot isolation or lifecycle mutation.
 
 CheckID and MonitorID are stable cross-runtime correlation identifiers for the implemented execution path. No tracing backend or concrete distributed-tracing propagation contract is introduced by this milestone.
 

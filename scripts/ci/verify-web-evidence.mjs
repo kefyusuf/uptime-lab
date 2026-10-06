@@ -32,6 +32,15 @@ export function verifyEvidence(capture, rows) {
       throw new Error(`Durable ${card} evidence mismatch`);
   }
 }
+export function verifyInventoryEvidence(capture,monitors) {
+ const uuid=value=>typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value)&&value!=='00000000-0000-0000-0000-000000000000';
+ const inventory=capture?.inventory;
+ if(capture?.target!=='http://web/'||!inventory||Object.keys(inventory).length!==2||!Array.isArray(inventory.ids)||inventory.ids.length!==21||!inventory.ids.every(uuid)||new Set(inventory.ids).size!==21||!uuid(inventory.selectedId)||!inventory.ids.includes(inventory.selectedId)||!Array.isArray(monitors)) throw new Error('Invalid browser inventory evidence');
+ for(const id of inventory.ids) {
+  const matching=monitors.filter(row=>row?.id===id);
+  if(matching.length!==1||matching[0].target_url!==capture.target) throw new Error('Durable inventory Monitor mismatch');
+ }
+}
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
@@ -40,7 +49,8 @@ if (
     JSON.parse(readFileSync(process.argv[2], "utf8")),
     JSON.parse(readFileSync(process.argv[3], "utf8")),
   );
+  verifyInventoryEvidence(JSON.parse(readFileSync(process.argv[2],"utf8")),JSON.parse(readFileSync(process.argv[4],"utf8")));
   console.log(
-    "Both independent browser snapshots match durable terminal rows.",
+    "Independent browser snapshots and inventory IDs match durable rows.",
   );
 }

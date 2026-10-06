@@ -282,3 +282,39 @@ time {
     font-size: 11px;
   }
 }
+.inventory-panel {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+.inventory-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.inventory-list {
+  list-style: none;
+  padding: 0;
+  margin: 20px 0 0;
+}
+.inventory-list li {
+  border-top: 1px solid #dfe6ef;
+  padding: 16px 0;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.inventory-target,
+.inventory-id {
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+.inventory-id {
+  color: #59697d;
+  font-size: 13px;
+}
+.inventory-list time {
+  overflow-wrap: anywhere;
+}
+.inventory-list a {
+  justify-self: start;
+}

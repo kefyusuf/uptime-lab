@@ -47,7 +47,7 @@ Go test commands run in apps/api. Root shell scripts run at repository root usin
 
 Docker is absent locally. Mandatory real PostgreSQL/browser RED and GREEN must run through existing Linux CI on the actual execution branch; use a temporary draft execution PR for focused tests before fixing behavior when necessary. Reuse that draft as the final implementation PR. Fake CLI output or compile-only RED is not SQL/browser proof. No global Docker installation.
 
-### Task1: Closed collection contract
+### Task 1: Closed collection contract
 
 **Files:** Modify contracts/openapi/public.yaml, scripts/ci/check-public-contract.mjs, scripts/ci/test-check-public-contract.mjs; create contracts/fixtures/public/monitor-inventory-{page,empty,final}.json; regenerate apps/web/src/shared/api/public.generated.ts.
 
@@ -66,7 +66,7 @@ Docker is absent locally. Mandatory real PostgreSQL/browser RED and GREEN must r
 - [ ] Run focused GREEN, existing CI Redocly2.53.3 lint/bundle and check-public-contract.mjs on bundled JSON; npm run generate:api then npm run check:generated/typecheck. No package changes.
 - [ ] Commit Task1 files: feat(contracts): define bounded monitor inventory read.
 
-### Task2: Cursor, inventory port and Go use case
+### Task 2: Cursor, inventory port and Go use case
 
 **Files:** Create ports/monitor_inventory_repository.go, application/inventory_cursor.go, application/inventory_cursor_test.go, application/list_monitors.go, application/list_monitors_test.go; modify application/errors.go.
 
@@ -104,7 +104,7 @@ Add application.ErrInvalidInventoryQuery; reuse ErrPersistence. Limit0 is invali
 - [ ] Run focused GREEN, go test ./internal/modules/monitoring/... and root bash scripts/ci/check-go-architecture.sh .
 - [ ] Commit Task2 files: feat(api): add bounded monitor inventory use case.
 
-### Task3: Actual PostgreSQL retrieval and immutable index
+### Task 3: Actual PostgreSQL retrieval and immutable index
 
 **Files:** Create adapters/postgres/monitor_inventory.go, adapters/postgres/monitor_inventory_integration_test.go, apps/api/migrations/00003_add_monitor_inventory_order_index.sql, apps/api/migrations/monitor_inventory_integration_test.go; update migration expectation tests only as required.
 
@@ -121,7 +121,7 @@ Add application.ErrInvalidInventoryQuery; reuse ErrPersistence. Limit0 is invali
 - [ ] Repeat actual integration GREEN; verify index presence and representative EXPLAIN, not mandatory index selection for tiny fixtures. Verify missing00003 unready -> explicit migration -> ready. Run immutable migration/architecture checks.
 - [ ] Commit Task3 files: feat(api): persist bounded monitor inventory traversal.
 
-### Task4: Public HTTP budgeting and composition
+### Task 4: Public HTTP budgeting and composition
 
 **Files:** Create adapters/http/inventory.go, adapters/http/inventory_test.go; modify adapters/http/handler.go, adapters/http/handler_test.go, apps/api/internal/modules/monitoring/module.go and apps/api/cmd/api/{main.go,main_test.go,main_integration_test.go}.
 
@@ -138,7 +138,7 @@ Add application.ErrInvalidInventoryQuery; reuse ErrPersistence. Limit0 is invali
 - [ ] Run focused/full go test ./..., go vet ./..., go test -race ./...; real cmd/api integration GREEN, public-contract checks and existing pinned govulncheck gate.
 - [ ] Commit Task4 files: feat(api): serve byte-bounded monitor inventory pages.
 
-### Task5: Exact collection-only gateway query allowance
+### Task 5: Exact collection-only gateway query allowance
 
 **Files:** Create apps/web/server/inventory-query.ts, inventory-query.test.ts; modify server/routes.ts, routes.test.ts, gateway.test.ts. Preserve config/proxy limits.
 
@@ -155,7 +155,7 @@ Add application.ErrInvalidInventoryQuery; reuse ErrPersistence. Limit0 is invali
 - [ ] Run focused/full Web GREEN, typecheck/lint/format/boundaries; permanent incomplete-header/unfinished-body tests remain passing.
 - [ ] Commit Task5 files: feat(web): allow bounded inventory queries through gateway.
 
-### Task6: Strict browser client and bounded inventory feature
+### Task 6: Strict browser client and bounded inventory feature
 
 **Files:** Create src/entities/monitor/inventory.ts, inventory.test.ts; src/features/monitor-inventory/{useMonitorInventory.ts,useMonitorInventory.test.tsx,MonitorInventory.tsx,MonitorInventory.test.tsx,index.ts}. Modify entity model.ts/api.ts/api.test.ts/index.ts, pages/CreateMonitorPage.tsx/CreateMonitorPage.test.tsx, app/styles.css. Update MonitorClient doubles in app/App.test.tsx, pages/MonitorDetailPage.test.tsx, features/refresh-monitor/useMonitorReads.test.tsx and features/create-monitor/CreateMonitorForm.test.tsx.
 
@@ -173,7 +173,7 @@ Add application.ErrInvalidInventoryQuery; reuse ErrPersistence. Limit0 is invali
 - [ ] Run focused/full Web GREEN, generated parity, typecheck/lint/format/boundaries/build/audit and existing create/detail/narrow-viewport checks.
 - [ ] Commit Task6 files: feat(web): add cancellable local monitor inventory.
 
-### Task7: Composed acceptance and current-state documentation
+### Task 7: Composed acceptance and current-state documentation
 
 **Files:** Modify apps/web/e2e/local-monitoring.spec.ts; scripts/ci/run-web-browser-tests.sh, test-run-web-browser-tests.sh, verify-web-evidence.mjs, test-verify-web-evidence.mjs, smoke-local-dev.sh, test-smoke-local-dev.sh. Update canonical docs listed below and explicit operation/index fitness expectations only.
 

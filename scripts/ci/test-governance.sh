@@ -30,6 +30,8 @@ expect_failure() {
 expect_success "valid scoped title" "$SCRIPT_DIR/check-pr-title.sh" "feat(api): add monitor registration"
 expect_success "valid unscoped title" "$SCRIPT_DIR/check-pr-title.sh" "docs: update readme"
 expect_success "valid breaking title" "$SCRIPT_DIR/check-pr-title.sh" "fix(checker)!: change timeout contract"
+expect_success "accept Dependabot production dependency title" "$SCRIPT_DIR/check-pr-title.sh" "build(deps): bump actions/upload-artifact from 4.6.2 to 7.0.1"
+expect_success "accept development dependency title" "$SCRIPT_DIR/check-pr-title.sh" "build(deps-dev): bump test dependency"
 expect_failure "reject unknown type" "$SCRIPT_DIR/check-pr-title.sh" "feature(api): add monitor registration"
 expect_failure "reject unknown scope" "$SCRIPT_DIR/check-pr-title.sh" "feat(database): add monitor registration"
 expect_failure "reject missing colon" "$SCRIPT_DIR/check-pr-title.sh" "feat(api) add monitor registration"
@@ -73,6 +75,17 @@ git -C "$TMP_GIT" add file.txt
 git -C "$TMP_GIT" commit -q -m "Added invalid change"
 INVALID_HEAD="$(git -C "$TMP_GIT" rev-parse HEAD)"
 expect_failure "reject invalid commit range" bash -c "cd '$TMP_GIT' && '$SCRIPT_DIR/check-commit-range.sh' '$VALID_HEAD' '$INVALID_HEAD'"
+
+printf 'dependency update\n' >> "$TMP_GIT/file.txt"
+git -C "$TMP_GIT" add file.txt
+git -C "$TMP_GIT" commit -q -m "build(deps): bump actions/upload-artifact from 4.6.2 to 7.0.1"
+DEPENDENCY_HEAD="$(git -C "$TMP_GIT" rev-parse HEAD)"
+expect_success "accept Dependabot production dependency commit" bash -c "cd '$TMP_GIT' && '$SCRIPT_DIR/check-commit-range.sh' '$INVALID_HEAD' '$DEPENDENCY_HEAD'"
+printf 'development dependency update\n' >> "$TMP_GIT/file.txt"
+git -C "$TMP_GIT" add file.txt
+git -C "$TMP_GIT" commit -q -m "build(deps-dev): bump test dependency"
+DEVELOPMENT_HEAD="$(git -C "$TMP_GIT" rev-parse HEAD)"
+expect_success "accept development dependency commit" bash -c "cd '$TMP_GIT' && '$SCRIPT_DIR/check-commit-range.sh' '$DEPENDENCY_HEAD' '$DEVELOPMENT_HEAD'"
 
 printf '\nGovernance tests: %d passed, %d failed\n' "$PASS" "$FAIL"
 test "$FAIL" -eq 0

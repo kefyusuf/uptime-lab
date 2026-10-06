@@ -72,6 +72,9 @@ func TestProductionMonitoringCompositionAgainstPostgreSQL(t *testing.T) {
 	if _, err := provider.Down(ctx); err != nil {
 		t.Fatalf("provider.Down() error = %v", err)
 	}
+	if _, err := provider.Down(ctx); err != nil {
+		t.Fatalf("provider.Down() for CheckRuns error = %v", err)
+	}
 
 	var checkRunsExists bool
 	if err := pool.QueryRow(
@@ -181,6 +184,22 @@ func TestProductionMonitoringCompositionAgainstPostgreSQL(t *testing.T) {
 	}
 	if getPayload.CreatedAt != postPayload.CreatedAt {
 		t.Fatalf("GET createdAt = %q, want exact POST instant %q", getPayload.CreatedAt, postPayload.CreatedAt)
+	}
+
+	inventoryResponse, err := client.Get(baseURL + "/monitors?limit=20")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inventory struct {
+		Items      []monitorPayload `json:"items"`
+		NextCursor *string          `json:"nextCursor"`
+	}
+	if err := json.NewDecoder(inventoryResponse.Body).Decode(&inventory); err != nil {
+		t.Fatal(err)
+	}
+	inventoryResponse.Body.Close()
+	if inventoryResponse.StatusCode != 200 || inventoryResponse.Header.Get("Cache-Control") != "no-store" || len(inventory.Items) != 1 || inventory.Items[0] != getPayload || inventory.NextCursor != nil {
+		t.Fatalf("inventory readback: status=%d page=%+v", inventoryResponse.StatusCode, inventory)
 	}
 
 	assertStatus(

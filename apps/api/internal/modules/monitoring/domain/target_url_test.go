@@ -11,6 +11,9 @@ func TestNewTargetURLAcceptsSupportedAbsoluteURLs(t *testing.T) {
 		"https://example.com/path?x=1",
 		"https://example.com:8443/path",
 		"HTTPS://Example.COM/path",
+		"http://[fe80::1%25eth0]/",
+		"http://example.com:65536/",
+		"http://127.0.0.999/",
 	}
 
 	for _, raw := range tests {
