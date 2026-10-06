@@ -79,6 +79,8 @@ Configured Dependabot ecosystems explicitly use `commit-message.prefix: build` a
 
 Existing dependency PRs must incorporate the corrected policy from `main` before rerunning CI. Renaming only the PR title cannot repair an incompatible commit subject; keep the title and branch commits consistent.
 
+GitHub's update-branch operation can add `Merge branch 'main' into ...` commits. The commit-range validator excludes merge commits while checking every non-merge PR commit. The PR title is still checked and becomes the squash commit on `main`; this allows base updates without permitting malformed authored commits or relaxing main's linear-history rule.
+
 ## Bootstrap Exception
 
 The empty repository had no Git ref, so the canonical foundation design was allowed to become the initial root commit on `main`. That was the only planned direct-to-main bootstrap exception. All normal implementation changes use branches and pull requests.

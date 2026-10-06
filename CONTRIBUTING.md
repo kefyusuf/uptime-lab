@@ -58,6 +58,8 @@ docs(architecture): document module boundaries
 
 Pull-request titles follow the same format because the PR title becomes the squash commit subject on `main`.
 
+Commit-range checks validate non-merge branch commits. Generated merge commits that update a PR from its base branch are excluded from subject validation; they do not exempt the PR's normal commits or title. Squash-only merging and linear history on `main` remain required.
+
 ## Pull Requests
 
 Each pull request must represent one coherent, reviewable outcome. The standard PR template requires explicit statements for:
