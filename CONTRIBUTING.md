@@ -44,7 +44,7 @@ Every commit subject must follow Conventional Commits:
 
 Allowed types are `feat`, `fix`, `refactor`, `test`, `docs`, `ci`, `build`, `chore`, `perf`, and `revert`.
 
-Canonical scopes are `web`, `api`, `checker`, `contracts`, `devops`, `architecture`, and `docs`. The scope may be omitted when the change is genuinely repository-wide.
+Canonical scopes are `web`, `api`, `checker`, `contracts`, `devops`, `architecture`, `docs`, `deps`, and `deps-dev`. Use `deps` and `deps-dev` for production and development dependency updates, including Dependabot PR titles and commit subjects. The scope may be omitted when the change is genuinely repository-wide.
 
 Examples:
 
