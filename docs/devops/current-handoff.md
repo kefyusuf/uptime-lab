@@ -16,6 +16,8 @@ The recorded main passed all ten jobs and the aggregate gate in [CI37432170970](
 
 Review the [pause/resume scope proposal](../superpowers/specs/2026-10-08-local-monitor-pause-resume-scope-reassessment.md). Proposed semantics: stop new claims, allow already claimed work to complete, preserve existing resume cadence and result evidence. Scope approval precedes detailed design, written design approval precedes an implementation plan, and product execution follows TDD -> branch/commit -> PR. These rules remain proposals. R0 audience, workload, operator, budget and recovery decisions remain unresolved.
 
+The subsequent user continuation authorized the [written pause/resume design](../superpowers/specs/2026-10-08-local-monitor-pause-resume-design.md) using the recommended scope. PR #59 remains open and is extended with this design. The current gate is written-design review, before implementation planning. No runtime code or migration has changed; scope-stage wording in the earlier proposal is historical.
+
 ## Historical inventory implementation evidence
 
 The user approved merging plan55 and executing all seven dependent tasks through Native TDD. All seven tasks are complete:532db58 contract,4c20401 cursor/use case,666a6d3 SQL RED,336ce4b retrieval/index,0a1fb9c HTTP,96dc3cb maximum-row budget,21a8c70 gateway,1793e25 UI and1386e98 durable Monitor/browser/index acceptance, followed by canonical documentation57e3ad7.
