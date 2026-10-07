@@ -25,7 +25,8 @@ Design/spec/plan documents preserve the decision history for the phase in which 
 - [Local Web and exposure scope](superpowers/specs/2026-10-02-web-public-exposure-scope-reassessment.md): historical selection of the implemented local browser journey; remote release remains a separate decision.
 - [Local Monitor Inventory scope](superpowers/specs/2026-10-04-local-monitor-inventory-scope-reassessment.md): approved first R2 increment through #53, implemented on PR56 after design54/plan55 approval. Remaining lifecycle/history work and remote release gates are separate.
 - [Local Monitor Pause/Resume scope](superpowers/specs/2026-10-08-local-monitor-pause-resume-scope-reassessment.md): scope-stage proposal for the next R2 increment; subsequent user continuation authorized writing the design with recommended semantics. Historical proposal wording remains; no implementation authorized.
-- [Local Monitor Pause/Resume design](superpowers/specs/2026-10-08-local-monitor-pause-resume-design.md): written design after scope continuation; transaction serialization, strict scheduling contract, gateway mutation guards and browser uncertainty rules. Awaiting written-design review before implementation planning.
+- [Local Monitor Pause/Resume design](superpowers/specs/2026-10-08-local-monitor-pause-resume-design.md): transaction serialization, strict scheduling contract, gateway mutation guards and browser uncertainty rules; subsequent continuation authorized the plan.
+- [Local Monitor Pause/Resume implementation plan](superpowers/plans/2026-10-08-local-monitor-pause-resume.md): seven dependent TDD tasks with exact interfaces and SQL/browser/restart acceptance; awaiting plan review before Native execution.
 
 ## Implemented Runtime
 

@@ -16,7 +16,7 @@ The recorded main passed all ten jobs and the aggregate gate in [CI37432170970](
 
 Review the [pause/resume scope proposal](../superpowers/specs/2026-10-08-local-monitor-pause-resume-scope-reassessment.md). Proposed semantics: stop new claims, allow already claimed work to complete, preserve existing resume cadence and result evidence. Scope approval precedes detailed design, written design approval precedes an implementation plan, and product execution follows TDD -> branch/commit -> PR. These rules remain proposals. R0 audience, workload, operator, budget and recovery decisions remain unresolved.
 
-The subsequent user continuation authorized the [written pause/resume design](../superpowers/specs/2026-10-08-local-monitor-pause-resume-design.md) using the recommended scope. PR #59 remains open and is extended with this design. The current gate is written-design review, before implementation planning. No runtime code or migration has changed; scope-stage wording in the earlier proposal is historical.
+Subsequent user continuations authorized the [written pause/resume design](../superpowers/specs/2026-10-08-local-monitor-pause-resume-design.md) using the recommended scope, then preparation of the [TDD implementation plan](../superpowers/plans/2026-10-08-local-monitor-pause-resume.md). PR #59 remains open and now contains scope/design/plan documentation. The current gate is plan review before Native execution; no runtime code or migration has changed. Earlier artifact approval-stage wording is historical. The plan explicitly retains actual PostgreSQL snapshot-interleaving evidence as an acceptance requirement rather than assuming it from browser timing.
 
 ## Historical inventory implementation evidence
 
