@@ -103,15 +103,17 @@ func composeMonitoring(pool *pgxpool.Pool) (http.Handler, *migrations.Compatibil
 	}
 
 	repository := monitoringpostgres.NewRepository(pool)
-	publicModule := monitoring.NewModuleWithInventory(repository, repository, repository, newMonitorID, productionClock)
+	publicModule := monitoring.NewModuleWithScheduling(repository, repository, repository, newMonitorID, productionClock, repository)
 	executionModule := monitoring.NewExecutionModule(repository, newCheckID, productionClock)
 
-	publicHandler := monitoringhttp.NewHandlerWithInventory(
+	publicHandler := monitoringhttp.NewHandlerWithScheduling(
 		publicModule.RegisterMonitor,
 		publicModule.GetMonitor,
 		publicModule.GetLatestCheckResult,
 		publicModule.GetMonitorAvailability,
 		publicModule.ListMonitors,
+		publicModule.GetMonitorScheduling,
+		publicModule.SetMonitorScheduling,
 	)
 	internalHandler := checkerhttp.NewHandler(
 		executionModule.ClaimDueCheck,
