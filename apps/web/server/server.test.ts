@@ -8,6 +8,7 @@ import { afterEach, beforeEach, expect, it } from 'vitest';
 import { loadAssets } from './assets.js';
 import { loadWebConfig } from './config.js';
 import { createWebServer, shutdownWebServer } from './server.js';
+import type { WebLog } from './server.js';
 let root: string, server: Server, port: number;
 beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'uptime-server-'));
@@ -55,6 +56,46 @@ async function call(path: string, host = '127.0.0.1:4173') {
     req.end();
   });
 }
+it('logs scheduling PUT with bounded metadata only', async () => {
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  const logs: WebLog[] = [];
+  server = createWebServer(loadWebConfig({}), loadAssets(root), (entry) =>
+    logs.push(entry),
+  );
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw Error('address');
+  await new Promise<void>((resolve, reject) => {
+    const req = request(
+      {
+        hostname: '127.0.0.1',
+        port: address.port,
+        path: '/api/monitors/id/scheduling',
+        method: 'PUT',
+        headers: { Host: '127.0.0.1:4173' },
+      },
+      (res) => {
+        res.resume();
+        res.once('end', resolve);
+      },
+    );
+    req.on('error', reject);
+    req.end();
+  });
+  expect(logs).toHaveLength(1);
+  expect(logs[0]).toMatchObject({
+    category: 'api',
+    method: 'PUT',
+    status: 403,
+  });
+  expect(Object.keys(logs[0]).sort()).toEqual([
+    'category',
+    'durationMs',
+    'method',
+    'status',
+  ]);
+});
 it('serves recognized pages and manifest assets with security headers', async () => {
   const html = await call('/monitors/id');
   expect(html.status).toBe(200);
