@@ -2,9 +2,19 @@
 
 **Recorded:** 2026-10-08
 **Verified landed baseline:** `main@9b577ea3239803f0dac19ea4c687669228e4b339`
-**Current documentation branch:** `docs/local-monitor-pause-resume-scope`
-**Continuation checkout:** `E:\projects\uptime-lab`
-**Authorized task:** update continuation documents and propose local pause/resume scope; no product implementation or deployment.
+**Current feature branch:** `feat/local-monitor-pause-resume`, stacked on `docs/local-monitor-pause-resume-scope`
+**Continuation checkout:** `E:\projects\uptime-lab\.worktrees\local-monitor-pause-resume`
+**Authorized task:** approved seven-task Native TDD implementation and reviewable PR; merge and deployment are not authorized.
+
+## Active local scheduling continuation
+
+[Feature PR60](https://github.com/kefyusuf/uptime-lab/pull/60) stacks on open documentation PR59 (`c05b4e7`). Tasks1–6 committed:7aa83db contract,b0963b5 application/domain,fdb06f7 SQL serialization/races,48d1cff strict HTTP/composition,dc9c372 gateway,54fa8a6 independent detail controls. Task7 adds durable browser/restart acceptance and canonical documentation. The ignored plan ledger in this worktree records task boundaries, rulings and test logs; preserve the unmerged worktree.
+
+Native full Go/vet, real Linux PostgreSQL/race integration and301 Web tests passed. Task7 working-tree actual Chromium journeys passed4173 and4817 with API/Checker restart timestamps, no new paused CheckRun IDs over real claim opportunities and one resumed claim. These local observations do not substitute for final exact-head CI or independent review. Fresh whole-branch review and final affected CI/aggregate gate remain finish requirements until the PR records them.
+
+Initial draft CI37726542597 at54fa8a6 passed Go,public-contract,Web and canonical Docker smoke but policy/gate failed because the draft PR title used an unapproved `monitoring` scope. The title was corrected to `api`; the next push must rerun policy. Repository scopes also override the historical Task7 suggested commit scope: use `test(api)`, without expanding allowed scopes.
+
+Runtime rulings: Windows Git Bash converted the container migration path during the first local attempt; that setup failure is not feature RED. Ignored task-only Docker/npm wrappers keep pinned host tools and suppress path conversion only for Docker calls. The scheduling acceptance helper is a small orchestration seam; it pauses only other task-fixture Monitors and waits for the real60-second cadence, preserving displayed terminal timestamps. There is no production test hook. Task stacks remove their own containers/networks/volumes/local images; baseline images, preexisting resources and ignored module/build caches are retained.
 
 ## Landed state and next decision
 
@@ -16,7 +26,7 @@ The recorded main passed all ten jobs and the aggregate gate in [CI37432170970](
 
 Review the [pause/resume scope proposal](../superpowers/specs/2026-10-08-local-monitor-pause-resume-scope-reassessment.md). Proposed semantics: stop new claims, allow already claimed work to complete, preserve existing resume cadence and result evidence. Scope approval precedes detailed design, written design approval precedes an implementation plan, and product execution follows TDD -> branch/commit -> PR. These rules remain proposals. R0 audience, workload, operator, budget and recovery decisions remain unresolved.
 
-Subsequent user continuations authorized the [written pause/resume design](../superpowers/specs/2026-10-08-local-monitor-pause-resume-design.md) using the recommended scope, then preparation of the [TDD implementation plan](../superpowers/plans/2026-10-08-local-monitor-pause-resume.md). PR #59 remains open and now contains scope/design/plan documentation. The current gate is plan review before Native execution; no runtime code or migration has changed. Earlier artifact approval-stage wording is historical. The plan explicitly retains actual PostgreSQL snapshot-interleaving evidence as an acceptance requirement rather than assuming it from browser timing.
+Subsequent user continuations authorized the [written pause/resume design](../superpowers/specs/2026-10-08-local-monitor-pause-resume-design.md), the [TDD implementation plan](../superpowers/plans/2026-10-08-local-monitor-pause-resume.md) and then Native execution. PR #59 contains scope/design/plan documentation; feature PR60 is stacked on it. Earlier artifact approval-stage wording is historical. Actual PostgreSQL snapshot-interleaving evidence is implemented and qualified independently of browser timing.
 
 ## Historical inventory implementation evidence
 
@@ -36,7 +46,7 @@ Those finish gates completed before the approved merge of PR #56. The deferred m
 
 ## Resume verification
 
-Use the primary checkout above. Inspect `git status --short --branch`, `git log -1 --format='%H %s'`, worktree inventory, current PRs and exact-head checks. Verify that the recorded landed baseline remains an ancestor of the checkout. Preserve user-owned changes. Historical task checkpoints are retained above; PR #56 holds final review, CI and execution rulings. Do not resume from an archived implementation worktree.
+Use the active unmerged feature worktree above; the primary checkout remains the documentation branch. Inspect `git status --short --branch`, `git log -1 --format='%H %s'`, worktree inventory, current PRs and exact-head checks. Verify that the recorded landed baseline remains an ancestor. Preserve user-owned changes and check the plan ledger before repeating work. PR #56 holds historical inventory review/CI rulings; do not resume from its archived worktree.
 
 ## Runtime and rulings
 

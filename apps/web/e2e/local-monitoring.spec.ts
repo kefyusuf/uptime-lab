@@ -175,6 +175,46 @@ test('built local monitor journey', async ({ page, request }) => {
       },
     };
     writeFileSync(artifact, JSON.stringify(capture));
+  } else if (
+    ['pause', 'paused', 'resume'].includes(process.env.WEB_BROWSER_PHASE || '')
+  ) {
+    const saved = JSON.parse(readFileSync(artifact, 'utf8')) as {
+      id: string;
+      scheduling?: Record<string, unknown>;
+    };
+    const phase = process.env.WEB_BROWSER_PHASE;
+    if (phase === 'pause') {
+      await page.goto('/');
+      await expect(page.getByTestId('inventory-row')).toHaveCount(20);
+      const link = page.locator('a[href="/monitors/' + saved.id + '"]');
+      if ((await link.count()) === 0)
+        await page.getByRole('button', { name: 'Next page' }).click();
+      await expect(link).toBeVisible();
+      await link.focus();
+      await link.press('Enter');
+    } else await page.goto('/monitors/' + saved.id);
+    await expect(page.getByTestId('monitor-id')).toHaveText(saved.id);
+    if (phase === 'pause') {
+      await expect(page.getByTestId('scheduling-state')).toHaveText('Active');
+      await page.getByRole('button', { name: 'Pause', exact: true }).click();
+      await expect(page.getByTestId('scheduling-state')).toHaveText('Paused');
+      await page.reload();
+      await expect(page.getByTestId('scheduling-state')).toHaveText('Paused');
+      saved.scheduling = { monitorId: saved.id, pausedState: 'paused' };
+    } else if (phase === 'paused') {
+      await expect(page.getByTestId('scheduling-state')).toHaveText('Paused');
+      await expect(
+        page.getByRole('button', { name: 'Resume', exact: true }),
+      ).toBeEnabled();
+    } else {
+      await expect(page.getByTestId('scheduling-state')).toHaveText('Paused');
+      await page.getByRole('button', { name: 'Resume', exact: true }).click();
+      await expect(page.getByTestId('scheduling-state')).toHaveText('Active');
+      await page.reload();
+      await expect(page.getByTestId('scheduling-state')).toHaveText('Active');
+      saved.scheduling!.resumedState = 'active';
+    }
+    writeFileSync(artifact, JSON.stringify(saved));
   } else throw new Error('Unknown browser phase.');
   expect(errors).toEqual([]);
 });

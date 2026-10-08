@@ -12,6 +12,14 @@ Each captured CheckID and Monitor ID is verified against its own durable termina
 
 Remote ingress/TLS, authentication/authorization, backup/restore, production monitoring and release drills remain separate roadmap gates. This slice is local browser access, not live-release readiness.
 
+## Pause/resume qualification
+
+The runner adds actual inventory-to-detail Pause/reload, API and Checker restarts against the same database, paused readback, then Resume/reload and a real subsequent claim. It records Docker `State.StartedAt` before/after each restart and requires a strictly later UTC instant; container IDs alone are insufficient. The CheckRun baseline is read after pause commits and includes earlier pending work. That work may complete; new CheckRun IDs during pause are forbidden.
+
+The isolated fixture pauses other Monitors, preserves historical terminal timestamps and waits at most65 seconds for the existing60-second cadence boundary. After Checker restart, at least three actual `claim_no_work` events establish claim opportunities before the paused SQL snapshot. Resume must persist active and produce exactly one new linked CheckRun within20 bounded polls. No destination-policy bypass, synthetic result or production clock hook is added. Original policy_rejected/raw/availability/inventory evidence remains independently checked against durable rows.
+
+`web-scheduling-evidence.mjs` owns bounded fixture/snapshot checkpoints; `verifySchedulingEvidence` validates the closed capture, states, UUIDs, CheckRun linkage, unchanged paused IDs, durable resumed state and both restart timestamps. Mutation tests27 and fake orchestration cases8 passed during implementation; fake CLI tests are not runtime proof. Local4173/4817 real Chromium/Linux Go/Checker/PostgreSQL journeys passed on the Task7 working tree. Temporarily disabling both claim scheduling guards made the real journey fail with "New CheckRun appeared while paused"; the guards were restored without committing the mutation. Final exact-head Linux CI and fresh review are separate finish gates. Each runner removes only its unique project containers/network/volume and locally built images.
+
 ## Recorded Linux Acceptance
 
 At implementation commit `02f95b3`, CI run [37196147028](https://github.com/kefyusuf/uptime-lab/actions/runs/37196147028) passed the Web job with real default/custom-port journeys and canonical smoke. After PR51 merged at `f17d2de`, [exact-main run37215662225](https://github.com/kefyusuf/uptime-lab/actions/runs/37215662225) passed all10 jobs/gate. Fresh independent review found no blocking defect. Evidence is commit-specific; always verify the active PR's current head and aggregate gate before merge.
