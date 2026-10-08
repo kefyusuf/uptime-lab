@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AvailabilityCard,
   LatestResultCard,
@@ -6,6 +6,7 @@ import {
   type MonitorClient,
 } from '../entities/monitor';
 import { useMonitorReads } from '../features/refresh-monitor';
+import { MonitorSchedulingControl } from '../features/set-monitor-scheduling';
 export function MonitorDetailPage({
   id,
   client,
@@ -19,6 +20,8 @@ export function MonitorDetailPage({
     heading.current?.focus();
   }, [id]);
   const monitor = reads.monitor.kind === 'success' ? reads.monitor.data : null;
+  const [schedulingID, setSchedulingID] = useState<string | null>(null);
+  if (monitor && schedulingID !== id) setSchedulingID(id);
   const error = reads.monitor.kind === 'error' ? reads.monitor.error : null;
   return (
     <div className="detail-layout">
@@ -68,6 +71,9 @@ export function MonitorDetailPage({
           <p role="status">Reading monitor…</p>
         )}
       </section>
+      {schedulingID === id && reads.monitor.kind !== 'error' && (
+        <MonitorSchedulingControl key={id} id={id} client={client} />
+      )}
       {monitor && (
         <div className="result-layout">
           <AvailabilityCard state={reads.availability} />
