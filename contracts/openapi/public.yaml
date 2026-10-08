@@ -271,8 +271,91 @@ paths:
               "description": "Always bypass cached availability assessments."
       "summary": "Get current monitor availability"
       "description": "Read-only assessment from the latest terminal result. Future or older-than-120-second evidence is unknown; exactly 120 seconds is fresh. HTTP 200–299 is available; other valid HTTP statuses and probe failures are unavailable. Policy and execution failures are unknown. No terminal result returns unknown/no_result without evidence. All matched responses use no-store."
+  /monitors/{monitorId}/scheduling:
+    get:
+      operationId: getMonitorScheduling
+      summary: Read monitor scheduling state
+      description: >
+        Local scheduling snapshot, independent of availability. No query, including
+        an empty trailing question mark, or request body is accepted. Reject encoded
+        path segments and slash/dot/backslash aliases without redirecting. HEAD and
+        OPTIONS are unsupported. UUID parsing follows the existing Monitor contract.
+      parameters: &schedulingParameters
+        - name: monitorId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': &schedulingSuccess
+          description: Persisted scheduling state.
+          headers: &schedulingNoStore
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MonitorScheduling' }
+        '400': &schedulingInvalid
+          description: Invalid scheduling request.
+          headers: *schedulingNoStore
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '404':
+          <<: *schedulingInvalid
+          description: Monitor not found.
+        '500':
+          <<: *schedulingInvalid
+          description: The server could not complete the request.
+        '405': &schedulingMethod
+          description: Unsupported method; HEAD has no response body.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+            Allow:
+              schema: { type: string, const: 'GET, PUT' }
+    put:
+      operationId: setMonitorScheduling
+      summary: Set monitor scheduling state
+      description: >
+        Sets desired state and returns it after commit, including repeated same-state
+        commands. Pause stops new claims; already claimed work may finish. Resume
+        preserves the completion-based cadence. Concurrent commands are last-commit
+        wins. Never automatically retry uncertain writes. Raw body including whitespace
+        is at most 1024 bytes. Require JSON with optional UTF-8 charset only and no
+        content encoding. Reject duplicate or unknown decoded keys, case alternatives,
+        null/non-object input, missing state and trailing JSON. No query or encoded
+        path aliases; HEAD and OPTIONS are unsupported. State is not availability.
+      x-max-body-bytes: 1024
+      parameters: *schedulingParameters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MonitorScheduling' }
+      responses:
+        '200': *schedulingSuccess
+        '400': *schedulingInvalid
+        '404':
+          <<: *schedulingInvalid
+          description: Monitor not found.
+        '413':
+          <<: *schedulingInvalid
+          description: Scheduling body exceeds 1024 bytes.
+        '415':
+          <<: *schedulingInvalid
+          description: Unsupported scheduling media type or encoding.
+        '500':
+          <<: *schedulingInvalid
+          description: The server could not complete the request.
+        '405': *schedulingMethod
 components:
   schemas:
+    MonitorScheduling:
+      type: object
+      additionalProperties: false
+      required: [state]
+      properties:
+        state: { type: string, enum: [active, paused] }
     MonitorInventoryPage:
       type: object
       additionalProperties: false

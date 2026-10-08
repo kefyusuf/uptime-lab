@@ -27,6 +27,8 @@ function problemResponse() {
 function canonicalPublicFixtures() {
   return {
     ...inventoryFixtures(),
+    'monitor-scheduling-active.json': { state: 'active' },
+    'monitor-scheduling-paused.json': { state: 'paused' },
     ...availabilityFixtures(),
     'latest-result-http-response.json': {
       checkId: '7d9b2eb0-52bb-4dd7-8934-c5ce30d5c675',
@@ -236,7 +238,20 @@ function validDocument() {
   Object.assign(document.components.schemas, availabilitySchemas());
   document.paths['/monitors'].get = inventoryOperation();
   document.components.schemas.MonitorInventoryPage = inventorySchema();
+  document.components.schemas.MonitorScheduling = { type: 'object', additionalProperties: false, required: ['state'], properties: { state: { type: 'string', enum: ['active', 'paused'] } } };
+  document.paths['/monitors/{monitorId}/scheduling'] = schedulingPath();
   return document;
+}
+
+function schedulingPath() {
+  const schema = { $ref: '#/components/schemas/MonitorScheduling' };
+  const operation = (method) => {
+    const responses = { '200': { description: 'Scheduling.', content: { 'application/json': { schema } } }, '400': problemResponse(), '404': problemResponse(), '500': problemResponse(), '405': { description: 'Method.', headers: { Allow: { schema: { type: 'string', const: 'GET, PUT' } } } } };
+    if (method === 'put') Object.assign(responses, { '413': problemResponse(), '415': problemResponse() });
+    for (const response of Object.values(responses)) response.headers = { ...response.headers, 'Cache-Control': { schema: { type: 'string', const: 'no-store' } } };
+    return { operationId: method === 'get' ? 'getMonitorScheduling' : 'setMonitorScheduling', parameters: [{ name: 'monitorId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }], responses, ...(method === 'put' ? { 'x-max-body-bytes': 1024, requestBody: { required: true, content: { 'application/json': { schema } } } } : {}) };
+  };
+  return { get: operation('get'), put: operation('put') };
 }
 
 function inventoryOperation() {
@@ -379,6 +394,14 @@ function expectFixtureReject(name, filename, mutate, expected) {
 }
 
 expectPass('canonical fixture passes');
+expectReject('schedulingResourceIsClosed', d => { d.components.schemas.MonitorScheduling.additionalProperties = true; }, 'MonitorScheduling');
+expectReject('scheduling state enum excludes alternatives', d => { d.components.schemas.MonitorScheduling.properties.state.enum.push('disabled'); }, 'MonitorScheduling.state');
+expectReject('schedulingMethodsAndBodyLimitAreExact', d => { d.paths['/monitors/{monitorId}/scheduling'].put['x-max-body-bytes'] = 1025; }, 'scheduling body limit');
+expectReject('scheduling has no toggle method', d => { d.paths['/monitors/{monitorId}/scheduling'].post = d.paths['/monitors/{monitorId}/scheduling'].put; }, 'scheduling operations');
+expectReject('scheduling response cannot cache', d => { delete d.paths['/monitors/{monitorId}/scheduling'].put.responses['500'].headers; }, 'scheduling Cache-Control');
+expectReject('schedulingPreservesExistingOperations', d => { delete d.paths['/monitors'].post; }, '/monitors operations');
+expectReject('scheduling request is not immutable Monitor', d => { d.paths['/monitors/{monitorId}/scheduling'].put.requestBody.content['application/json'].schema = { $ref: '#/components/schemas/Monitor' }; }, 'scheduling request');
+expectFixtureReject('scheduling fixture cannot contain extra data', 'monitor-scheduling-paused.json', f => { f.available = true; }, 'scheduling fixture');
 
 expectReject('inventoryEnvelopeIsClosed', d => { d.components.schemas.MonitorInventoryPage.additionalProperties = true; }, 'MonitorInventoryPage.additionalProperties');
 expectReject('inventory nextCursor is required', d => { d.components.schemas.MonitorInventoryPage.required = ['items']; }, 'MonitorInventoryPage.required');
