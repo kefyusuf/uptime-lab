@@ -27,18 +27,21 @@ func TestProviderMigratesMonitoringSchemaUpDownUp(t *testing.T) {
 	if _, err := provider.Up(ctx); err != nil {
 		t.Fatalf("Up() error = %v", err)
 	}
-	assertMonitoringSchemaUp(t, ctx, db)
+	assertMonitoringSchemaUp(t, ctx, db, true)
 	assertCheckRunsColumns(t, ctx, db)
 
 	if _, err := provider.Down(ctx); err != nil {
+		t.Fatalf("scheduling Down() error = %v", err)
+	}
+	if _, err := provider.Down(ctx); err != nil {
 		t.Fatalf("first Down() error = %v", err)
 	}
-	assertMonitoringSchemaUp(t, ctx, db)
+	assertMonitoringSchemaUp(t, ctx, db, false)
 	assertCheckRunsColumns(t, ctx, db)
 	if _, err := provider.Down(ctx); err != nil {
 		t.Fatalf("second Down() error = %v", err)
 	}
-	assertMonitoringSchemaUp(t, ctx, db)
+	assertMonitoringSchemaUp(t, ctx, db, false)
 	assertCheckRunsTableDown(t, ctx, db)
 
 	if _, err := provider.Down(ctx); err != nil {
@@ -49,7 +52,7 @@ func TestProviderMigratesMonitoringSchemaUpDownUp(t *testing.T) {
 	if _, err := provider.Up(ctx); err != nil {
 		t.Fatalf("second Up() error = %v", err)
 	}
-	assertMonitoringSchemaUp(t, ctx, db)
+	assertMonitoringSchemaUp(t, ctx, db, true)
 	assertCheckRunsColumns(t, ctx, db)
 }
 
@@ -91,7 +94,7 @@ func resetMigrationState(t *testing.T, db *sql.DB) {
 	}
 }
 
-func assertMonitoringSchemaUp(t *testing.T, ctx context.Context, db *sql.DB) {
+func assertMonitoringSchemaUp(t *testing.T, ctx context.Context, db *sql.DB, scheduling bool) {
 	t.Helper()
 
 	rows, err := db.QueryContext(ctx, `
@@ -128,6 +131,9 @@ func assertMonitoringSchemaUp(t *testing.T, ctx context.Context, db *sql.DB) {
 		{name: "id", dataType: "uuid", isNullable: "NO"},
 		{name: "target_url", dataType: "text", isNullable: "NO"},
 		{name: "created_at", dataType: "timestamp with time zone", isNullable: "NO"},
+	}
+	if scheduling {
+		want = append(want, column{name: "paused", dataType: "boolean", isNullable: "NO"})
 	}
 	if len(got) != len(want) {
 		t.Fatalf("monitoring.monitors columns = %#v, want %#v", got, want)
