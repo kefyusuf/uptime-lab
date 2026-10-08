@@ -7,6 +7,105 @@ const monitor = {
 };
 const signal = () => new AbortController().signal;
 describe('Monitor client', () => {
+  it('bounds a lost scheduling write at12s without retrying', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockImplementation(() => new Promise(() => {}));
+      const outcome = createMonitorClient(fetcher).setScheduling(
+        monitor.id,
+        'paused',
+        signal(),
+      );
+      await vi.advanceTimersByTimeAsync(12000);
+      expect(await outcome).toMatchObject({ kind: 'uncertain' });
+      expect(fetcher.mock.calls[0][1]?.signal?.aborted).toBe(true);
+      expect(fetcher).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('reads scheduling and confirms only an explicit requested state', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ state: 'active' }))
+      .mockResolvedValueOnce(Response.json({ state: 'paused' }));
+    const client = createMonitorClient(fetcher);
+    expect(await client.getScheduling(monitor.id, signal())).toEqual({
+      kind: 'success',
+      data: { state: 'active' },
+    });
+    expect(await client.setScheduling(monitor.id, 'paused', signal())).toEqual({
+      kind: 'confirmed',
+      data: { state: 'paused' },
+    });
+    expect(fetcher).toHaveBeenLastCalledWith(
+      '/api/monitors/' + monitor.id + '/scheduling',
+      expect.objectContaining({
+        method: 'PUT',
+        body: '{"state":"paused"}',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        credentials: 'omit',
+        redirect: 'error',
+      }),
+    );
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+  it.each([200, 201, 202, 204, 500, 502, 504])(
+    'does not confirm scheduling status %d with a mismatched or empty body',
+    async (status) => {
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(
+          status === 204
+            ? new Response(null, { status })
+            : Response.json({ state: 'active' }, { status }),
+        );
+      expect(
+        await createMonitorClient(fetcher).setScheduling(
+          monitor.id,
+          'paused',
+          signal(),
+        ),
+      ).toMatchObject({ kind: 'uncertain' });
+      expect(fetcher).toHaveBeenCalledOnce();
+    },
+  );
+  it.each([400, 404, 413, 415])(
+    'requires reread after a known scheduling rejection %d',
+    async (status) => {
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(
+          Response.json({ title: 'secret details', status }, { status }),
+        );
+      const outcome = await createMonitorClient(fetcher).setScheduling(
+        monitor.id,
+        'paused',
+        signal(),
+      );
+      expect(outcome).toMatchObject({ kind: 'rejected', error: { status } });
+      expect(JSON.stringify(outcome)).not.toContain('secret');
+      expect(fetcher).toHaveBeenCalledOnce();
+    },
+  );
+  it.each([
+    () => Promise.reject(Error('secret')),
+    () => Promise.resolve(Response.json({ state: 'paused', extra: 1 })),
+    () => Promise.resolve(new Response('broken', { status: 200 })),
+  ])('never retries an uncertain scheduling write', async (response) => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(response);
+    expect(
+      await createMonitorClient(fetcher).setScheduling(
+        monitor.id,
+        'paused',
+        signal(),
+      ),
+    ).toMatchObject({ kind: 'uncertain' });
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
   it.each([
     'http://[fe80::1%25eth0]/',
     'http://example.com:65536/',

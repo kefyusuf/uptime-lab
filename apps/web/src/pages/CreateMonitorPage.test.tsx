@@ -4,6 +4,8 @@ import { expect, it, vi } from 'vitest';
 import { CreateMonitorPage } from './CreateMonitorPage';
 import type { MonitorClient } from '../entities/monitor';
 const client: MonitorClient = {
+  getScheduling: vi.fn(),
+  setScheduling: vi.fn(),
   createMonitor: vi.fn(),
   listMonitors: vi.fn().mockResolvedValue({
     kind: 'success',

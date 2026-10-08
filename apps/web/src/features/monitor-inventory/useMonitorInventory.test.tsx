@@ -14,6 +14,8 @@ const row = {
 };
 function client(): MonitorClient {
   return {
+    getScheduling: vi.fn(),
+    setScheduling: vi.fn(),
     listMonitors: vi.fn(),
     createMonitor: vi.fn(),
     getMonitor: vi.fn(),
@@ -64,6 +66,8 @@ it('Next replaces the page and clears rows while pending without health fan-out'
   );
   expect(api.getAvailability).not.toHaveBeenCalled();
   expect(api.getLatestResult).not.toHaveBeenCalled();
+  expect(api.getScheduling).not.toHaveBeenCalled();
+  expect(api.setScheduling).not.toHaveBeenCalled();
   expect(api.createMonitor).not.toHaveBeenCalled();
 });
 it('Refresh aborts Next and wins over a late response; unmount cancels', async () => {

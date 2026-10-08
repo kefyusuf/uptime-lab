@@ -9,6 +9,8 @@ export type {
   ReadResult,
   CreateOutcome,
   MonitorClient,
+  MonitorScheduling,
+  SchedulingOutcome,
   LoadState,
 } from './model';
 export { AvailabilityCard } from './AvailabilityCard';

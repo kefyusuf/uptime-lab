@@ -7,6 +7,8 @@ it.each([
   ['/api/monitors/ABC-invalid', 'GET', '/monitors/ABC-invalid'],
   ['/api/monitors/id/latest-result', 'GET', '/monitors/id/latest-result'],
   ['/api/monitors/id/availability', 'GET', '/monitors/id/availability'],
+  ['/api/monitors/id/scheduling', 'GET', '/monitors/id/scheduling'],
+  ['/api/monitors/id/scheduling', 'PUT', '/monitors/id/scheduling'],
 ])('maps only public shape %s', (path, method, target) =>
   expect(matchApiRoute(path, method)).toEqual({
     kind: 'forward',
@@ -75,4 +77,21 @@ it('keeps POST and resource query bans', () => {
     kind: 'reject',
     status: 400,
   });
+});
+
+it.each(['HEAD', 'OPTIONS', 'POST', 'PATCH', 'DELETE'])(
+  'keeps scheduling verbs closed: %s',
+  (method) => {
+    expect(matchApiRoute('/api/monitors/id/scheduling', method)).toEqual({
+      kind: 'reject',
+      status: 405,
+      allow: 'GET, PUT',
+    });
+  },
+);
+it.each([
+  '/api/monitors/id/scheduling?',
+  '/api/monitors/id/scheduling?state=paused',
+])('rejects scheduling query %s', (target) => {
+  expect(matchApiRoute(target, 'PUT')).toEqual({ kind: 'reject', status: 400 });
 });

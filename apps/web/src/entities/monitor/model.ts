@@ -7,6 +7,13 @@ export interface MonitorInventoryPage {
   items: Monitor[];
   nextCursor: string | null;
 }
+export interface MonitorScheduling {
+  state: 'active' | 'paused';
+}
+export type SchedulingOutcome =
+  | { kind: 'confirmed'; data: MonitorScheduling }
+  | { kind: 'rejected'; error: ClientError }
+  | { kind: 'uncertain'; error: ClientError };
 export interface Evidence {
   checkId: string;
   completedAt: string;
@@ -61,6 +68,15 @@ export type CreateOutcome =
   | { kind: 'rejected'; message: string }
   | { kind: 'uncertain'; message: string };
 export interface MonitorClient {
+  getScheduling(
+    id: string,
+    signal: AbortSignal,
+  ): Promise<ReadResult<MonitorScheduling>>;
+  setScheduling(
+    id: string,
+    state: MonitorScheduling['state'],
+    signal: AbortSignal,
+  ): Promise<SchedulingOutcome>;
   listMonitors(
     input: { limit: number; cursor: string | null },
     signal: AbortSignal,

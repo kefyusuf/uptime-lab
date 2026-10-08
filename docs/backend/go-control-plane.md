@@ -51,6 +51,8 @@ GET  /monitors
 GET  /monitors/{monitorId}
 GET  /monitors/{monitorId}/latest-result
 GET  /monitors/{monitorId}/availability
+GET  /monitors/{monitorId}/scheduling
+PUT  /monitors/{monitorId}/scheduling
 ~~~
 
 The internal Checker surface is:
@@ -68,6 +70,14 @@ GET /readyz
 ~~~
 
 The latest-result route exposes only the latest terminal CheckRun execution fact. Pending rows are invisible; a known Monitor with no terminal result maps to `204`. Full CheckRun history and materialized availability history remain deferred.
+
+## Durable local scheduling
+
+Scheduling is separate from immutable Monitor registration. Migration00004 adds `paused boolean NOT NULL DEFAULT false`; existing and new Monitors start active. GET/PUT return only `{state:active|paused}`. PUT sets a desired state and commits before success; repeating the same desired state still acquires the Monitor row lock. Unknown Monitor maps to404; persistence/commit failures are sanitized500.
+
+Claims use explicit Read Committed, select active candidates with `FOR UPDATE OF monitor SKIP LOCKED`, then read the locked candidate's current paused state in a separate statement before inserting a CheckRun. This recheck covers a candidate snapshot overlapping a committed pause. Pause does not lock or cancel CheckRuns; work claimed before pause may complete normally. Reconciliation, the pending guard, global concurrency bound and60-second cadence after the latest terminal completion remain intact. Resume does not reset that cadence.
+
+Scheduling owns strict1024-byte PUT input, exact token-wise state JSON, JSON with optional UTF-8 charset and no content encoding. Raw path aliases/escapes and any query are400; only GET/PUT are supported. HEAD/OPTIONS return405 with `Allow: GET, PUT`. GET rejects body framing. All matched responses use no-store; no redirect or Location is emitted. This local capability adds no ownership, maintenance or deployment qualification.
 
 ## Monitoring Domain
 

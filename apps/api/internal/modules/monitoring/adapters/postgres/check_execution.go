@@ -24,7 +24,7 @@ func (repository *Repository) ClaimDueCheck(
 		return ports.ClaimedCheck{}, err
 	}
 
-	tx, err := repository.pool.BeginTx(ctx, pgx.TxOptions{})
+	tx, err := repository.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return ports.ClaimedCheck{}, fmt.Errorf("begin claim transaction: %w", err)
 	}
@@ -65,7 +65,7 @@ func (repository *Repository) ClaimDueCheck(
 				ORDER BY run.completed_at DESC
 				LIMIT 1
 			) AS terminal ON true
-			WHERE NOT EXISTS (
+			WHERE monitor.paused = false AND NOT EXISTS (
 				SELECT 1
 				FROM monitoring.check_runs AS pending
 				WHERE pending.monitor_id = monitor.id
@@ -91,6 +91,18 @@ func (repository *Repository) ClaimDueCheck(
 	}
 	if err != nil {
 		return ports.ClaimedCheck{}, fmt.Errorf("select due monitor: %w", err)
+	}
+
+	// A separate Read Committed statement observes the locked candidate's current state.
+	var paused bool
+	if err := tx.QueryRow(ctx, `SELECT paused FROM monitoring.monitors WHERE id=$1::uuid`, rawMonitorID).Scan(&paused); err != nil {
+		return ports.ClaimedCheck{}, fmt.Errorf("recheck locked monitor scheduling: %w", err)
+	}
+	if paused {
+		if err := tx.Commit(ctx); err != nil {
+			return ports.ClaimedCheck{}, fmt.Errorf("commit paused candidate: %w", err)
+		}
+		return ports.ClaimedCheck{}, ports.ErrNoDueCheck
 	}
 
 	if _, err := tx.Exec(

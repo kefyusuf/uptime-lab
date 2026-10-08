@@ -1,6 +1,6 @@
 import { validateInventoryQuery } from './inventory-query.js';
 export type RouteDecision =
-  | { kind: 'forward'; path: string; method: 'GET' | 'POST' }
+  | { kind: 'forward'; path: string; method: 'GET' | 'POST' | 'PUT' }
   | { kind: 'reject'; status: number; allow?: string }
   | { kind: 'not_api' };
 export function matchApiRoute(
@@ -32,6 +32,11 @@ export function matchApiRoute(
   if (rawTarget !== '/api' && !rawTarget.startsWith('/api/'))
     return { kind: 'not_api' };
   if (rawTarget.endsWith('/')) return { kind: 'reject', status: 400 };
+  if (/^\/api\/monitors\/[A-Za-z0-9-]+\/scheduling$/.test(rawTarget)) {
+    if (method !== 'GET' && method !== 'PUT')
+      return { kind: 'reject', status: 405, allow: 'GET, PUT' };
+    return { kind: 'forward', path: rawTarget.slice(4), method };
+  }
   const allowed =
     rawTarget === '/api/monitors'
       ? 'POST'

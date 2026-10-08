@@ -185,6 +185,7 @@ function validateLatestResultFixtures(repositoryRoot) {
       'latest-result-http-response.json',
       'latest-result-worker-timeout.json',
       'monitor-inventory-page.json',
+      'monitor-scheduling-active.json', 'monitor-scheduling-paused.json',
       'monitor-inventory-empty.json',
       'monitor-inventory-final.json',
       ...availabilityFixtureCases.map(([name]) => `availability-${name}.json`),
@@ -256,6 +257,7 @@ export function validatePublicContract(document, repositoryRoot = '.') {
       'LatestWorkerTimeoutResult',
       'Monitor',
       'MonitorInventoryPage',
+      'MonitorScheduling',
       'Problem',
       'MonitorAvailability', 'AvailableMonitorAvailability', 'UnavailableMonitorAvailability',
       'UnknownMonitorAvailability', 'NoResultMonitorAvailability', 'MonitorAvailabilityEvidence',
@@ -267,7 +269,7 @@ export function validatePublicContract(document, repositoryRoot = '.') {
   const publicPaths = Object.keys(document.paths).filter((key) => key.startsWith('/'));
   assertExactSet(
     publicPaths,
-    ['/monitors', '/monitors/{monitorId}', '/monitors/{monitorId}/latest-result', '/monitors/{monitorId}/availability'],
+    ['/monitors', '/monitors/{monitorId}', '/monitors/{monitorId}/latest-result', '/monitors/{monitorId}/availability', '/monitors/{monitorId}/scheduling'],
     'public path set',
   );
 
@@ -488,6 +490,43 @@ export function validatePublicContract(document, repositoryRoot = '.') {
   validateLatestResultFixtures(repositoryRoot);
   validateAvailability(document, repositoryRoot);
   validateInventory(document, repositoryRoot);
+  validateScheduling(document, repositoryRoot);
+}
+
+function validateScheduling(document, repositoryRoot) {
+  const label = 'scheduling';
+  const pathItem = document.paths['/monitors/{monitorId}/scheduling'];
+  assert(!own(pathItem, 'servers'), 'scheduling path servers must be absent');
+  assertExactSet(operationMethods(pathItem), ['get', 'put'], 'scheduling operations');
+  const schema = document.components.schemas.MonitorScheduling;
+  assertObjectShape(schema, ['state'], ['state'], 'MonitorScheduling');
+  assertStringEnum(schema.properties.state, ['active', 'paused'], 'MonitorScheduling.state');
+  for (const method of ['get', 'put']) {
+    const operation = pathItem[method];
+    assertNoOperationSecurityOrServers(operation, label);
+    assert(operation.operationId === (method === 'get' ? 'getMonitorScheduling' : 'setMonitorScheduling'), 'scheduling operationId');
+    assert(Array.isArray(operation.parameters) && operation.parameters.length === 1, 'scheduling requires one parameter');
+    const parameter = operation.parameters[0];
+    assert(parameter.name === 'monitorId' && parameter.in === 'path' && parameter.required === true, 'scheduling MonitorID');
+    assertStringFormat(parameter.schema, 'uuid', 'scheduling MonitorID');
+    const errors = method === 'get' ? ['400', '404', '500'] : ['400', '404', '413', '415', '500'];
+    assertExactKeys(operation.responses, ['200', '405', ...errors], 'scheduling responses');
+    assertResponseContent(document, operation.responses['200'], 'application/json', 'MonitorScheduling', 'scheduling 200');
+    assertProblemResponses(document, operation, errors, label);
+    assertStringConst(operation.responses['405'].headers?.Allow?.schema, 'GET, PUT', 'scheduling Allow');
+    for (const response of Object.values(operation.responses)) assertStringConst(response.headers?.['Cache-Control']?.schema, 'no-store', 'scheduling Cache-Control');
+    if (method === 'put') {
+      assert(operation['x-max-body-bytes'] === 1024, 'scheduling body limit');
+      assert(operation.requestBody?.required === true, 'scheduling body required');
+      assertExactKeys(operation.requestBody.content, ['application/json'], 'scheduling media');
+      assertSchemaTarget(document, operation.requestBody.content['application/json'].schema, 'MonitorScheduling', 'scheduling request');
+    } else assert(!own(operation, 'requestBody'), 'scheduling GET must not have body');
+  }
+  for (const state of ['active', 'paused']) {
+    const fixture = readJSONFixture(repositoryRoot, `monitor-scheduling-${state}.json`);
+    assertExactKeys(fixture, ['state'], 'scheduling fixture');
+    assert(fixture.state === state, 'scheduling fixture state');
+  }
 }
 
 function validateInventory(document, repositoryRoot) {

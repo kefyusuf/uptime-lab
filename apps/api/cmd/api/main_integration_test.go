@@ -70,6 +70,9 @@ func TestProductionMonitoringCompositionAgainstPostgreSQL(t *testing.T) {
 		t.Fatalf("migrations.NewProvider() error = %v", err)
 	}
 	if _, err := provider.Down(ctx); err != nil {
+		t.Fatalf("provider.Down() for scheduling error = %v", err)
+	}
+	if _, err := provider.Down(ctx); err != nil {
 		t.Fatalf("provider.Down() error = %v", err)
 	}
 	if _, err := provider.Down(ctx); err != nil {
