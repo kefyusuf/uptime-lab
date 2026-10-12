@@ -73,7 +73,7 @@ func (handler *Handler) serveScheduling(writer http.ResponseWriter, request *htt
 			return
 		}
 		media, parameters, mediaErr := mime.ParseMediaType(request.Header.Get("Content-Type"))
-		validMedia := mediaErr == nil && strings.EqualFold(media, "application/json") && request.Header.Get("Content-Encoding") == ""
+		validMedia := mediaErr == nil && strings.EqualFold(media, "application/json") && len(request.Header.Values("Content-Encoding")) == 0
 		for key, value := range parameters {
 			if key != "charset" || !strings.EqualFold(value, "utf-8") {
 				validMedia = false
