@@ -108,7 +108,7 @@ make_fixture() {
   mkdir -p "$TMP/repo/deploy/docker/placeholder" "$TMP/repo/apps/api" "$TMP/repo/apps/checker" "$TMP/repo/apps/web" "$TMP/repo/contracts/openapi"
   cp "$SCRIPT_DIR/../../apps/web/Dockerfile" "$TMP/repo/apps/web/Dockerfile"
   printf '{}\n' > "$TMP/repo/apps/web/package-lock.json"
-  printf 'module github.com/kefyusuf/uptime-lab/apps/api\n\ngo 1.27.1\n' > "$TMP/repo/apps/api/go.mod"
+  printf 'module github.com/kefyusuf/uptime-lab/apps/api\n\ngo 1.27.2\n' > "$TMP/repo/apps/api/go.mod"
   : > "$TMP/repo/apps/api/go.sum"
   printf '[workspace]\n' > "$TMP/repo/apps/checker/Cargo.toml"
   : > "$TMP/repo/apps/checker/Cargo.lock"
@@ -219,7 +219,7 @@ exec tail -f /dev/null
 SH
 
   cat > "$TMP/repo/apps/api/Dockerfile" <<'DOCKER'
-FROM golang:1.27.1-alpine3.24 AS builder
+FROM golang:1.27.2-alpine3.24 AS builder
 WORKDIR /src/apps/api
 COPY apps/api/go.mod apps/api/go.sum ./
 RUN go mod download
@@ -372,7 +372,7 @@ mutate_service_line "$TMP/repo/compose.yaml" api '      test: ["CMD", "wget", "-
 expect_failure "API placeholder readiness marker fails" "$CHECKER" "$TMP/repo"
 
 make_fixture
-replace_literal_once "$TMP/repo/apps/api/Dockerfile" "FROM golang:1.27.1-alpine3.24 AS builder" "FROM golang:latest AS builder"
+replace_literal_once "$TMP/repo/apps/api/Dockerfile" "FROM golang:1.27.2-alpine3.24 AS builder" "FROM golang:latest AS builder"
 expect_failure "API floating builder image fails" "$CHECKER" "$TMP/repo"
 
 make_fixture

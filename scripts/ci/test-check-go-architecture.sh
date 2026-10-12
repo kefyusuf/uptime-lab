@@ -40,7 +40,7 @@ make_fixture() {
   cat > "$TMP/repo/apps/api/go.mod" <<'MOD'
 module github.com/kefyusuf/uptime-lab/apps/api
 
-go 1.27.1
+go 1.27.2
 MOD
 
   cat > "$TMP/repo/apps/api/internal/modules/monitoring/domain/domain.go" <<'GO'
@@ -168,7 +168,7 @@ MOD
 cat > "$TMP/repo/fakes/pgx/go.mod" <<'MOD'
 module github.com/jackc/pgx/v5
 
-go 1.27.1
+go 1.27.2
 MOD
 cat > "$TMP/repo/fakes/pgx/pgx.go" <<'GO'
 package pgx
@@ -228,7 +228,7 @@ MOD
 cat > "$TMP/repo/fakes/pgx/go.mod" <<'MOD'
 module github.com/jackc/pgx/v5
 
-go 1.27.1
+go 1.27.2
 MOD
 cat > "$TMP/repo/fakes/pgx/pgx.go" <<'GO'
 package pgx
@@ -251,7 +251,7 @@ MOD
 cat > "$TMP/repo/fakes/goose/go.mod" <<'MOD'
 module github.com/pressly/goose/v3
 
-go 1.27.1
+go 1.27.2
 MOD
 cat > "$TMP/repo/fakes/goose/goose.go" <<'GO'
 package goose
@@ -306,7 +306,7 @@ MOD
 cat > "$TMP/repo/fakes/pgx/go.mod" <<'MOD'
 module github.com/jackc/pgx/v5
 
-go 1.27.1
+go 1.27.2
 MOD
 cat > "$TMP/repo/fakes/pgx/pgx.go" <<'GO'
 package pgx
@@ -329,7 +329,7 @@ MOD
 cat > "$TMP/repo/fakes/goose/go.mod" <<'MOD'
 module github.com/pressly/goose/v3
 
-go 1.27.1
+go 1.27.2
 MOD
 cat > "$TMP/repo/fakes/goose/goose.go" <<'GO'
 package goose

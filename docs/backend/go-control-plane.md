@@ -32,7 +32,7 @@ The Go Control Plane is implemented for public Monitor create/read, latest termi
 
 It owns product semantics, scheduling truth, durable Monitor/CheckRun state, public/internal HTTP adapters, explicit migrations, and schema-aware readiness.
 
-Reviewed Go toolchain: Go 1.27.1.
+Reviewed Go toolchain: Go 1.27.2.
 
 ## Scope
 
