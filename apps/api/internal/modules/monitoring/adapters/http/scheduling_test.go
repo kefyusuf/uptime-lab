@@ -118,7 +118,7 @@ func TestSchedulingHTTPValidationPrecedence(t *testing.T) {
 		{name: "foreign charset", method: "PUT", target: schedulingTestPath, media: "application/json; charset=iso-8859-1", status: 415},
 		{name: "extra parameter", method: "PUT", target: schedulingTestPath, media: "application/json; other=1", status: 415},
 		{name: "encoding", method: "PUT", target: schedulingTestPath, media: "application/json", encoding: "gzip", status: 415},
-		{name: "empty encoding header", method: "PUT", target: schedulingTestPath, media: "application/json", status: 415},
+		{name: "empty encoding header", method: "PUT", target: schedulingTestPath, media: "application/json", body: `{"state":"paused"}`, status: 415},
 		{name: "get length", method: "GET", target: schedulingTestPath, length: 1, body: "x", status: 400},
 		{name: "get chunked", method: "GET", target: schedulingTestPath, chunked: true, status: 400},
 	} {
