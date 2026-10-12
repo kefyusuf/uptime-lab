@@ -118,6 +118,7 @@ func TestSchedulingHTTPValidationPrecedence(t *testing.T) {
 		{name: "foreign charset", method: "PUT", target: schedulingTestPath, media: "application/json; charset=iso-8859-1", status: 415},
 		{name: "extra parameter", method: "PUT", target: schedulingTestPath, media: "application/json; other=1", status: 415},
 		{name: "encoding", method: "PUT", target: schedulingTestPath, media: "application/json", encoding: "gzip", status: 415},
+		{name: "empty encoding header", method: "PUT", target: schedulingTestPath, media: "application/json", status: 415},
 		{name: "get length", method: "GET", target: schedulingTestPath, length: 1, body: "x", status: 400},
 		{name: "get chunked", method: "GET", target: schedulingTestPath, chunked: true, status: 400},
 	} {
@@ -125,7 +126,9 @@ func TestSchedulingHTTPValidationPrecedence(t *testing.T) {
 			f := &schedulingStoreFake{state: domain.SchedulingActive}
 			req := httptest.NewRequest(tc.method, tc.target, strings.NewReader(tc.body))
 			req.Header.Set("Content-Type", tc.media)
-			req.Header.Set("Content-Encoding", tc.encoding)
+			if tc.encoding != "" || tc.name == "empty encoding header" {
+				req.Header.Set("Content-Encoding", tc.encoding)
+			}
 			if tc.length != 0 {
 				req.ContentLength = tc.length
 			}
