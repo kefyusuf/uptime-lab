@@ -178,7 +178,7 @@ grep -Fqx 'USER 10001:10001' "$PLACEHOLDER_DOCKERFILE" || fail "placeholder must
 
 mapfile -t API_FROM_LINES < <(grep -E '^FROM[[:space:]]+' "$API_DOCKERFILE")
 [[ "${#API_FROM_LINES[@]}" -eq 2 ]] || fail "API Dockerfile must have exactly builder and runtime stages"
-[[ "${API_FROM_LINES[0]}" == 'FROM golang:1.27.1-alpine3.24 AS builder' ]] || fail "API builder image must use exact reviewed Go pin"
+[[ "${API_FROM_LINES[0]}" == 'FROM golang:1.27.2-alpine3.24 AS builder' ]] || fail "API builder image must use exact reviewed Go pin"
 [[ "${API_FROM_LINES[1]}" == 'FROM alpine:3.24.2' ]] || fail "API runtime image must use exact Alpine pin"
 
 grep -Fqx 'WORKDIR /src/apps/api' "$API_DOCKERFILE" || fail "API builder workdir is invalid"
