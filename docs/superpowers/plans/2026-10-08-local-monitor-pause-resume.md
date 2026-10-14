@@ -6,7 +6,7 @@
 
 **Architecture:** Go owns validated scheduling state, use cases and PostgreSQL transactions. Claim selection filters active Monitors and rereads state after locking. Web provides explicit desired-state commands through a guarded GET/PUT gateway; Rust and internal execution contracts remain unchanged.
 
-**Tech Stack:** Existing Go1.27.1/pgx/goose, PostgreSQL18, OpenAPI3.1.2, React/TypeScript/Vitest/Playwright, Node24.21.0/npm11.19.1. No new dependencies.
+**Tech Stack:** Existing Go1.27.2/pgx/goose, PostgreSQL18, OpenAPI3.1.2, React/TypeScript/Vitest/Playwright, Node24.21.0/npm11.19.1. No new dependencies.
 
 **Spec:** [Local Monitor Pause/Resume design](../specs/2026-10-08-local-monitor-pause-resume-design.md), written at `a744ffb`; user's subsequent continuation approved preparation of this plan.
 
