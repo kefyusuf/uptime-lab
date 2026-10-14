@@ -1,12 +1,27 @@
 # Current Project Handoff
 
-**Recorded:** 2026-10-08
-**Verified landed baseline:** `main@9b577ea3239803f0dac19ea4c687669228e4b339`
-**Current feature branch:** `feat/local-monitor-pause-resume`, stacked on `docs/local-monitor-pause-resume-scope`
-**Continuation checkout:** `E:\projects\uptime-lab\.worktrees\local-monitor-pause-resume`
-**Authorized task:** approved seven-task Native TDD implementation and reviewable PR; merge and deployment are not authorized.
+**Updated:** 2026-10-15
+**Verified landed baseline:** `main@a4dae6f224d1bb2af0402bf6030c2b8f9ddac565`
+**Active feature implementation PR:** none; documentation PR #59 and feature PR #60 are both merged.
+**Continuation checkout:** resolve the current local worktree and clean Git state before any future change; the historical worktree path below is not a current instruction.
+**Current scope:** reconcile post-merge documentation and assess open R0 release decisions only. No new runtime feature, release, production migration or deployment is authorized.
 
-## Active local scheduling continuation
+## Current landed state and release boundary
+
+- [Documentation PR #59](https://github.com/kefyusuf/uptime-lab/pull/59) was squash-merged to `main@c6103cb61d69cbf7a26d3d3f8420dd8002daef27`; [push CI #38594288750](https://github.com/kefyusuf/uptime-lab/actions/runs/38594288750) passed.
+- [Pause/resume implementation PR #60](https://github.com/kefyusuf/uptime-lab/pull/60) was independently reviewed and squash-merged from exact head `e15e64ce5c3f2c8678933abc4ab14a13c4ec65e5` to [`main@a4dae6f224d1bb2af0402bf6030c2b8f9ddac565`](https://github.com/kefyusuf/uptime-lab/commit/a4dae6f224d1bb2af0402bf6030c2b8f9ddac565). [Post-merge push CI #38607266725](https://github.com/kefyusuf/uptime-lab/actions/runs/38607266725) passed policy, repository, changes, Go/PostgreSQL, public-contract, real Docker local-dev, Web/Chromium, and aggregate `CI / gate`; unchanged Checker/internal-contract jobs were skipped.
+- Local scheduling GET/PUT, durable PostgreSQL pause state, claim serialization, guarded browser controls, API/Checker restart and real SQL/Chromium evidence are landed. Pausing prevents **new** claims after commit; already-claimed checks may complete. Resuming preserves the existing completion-based cadence. This is local-development acceptance, **not** a deployed-system certification.
+- Migration `00004` is repository-owned SQL; source inclusion and local CI migration evidence are **not** approval to run production migration. No release tag, external deployment or production migration was performed by the #59/#60 landing.
+
+## Open R0 decisions — not approved
+
+The [industry benchmark and launch roadmap](../roadmap/2026-10-02-industry-benchmark-and-launch-roadmap.md) remains a proposal. Before any protected monitoring beta, define and approve: intended operator/audience and access model; supported targets and workload/admission cap; detection and notification expectations; hosting region and budget; retention and sensitive target URL policy; backup/restore objectives (RPO/RTO), named operator and escalation. A first notification channel and confirmed incident semantics remain R3/R4 design work. None has a chosen value here.
+
+**Current release judgment:** local implementation landed / **external monitoring beta NO-GO**. CI, loopback access and read-only schema readiness do not qualify authentication, quotas, HTTPS ingress, independent notification, production backup/restore or rollback. Do not start R3/R4/R5 implementation without an explicit scoped decision.
+
+## Historical local scheduling continuation (recorded 2026-10-08)
+
+The entries below preserve the original branch-stage plan, worktree setup, evidence checkpoints and rulings. References to open #59/#60 PRs, pending reviews or an active feature worktree describe their 2026-10-08 state and must not be followed as current instructions.
 
 [Feature PR 60](https://github.com/kefyusuf/uptime-lab/pull/60) stacks on open documentation PR 59 (`c05b4e7`). Tasks 1–6 committed: 7aa83db contract, a36ebec application/domain, 5aa1190 SQL serialization/races, cb9ff9a strict HTTP/composition, 239dc86 gateway, 69bc753 independent detail controls. Task 7 at fe9aca8 adds durable browser/restart acceptance and canonical documentation. All seven implementation tasks passed their completion commands. The ignored plan ledger in this worktree records historical task boundaries, rulings and test logs; preserve the unmerged worktree.
 
@@ -16,7 +31,7 @@ Initial draft CI 37726542597 at 54fa8a6 passed Go, public-contract, Web and cano
 
 Runtime rulings: Windows Git Bash converted the container migration path during the first local attempt; that setup failure is not feature RED. Ignored task-only Docker/npm wrappers keep pinned host tools and suppress path conversion only for Docker calls. The scheduling acceptance helper is a small orchestration seam; it pauses only other task-fixture Monitors and waits for the real 60-second cadence, preserving displayed terminal timestamps. There is no production test hook. Task stacks remove their own containers/networks/volumes/local images; baseline images, preexisting resources and ignored module/build caches are retained.
 
-## Landed state and next decision
+## Earlier landed state and decision (historical)
 
 Inventory [PR #56](https://github.com/kefyusuf/uptime-lab/pull/56) landed at `fcd844116667b34ca5c8d126882193abbff34bac`. Final feature head `730763e66c4d00ac1557e1516b9383e51938217f` passed [CI37244127913](https://github.com/kefyusuf/uptime-lab/actions/runs/37244127913); landed main passed [CI37428521056](https://github.com/kefyusuf/uptime-lab/actions/runs/37428521056). The managed inventory worktree was archived recoverably; plan scratch was removed after preserving evidence/rulings in PR #56.
 
@@ -44,7 +59,7 @@ Documentation head57e3ad7 passed [CI37243527314](https://github.com/kefyusuf/upt
 
 Those finish gates completed before the approved merge of PR #56. The deferred minor is representative populated-data JSON EXPLAIN evidence: existing index checks do not qualify performance, capacity or a supported Monitor count. Lifecycle/history and remote release remain separate.
 
-## Resume verification
+## Historical worktree verification (not a current command)
 
 Use the active unmerged feature worktree above; the primary checkout remains the documentation branch. Inspect `git status --short --branch`, `git log -1 --format='%H %s'`, worktree inventory, current PRs and exact-head checks. Verify that the recorded landed baseline remains an ancestor. Preserve user-owned changes and check the plan ledger before repeating work. PR #56 holds historical inventory review/CI rulings; do not resume from its archived worktree.
 
