@@ -275,4 +275,8 @@ This evidence does not claim:
 - private-network monitoring;
 - React UI behavior.
 
-Those remain outside this milestone.
+Those remain outside this milestone. The later local scheduling increment separately qualifies pause/resume admission and UI behavior; it does not expand this original execution milestone's claims.
+
+## Local scheduling regression evidence
+
+Migration00004 defaults old/new Monitors active and preserves Monitor/CheckRun records on Down/Up. Real PostgreSQL/race tests cover committed pause admission, same-state serialization with an opposing write, claim-before-pause commit/rollback, skipped locked candidates, exact resume cadence, pending guards, completion/replay/late conflicts while paused and global timeout reconciliation. A test-owned view/advisory gate pauses the candidate query after its statement snapshot; a separate connection commits pause before claim resumes. Temporarily removing both scheduling guards made that real snapshot test fail; restoring them passed. This is correctness evidence, not latency/capacity qualification.

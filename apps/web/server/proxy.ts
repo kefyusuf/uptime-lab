@@ -48,7 +48,7 @@ export function forwardApi(
     agent,
     headers: {
       Accept: 'application/json',
-      ...(route.method === 'POST'
+      ...(route.method === 'POST' || route.method === 'PUT'
         ? { 'Content-Type': 'application/json', 'Content-Length': body.length }
         : {}),
     },

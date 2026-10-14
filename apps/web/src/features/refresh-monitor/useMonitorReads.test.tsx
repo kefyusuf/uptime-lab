@@ -29,6 +29,8 @@ function deferred<T>() {
 }
 function client(): MonitorClient {
   return {
+    getScheduling: vi.fn(),
+    setScheduling: vi.fn(),
     createMonitor: vi.fn(),
     listMonitors: vi.fn().mockResolvedValue({
       kind: 'success',

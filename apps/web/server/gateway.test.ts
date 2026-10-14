@@ -94,6 +94,190 @@ afterEach(async () => {
   }
 });
 describe('actual HTTP gateway', () => {
+  it.each([false, true])(
+    'bounds scheduling at1024 bytes, streamed=%s',
+    async (streamed) => {
+      const headers = {
+        Origin: 'http://127.0.0.1:4173',
+        'Content-Type': 'application/json',
+        ...(streamed ? { 'Transfer-Encoding': 'chunked' } : {}),
+      };
+      for (const size of [1024, 1025]) {
+        const payload = '{"state":"paused"}' + ' '.repeat(size - 18);
+        const framing = streamed
+          ? headers
+          : { ...headers, 'Content-Length': String(size) };
+        const result = await call(
+          '/api/monitors/id/scheduling',
+          'PUT',
+          framing,
+          payload,
+        );
+        expect(result.status).toBe(size === 1024 ? 200 : 413);
+        expect(result.headers['cache-control']).toBe('no-store');
+        expect(captured).toHaveLength(1);
+      }
+      expect(captured[0].body).toHaveLength(1024);
+    },
+  );
+  it.each([
+    ['', '', 415],
+    ['application/json; charset=latin1', '', 415],
+    ['application/json; other=1', '', 415],
+    ['application/json', 'gzip', 415],
+    ['application/json', 'identity', 415],
+  ] as const)(
+    'rejects PUT media/encoding %s %s',
+    async (media, encoding, want) => {
+      const result = await call(
+        '/api/monitors/id/scheduling',
+        'PUT',
+        {
+          Origin: 'http://127.0.0.1:4173',
+          'Content-Type': media,
+          'Content-Encoding': encoding,
+        },
+        '{}',
+      );
+      expect(result.status).toBe(want);
+      expect(captured).toHaveLength(0);
+    },
+  );
+  it('rejects scheduling length before media and preserves creation budget', async () => {
+    expect(
+      (
+        await call(
+          '/api/monitors/id/scheduling',
+          'PUT',
+          { Origin: 'http://127.0.0.1:4173', 'Content-Length': '1025' },
+          ' '.repeat(1025),
+        )
+      ).status,
+    ).toBe(413);
+    expect(captured).toHaveLength(0);
+    expect(
+      (
+        await call(
+          '/api/monitors',
+          'POST',
+          {
+            Origin: 'http://127.0.0.1:4173',
+            'Content-Type': 'application/json',
+          },
+          ' '.repeat(1025),
+        )
+      ).status,
+    ).toBe(200);
+    expect(captured[0].body).toHaveLength(1025);
+  });
+  it.each(['HEAD', 'OPTIONS'])(
+    'rejects scheduling %s with exact Allow',
+    async (method) => {
+      const result = await call('/api/monitors/id/scheduling', method);
+      expect(result).toMatchObject({
+        status: 405,
+        headers: { allow: 'GET, PUT', 'cache-control': 'no-store' },
+      });
+      if (method === 'HEAD') expect(result.body).toBe('');
+      expect(captured).toHaveLength(0);
+    },
+  );
+  it.each([
+    '/api/monitors/id/scheduling?',
+    '/api/monitors/id/scheduling/',
+    '/api/monitors/id/%73cheduling',
+    '/api//monitors/id/scheduling',
+    '/api/monitors/id/./scheduling',
+  ])('rejects scheduling raw alias %s', async (path) => {
+    const result = await call(path);
+    expect(result.status).toBe(400);
+    expect(result.headers.location).toBeUndefined();
+    expect(captured).toHaveLength(0);
+  });
+  it.each([{ 'Content-Length': '2' }, { 'Transfer-Encoding': 'chunked' }])(
+    'rejects scheduling GET framing %o',
+    async (headers) => {
+      expect(
+        (await call('/api/monitors/id/scheduling', 'GET', headers, '{}'))
+          .status,
+      ).toBe(400);
+      expect(captured).toHaveLength(0);
+    },
+  );
+  it('forwards explicit scheduling writes with only JSON framing', async () => {
+    body = '{"state":"paused"}';
+    const result = await call(
+      '/api/monitors/id/scheduling',
+      'PUT',
+      {
+        Origin: 'http://127.0.0.1:4173',
+        'Content-Type': 'application/json; charset=UTF-8',
+        Cookie: 'secret=x',
+        Authorization: 'secret',
+        'X-Extra': 'secret',
+      },
+      body,
+    );
+    expect(result).toMatchObject({
+      status: 200,
+      body,
+      headers: { 'cache-control': 'no-store' },
+    });
+    expect(captured).toHaveLength(1);
+    expect(captured[0]).toMatchObject({
+      path: '/monitors/id/scheduling',
+      body,
+      headers: {
+        'content-type': 'application/json',
+        'content-length': String(Buffer.byteLength(body)),
+      },
+    });
+    for (const name of ['origin', 'cookie', 'authorization', 'x-extra'])
+      expect(captured[0].headers[name]).toBeUndefined();
+    expect((await call('/api/monitors/id/scheduling', 'GET')).status).toBe(200);
+  });
+  it.each([
+    {},
+    { Origin: 'null' },
+    { Origin: 'http://foreign.invalid' },
+    { Origin: 'http://127.0.0.1:4173', 'Sec-Fetch-Site': 'cross-site' },
+    { Origin: 'http://127.0.0.1:4173', Host: 'foreign.invalid' },
+  ])('requires the local browser boundary on PUT %o', async (headers) => {
+    expect(
+      (
+        await call(
+          '/api/monitors/id/scheduling',
+          'PUT',
+          { 'Content-Type': 'application/json', ...headers },
+          '{"state":"paused"}',
+        )
+      ).status,
+    ).toBe(403);
+    expect(captured).toHaveLength(0);
+  });
+  it.each(['Host', 'Origin'])('rejects duplicate %s on PUT', async (name) => {
+    const headers = [
+      'Host',
+      '127.0.0.1:4173',
+      'Origin',
+      'http://127.0.0.1:4173',
+      'Content-Type',
+      'application/json',
+      name,
+      name === 'Host' ? '127.0.0.1:4173' : 'http://127.0.0.1:4173',
+    ];
+    expect(
+      (
+        await call(
+          '/api/monitors/id/scheduling',
+          'PUT',
+          headers,
+          '{"state":"paused"}',
+        )
+      ).status,
+    ).toBe(403);
+    expect(captured).toHaveLength(0);
+  });
   it('forwards bounded inventory queries without changing bytes', async () => {
     const cursor = 'A'.repeat(88);
     for (const path of [
@@ -312,45 +496,56 @@ describe('actual HTTP gateway', () => {
     body = 'x'.repeat(262145);
     expect((await call('/api/monitors/id')).status).toBe(502);
   });
-  it('closes an unfinished POST body with408 before forwarding any request', async () => {
-    let forwarded = 0;
-    upstream.on('request', () => {
-      forwarded++;
-    });
-    const socket = connect({ host: '127.0.0.1', port });
-    try {
-      const wire = await new Promise<string>((resolve, reject) => {
-        let response = '';
-        const watchdog = setTimeout(() => {
-          reject(Error('Unfinished POST stayed open beyond 1000ms.'));
-          socket.destroy();
-        }, 1000);
-        socket.on('data', (chunk) => {
-          response += chunk.toString();
-        });
-        socket.once('error', (error) => {
-          clearTimeout(watchdog);
-          reject(error);
-        });
-        socket.once('close', () => {
-          clearTimeout(watchdog);
-          resolve(response);
-        });
-        socket.once('connect', () =>
-          socket.write(
-            'POST /api/monitors HTTP/1.1\r\nHost: 127.0.0.1:4173\r\nOrigin: http://127.0.0.1:4173\r\nContent-Type: application/json\r\nContent-Length: 64\r\n\r\n{"targetUrl":',
-          ),
-        );
+  it.each([
+    ['POST', '/api/monitors'],
+    ['PUT', '/api/monitors/id/scheduling'],
+  ])(
+    'closes an unfinished %s body with408 before forwarding any request',
+    async (method, path) => {
+      let forwarded = 0;
+      upstream.on('request', () => {
+        forwarded++;
       });
-      expect(wire).toMatch(/^HTTP\/1\.1 408 /);
-      expect(wire.toLowerCase()).toContain('connection: close');
-      expect(wire.toLowerCase()).toContain('cache-control: no-store');
-      expect(forwarded).toBe(0);
-      expect(captured).toHaveLength(0);
-    } finally {
-      socket.destroy();
-    }
-  });
+      const socket = connect({ host: '127.0.0.1', port });
+      try {
+        const wire = await new Promise<string>((resolve, reject) => {
+          let response = '';
+          const watchdog = setTimeout(() => {
+            reject(
+              Error('Unfinished ' + method + ' stayed open beyond 1000ms.'),
+            );
+            socket.destroy();
+          }, 1000);
+          socket.on('data', (chunk) => {
+            response += chunk.toString();
+          });
+          socket.once('error', (error) => {
+            clearTimeout(watchdog);
+            reject(error);
+          });
+          socket.once('close', () => {
+            clearTimeout(watchdog);
+            resolve(response);
+          });
+          socket.once('connect', () =>
+            socket.write(
+              method +
+                ' ' +
+                path +
+                ' HTTP/1.1\r\nHost: 127.0.0.1:4173\r\nOrigin: http://127.0.0.1:4173\r\nContent-Type: application/json\r\nContent-Length: 64\r\n\r\n{',
+            ),
+          );
+        });
+        expect(wire).toMatch(/^HTTP\/1\.1 408 /);
+        expect(wire.toLowerCase()).toContain('connection: close');
+        expect(wire.toLowerCase()).toContain('cache-control: no-store');
+        expect(forwarded).toBe(0);
+        expect(captured).toHaveLength(0);
+      } finally {
+        socket.destroy();
+      }
+    },
+  );
   it('terminates slow upstream with sanitized504', async () => {
     hang = true;
     const result = await call('/api/monitors/id');

@@ -44,9 +44,30 @@ export function createGateway(config: WebConfig): RequestListener {
       gatewayError(res, route.status, route.allow);
       return;
     }
-    const boundary = checkBrowserBoundary(req, config, route.method === 'POST');
+    const mutation = route.method === 'POST' || route.method === 'PUT';
+    const boundary = checkBrowserBoundary(req, config, mutation);
     if (boundary) {
       gatewayError(res, boundary.status);
+      return;
+    }
+    const maxRequestBytes =
+      route.method === 'PUT' ? 1024 : config.maxRequestBytes;
+    if (
+      route.method === 'PUT' &&
+      Number(req.headers['content-length']) > maxRequestBytes
+    ) {
+      gatewayError(res, 413);
+      req.resume();
+      return;
+    }
+    if (
+      route.method === 'PUT' &&
+      (!/^application\/json(?:\s*;\s*charset=(?:utf-8|"utf-8"))?$/i.test(
+        req.headers['content-type'] || '',
+      ) ||
+        req.headers['content-encoding'] !== undefined)
+    ) {
+      gatewayError(res, 415);
       return;
     }
     if (
@@ -58,7 +79,7 @@ export function createGateway(config: WebConfig): RequestListener {
       gatewayError(res, 415);
       return;
     }
-    if (Number(req.headers['content-length']) > config.maxRequestBytes) {
+    if (Number(req.headers['content-length']) > maxRequestBytes) {
       gatewayError(res, 413);
       req.resume();
       return;
@@ -98,7 +119,7 @@ export function createGateway(config: WebConfig): RequestListener {
     req.on('data', (chunk: Buffer) => {
       if (done) return;
       size += chunk.length;
-      if (size > config.maxRequestBytes) {
+      if (size > maxRequestBytes) {
         done = true;
         clean();
         gatewayError(res, 413);

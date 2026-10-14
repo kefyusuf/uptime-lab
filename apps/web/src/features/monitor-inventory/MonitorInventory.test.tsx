@@ -10,6 +10,8 @@ const row = {
 };
 function api(): MonitorClient {
   return {
+    getScheduling: vi.fn(),
+    setScheduling: vi.fn(),
     listMonitors: vi.fn(),
     createMonitor: vi.fn(),
     getMonitor: vi.fn(),

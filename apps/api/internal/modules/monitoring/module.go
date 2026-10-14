@@ -12,6 +12,8 @@ type Module struct {
 	GetLatestCheckResult   application.GetLatestCheckResult
 	GetMonitorAvailability application.GetMonitorAvailability
 	ListMonitors           application.ListMonitors
+	GetMonitorScheduling   application.GetMonitorScheduling
+	SetMonitorScheduling   application.SetMonitorScheduling
 }
 
 // NewModule composes Monitoring use cases from their inward-facing dependencies.
@@ -33,6 +35,14 @@ func NewModule(
 func NewModuleWithInventory(repository ports.MonitorRepository, latest ports.LatestCheckResultRepository, inventory ports.MonitorInventoryRepository, idGenerator application.IDGenerator, clock application.Clock) Module {
 	module := NewModule(repository, latest, idGenerator, clock)
 	module.ListMonitors = application.NewListMonitors(inventory)
+	return module
+}
+
+// NewModuleWithScheduling adds durable scheduling to the public use cases.
+func NewModuleWithScheduling(repository ports.MonitorRepository, latest ports.LatestCheckResultRepository, inventory ports.MonitorInventoryRepository, idGenerator application.IDGenerator, clock application.Clock, scheduling ports.MonitorSchedulingRepository) Module {
+	module := NewModuleWithInventory(repository, latest, inventory, idGenerator, clock)
+	module.GetMonitorScheduling = application.NewGetMonitorScheduling(scheduling)
+	module.SetMonitorScheduling = application.NewSetMonitorScheduling(scheduling)
 	return module
 }
 

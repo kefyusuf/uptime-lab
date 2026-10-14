@@ -48,6 +48,9 @@ func TestInventoryIndexMigration(t *testing.T) {
 	if _, err := provider.Down(ctx); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := provider.Down(ctx); err != nil {
+		t.Fatal(err)
+	}
 	var exists bool
 	if err := db.QueryRowContext(ctx, `SELECT to_regclass('monitoring.monitors_inventory_order_idx') IS NOT NULL`).Scan(&exists); err != nil || exists {
 		t.Fatal(exists, err)

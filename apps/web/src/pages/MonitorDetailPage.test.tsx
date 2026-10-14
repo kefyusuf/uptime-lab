@@ -8,6 +8,12 @@ const id = 'aa29443e-c597-4e7b-9202-a4762e0e04c0',
 const evaluatedAt = '2026-10-02T12:00:00.123456789Z';
 function client(): MonitorClient {
   return {
+    getScheduling: vi
+      .fn()
+      .mockResolvedValue({ kind: 'success', data: { state: 'active' } }),
+    setScheduling: vi
+      .fn()
+      .mockResolvedValue({ kind: 'confirmed', data: { state: 'paused' } }),
     createMonitor: vi.fn(),
     listMonitors: vi.fn().mockResolvedValue({
       kind: 'success',
@@ -42,6 +48,53 @@ function client(): MonitorClient {
     }),
   };
 }
+it('starts scheduling only after a known monitor and keeps evidence refresh independent', async () => {
+  const api = client();
+  let resolve!: (value: unknown) => void;
+  api.getMonitor = vi.fn().mockReturnValue(
+    new Promise((done) => {
+      resolve = done;
+    }),
+  );
+  render(<MonitorDetailPage id={id} client={api} />);
+  expect(api.getScheduling).not.toHaveBeenCalled();
+  await act(async () =>
+    resolve({
+      kind: 'success',
+      data: { id, targetUrl: 'https://example.com', createdAt: evaluatedAt },
+    }),
+  );
+  await screen.findByRole('region', { name: 'Monitor scheduling' });
+  expect(api.getScheduling).toHaveBeenCalledOnce();
+  await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
+  expect(api.getAvailability).toHaveBeenCalledOnce();
+  expect(api.getLatestResult).toHaveBeenCalledOnce();
+});
+it('keeps scheduling write alive while evidence is refreshed', async () => {
+  const api = client();
+  let finish!: (value: unknown) => void;
+  api.setScheduling = vi.fn().mockReturnValue(
+    new Promise((done) => {
+      finish = done;
+    }),
+  );
+  render(<MonitorDetailPage id={id} client={api} />);
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeEnabled(),
+  );
+  await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
+  const signal = vi.mocked(api.setScheduling).mock.calls[0][2];
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Refresh monitor' }),
+  );
+  await waitFor(() => expect(api.getAvailability).toHaveBeenCalledTimes(2));
+  expect(signal.aborted).toBe(false);
+  expect(api.getScheduling).toHaveBeenCalledOnce();
+  await act(async () =>
+    finish({ kind: 'confirmed', data: { state: 'paused' } }),
+  );
+  expect(screen.getByRole('button', { name: 'Resume' })).toBeEnabled();
+});
 it('shows separately identified snapshots and a plain escaped target; focuses the heading', async () => {
   const api = client();
   const { container } = render(<MonitorDetailPage id={id} client={api} />);

@@ -85,10 +85,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/monitors/{monitorId}/scheduling": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read monitor scheduling state
+         * @description Local scheduling snapshot, independent of availability. No query, including an empty trailing question mark, or request body is accepted. Reject encoded path segments and slash/dot/backslash aliases without redirecting. HEAD and OPTIONS are unsupported. UUID parsing follows the existing Monitor contract.
+         */
+        get: operations["getMonitorScheduling"];
+        /**
+         * Set monitor scheduling state
+         * @description Sets desired state and returns it after commit, including repeated same-state commands. Pause stops new claims; already claimed work may finish. Resume preserves the completion-based cadence. Concurrent commands are last-commit wins. Never automatically retry uncertain writes. Raw body including whitespace is at most 1024 bytes. Require JSON with optional UTF-8 charset only and no content encoding. Reject duplicate or unknown decoded keys, case alternatives, null/non-object input, missing state and trailing JSON. No query or encoded path aliases; HEAD and OPTIONS are unsupported. State is not availability.
+         */
+        put: operations["setMonitorScheduling"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        MonitorScheduling: {
+            /** @enum {string} */
+            state: "active" | "paused";
+        };
         MonitorInventoryPage: {
             items: components["schemas"]["Monitor"][];
             /** @description Last included key when more candidates exist, otherwise null. */
@@ -496,6 +524,154 @@ export interface operations {
             500: {
                 headers: {
                     /** @description Always bypass cached availability assessments. */
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getMonitorScheduling: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                monitorId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Persisted scheduling state. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonitorScheduling"];
+                };
+            };
+            /** @description Invalid scheduling request. */
+            400: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Monitor not found. */
+            404: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unsupported method; HEAD has no response body. */
+            405: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    Allow?: "GET, PUT";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The server could not complete the request. */
+            500: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    setMonitorScheduling: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                monitorId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MonitorScheduling"];
+            };
+        };
+        responses: {
+            /** @description Persisted scheduling state. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonitorScheduling"];
+                };
+            };
+            /** @description Invalid scheduling request. */
+            400: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Monitor not found. */
+            404: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unsupported method; HEAD has no response body. */
+            405: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    Allow?: "GET, PUT";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Scheduling body exceeds 1024 bytes. */
+            413: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unsupported scheduling media type or encoding. */
+            415: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The server could not complete the request. */
+            500: {
+                headers: {
                     "Cache-Control"?: "no-store";
                     [name: string]: unknown;
                 };

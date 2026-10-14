@@ -24,9 +24,9 @@ Design/spec/plan documents preserve the decision history for the phase in which 
 - [Industry benchmark and launch roadmap (2026-10-02)](roadmap/2026-10-02-industry-benchmark-and-launch-roadmap.md): researched product comparison, implementation gaps, proposed milestones, and live-release gates, refreshed after Local Web landed. Later phases remain proposals, not approved implementation plans or production-readiness claims.
 - [Local Web and exposure scope](superpowers/specs/2026-10-02-web-public-exposure-scope-reassessment.md): historical selection of the implemented local browser journey; remote release remains a separate decision.
 - [Local Monitor Inventory scope](superpowers/specs/2026-10-04-local-monitor-inventory-scope-reassessment.md): approved first R2 increment through #53, implemented on PR56 after design54/plan55 approval. Remaining lifecycle/history work and remote release gates are separate.
-- [Local Monitor Pause/Resume scope](superpowers/specs/2026-10-08-local-monitor-pause-resume-scope-reassessment.md): scope-stage proposal for the next R2 increment; subsequent user continuation authorized writing the design with recommended semantics. Historical proposal wording remains; no implementation authorized.
+- [Local Monitor Pause/Resume scope](superpowers/specs/2026-10-08-local-monitor-pause-resume-scope-reassessment.md): approved R2 increment implemented on feature PR60. Historical proposal wording remains; see the current handoff for verification and merge gates.
 - [Local Monitor Pause/Resume design](superpowers/specs/2026-10-08-local-monitor-pause-resume-design.md): transaction serialization, strict scheduling contract, gateway mutation guards and browser uncertainty rules; subsequent continuation authorized the plan.
-- [Local Monitor Pause/Resume implementation plan](superpowers/plans/2026-10-08-local-monitor-pause-resume.md): seven dependent TDD tasks with exact interfaces and SQL/browser/restart acceptance; awaiting plan review before Native execution.
+- [Local Monitor Pause/Resume implementation plan](superpowers/plans/2026-10-08-local-monitor-pause-resume.md): approved seven-task Native TDD execution, with actual SQL/browser/restart acceptance and one fresh whole-branch review. Merge and deployment remain separate decisions.
 
 ## Implemented Runtime
 

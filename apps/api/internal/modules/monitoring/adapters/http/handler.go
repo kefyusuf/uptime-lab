@@ -40,6 +40,8 @@ type Handler struct {
 	getLatest       getLatestCheckResult
 	getAvailability getMonitorAvailability
 	list            listMonitors
+	getScheduling   getMonitorScheduling
+	setScheduling   setMonitorScheduling
 }
 
 // NewHandler constructs the isolated public Monitoring HTTP adapter.
@@ -82,6 +84,10 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 
 	if rawID, ok := availabilityMonitorIDPathSegment(request.URL.Path); ok && handler.getAvailability != nil {
 		handler.serveAvailability(writer, request, rawID)
+		return
+	}
+	if rawID, ok := schedulingMonitorIDPathSegment(path.Clean(strings.ReplaceAll(request.URL.Path, "\\", "/"))); ok && handler.getScheduling != nil && handler.setScheduling != nil {
+		handler.serveScheduling(writer, request, rawID)
 		return
 	}
 

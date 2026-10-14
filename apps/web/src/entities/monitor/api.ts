@@ -1,4 +1,5 @@
 import { requestJson } from '../../shared/api/http';
+import { decodeMonitorScheduling } from './scheduling';
 import { decodeInventoryPage, decodeInventoryProblem } from './inventory';
 import {
   decodeAvailability,
@@ -58,6 +59,54 @@ export function createMonitorClient(fetchImpl: typeof fetch): MonitorClient {
   }
   const resource = (id: string) => '/api/monitors/' + encodeURIComponent(id);
   return {
+    getScheduling: (id, signal) =>
+      read(resource(id) + '/scheduling', signal, decodeMonitorScheduling),
+    async setScheduling(id, state, signal) {
+      try {
+        const response = await requestJson(
+          fetchImpl,
+          resource(id) + '/scheduling',
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ state }),
+            signal,
+          },
+        );
+        if ([400, 404, 413, 415].includes(response.status))
+          return {
+            kind: 'rejected',
+            error: {
+              kind: 'http',
+              status: response.status,
+              message:
+                'Scheduling request rejected. Refresh scheduling state before another change.',
+            },
+          };
+        if (response.status !== 200)
+          return {
+            kind: 'uncertain',
+            error: {
+              kind: 'http',
+              status: response.status,
+              message:
+                'The scheduling write may have completed. Refresh scheduling state.',
+            },
+          };
+        const data = decodeMonitorScheduling(response.value);
+        if (data.state !== state) throw new ResponseDecodeError();
+        return { kind: 'confirmed', data };
+      } catch {
+        return {
+          kind: 'uncertain',
+          error: {
+            kind: 'transport',
+            message:
+              'The scheduling write may have completed. Refresh scheduling state.',
+          },
+        };
+      }
+    },
     async listMonitors(input, signal) {
       if (
         !Number.isInteger(input.limit) ||
