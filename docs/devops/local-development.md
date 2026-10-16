@@ -29,7 +29,7 @@ docker compose -f compose.yaml -f compose.web-local.yaml up -d --wait --wait-tim
 
 Open `http://127.0.0.1:4173`. Only Web is published; API, Checker and DB remain private. For a custom port, export `UPTIME_LAB_WEB_PORT=4817` before every paired Compose command and use the matching URL. `.env.example` documents this optional value. An occupied port is an error; do not substitute a wildcard address. Web's `/healthz` verifies assets and remains independent of Go schema readiness. Normal `down` preserves data; `down -v` destroys this project's database.
 
-Create a Monitor or reopen a saved ID. Availability is a server snapshot; Refresh refetches Monitor and both independent cards. Their CheckIDs can differ. Unknown/no_result differs from raw empty `204`. Unconfirmed creation warns of possible success and duplicate retry; no automatic retry occurs. No browser persistence or polling exists.
+Create a Monitor, use the bounded inventory, or reopen a saved ID. The detail page has explicit local Pause/Resume scheduling controls; paused Monitors stop receiving **new** claims, while already-claimed work can finish. The persisted state survives API/Checker restarts and Resume does not reset completion-based cadence. An uncertain scheduling PUT requires a new scheduling read, never a blind automatic retry. Availability is a server snapshot; Refresh refetches Monitor and both independent cards. Their CheckIDs can differ. Unknown/no_result differs from raw empty `204`. Unconfirmed creation warns of possible success and duplicate retry; no automatic retry occurs. No browser persistence or polling exists.
 
 Run `./scripts/ci/run-web-browser-tests.sh` for the staged real browser journey and `UPTIME_LAB_WEB_PORT=4817 ./scripts/ci/run-web-browser-tests.sh` for custom-port acceptance. The runner owns and cleans isolated projects/volumes. See [Web verification](../testing/local-monitoring-web.md). Loopback access does not establish remote deployment readiness.
 
@@ -113,9 +113,12 @@ Public Monitor transport inside the container network:
 
 ~~~text
 POST /monitors
+GET  /monitors
 GET  /monitors/{monitorId}
 GET  /monitors/{monitorId}/latest-result
 GET  /monitors/{monitorId}/availability
+GET  /monitors/{monitorId}/scheduling
+PUT  /monitors/{monitorId}/scheduling
 ~~~
 
 Internal Checker transport:
