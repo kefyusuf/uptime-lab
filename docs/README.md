@@ -22,6 +22,7 @@ Design/spec/plan documents preserve the decision history for the phase in which 
 ## Roadmap Proposals
 
 - [Industry benchmark and launch roadmap (2026-10-02)](roadmap/2026-10-02-industry-benchmark-and-launch-roadmap.md): researched product comparison, implementation gaps, proposed milestones, and live-release gates, refreshed after Local Web landed. Later phases remain proposals, not approved implementation plans or production-readiness claims.
+- [R0 product and release decision brief (2026-10-18)](roadmap/2026-10-18-r0-product-release-decision-brief.md): proposed decision worksheet with unapproved audience, workload, operator, data/recovery and release gates; no production or feature authorization.
 - [Local Web and exposure scope](superpowers/specs/2026-10-02-web-public-exposure-scope-reassessment.md): historical selection of the implemented local browser journey; remote release remains a separate decision.
 - [Local Monitor Inventory scope](superpowers/specs/2026-10-04-local-monitor-inventory-scope-reassessment.md): approved first R2 increment through #53, implemented on PR56 after design54/plan55 approval. Remaining lifecycle/history work and remote release gates are separate.
 - [Local Monitor Pause/Resume scope](superpowers/specs/2026-10-08-local-monitor-pause-resume-scope-reassessment.md): historical R2 scope approved and implemented, with [feature PR #60](https://github.com/kefyusuf/uptime-lab/pull/60) squash-merged. See the current handoff for landed SHA, CI and remaining release gates.
