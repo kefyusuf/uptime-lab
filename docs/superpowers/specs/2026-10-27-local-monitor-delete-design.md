@@ -53,7 +53,7 @@ Add one operation to the existing `/monitors/{monitorId}` path item: `deleteMoni
 
 Validation precedence mirrors the scheduling resource: set no-store first; reject noncanonical raw paths, any query (including a bare `?`), encoded segments, aliases and fragments with 400; reject methods other than GET/DELETE with 405 and exact `Allow: GET, DELETE`; validate the UUID; reject a DELETE carrying declared length or transfer encoding with 400; then run exactly one use case. HEAD writes no body under actual server behavior.
 
-The resource's `Allow` value changes from `GET` to `GET, DELETE`; this is a deliberate, contract-visible change to existing 405 responses and existing transport tests asserting the old value must be updated, not preserved. Collection and sub-resource `Allow` values are unchanged. Internal OpenAPI, the five existing operation schemas and the internal contract are untouched; Web types are regenerated through the existing generator, with fixtures added per convention.
+The resource's `Allow` value changes from `GET` to `GET, DELETE`; this is a deliberate, contract-visible change to existing 405 responses and existing transport tests asserting the old value must be updated, not preserved. Collection and sub-resource `Allow` values are unchanged. Internal OpenAPI, the seven existing operation schemas and the internal contract are untouched; Web types are regenerated through the existing generator, with fixtures added per convention.
 
 ## 6. Gateway boundary
 

@@ -37,7 +37,7 @@ The next proposed R2 increment adds durable local deletion of a Monitor together
 
 ## Architecture and contract direction
 
-Go owns policy, persistence and read semantics; Rust executes claimed work without database access; Web displays Go state through the loopback gateway. Deletion becomes the sixth public operation on the existing Monitor resource:
+Go owns policy, persistence and read semantics; Rust executes claimed work without database access; Web displays Go state through the loopback gateway. Deletion becomes the eighth public operation, following the two scheduling operations:
 
 | Operation | Proposed behavior |
 |---|---|
