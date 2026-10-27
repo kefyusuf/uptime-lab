@@ -29,6 +29,7 @@ Design/spec/plan documents preserve the decision history for the phase in which 
 - [Local Monitor Pause/Resume design](superpowers/specs/2026-10-08-local-monitor-pause-resume-design.md): transaction serialization, strict scheduling contract, gateway mutation guards and browser uncertainty rules; subsequent continuation authorized the plan.
 - [Local Monitor Pause/Resume implementation plan](superpowers/plans/2026-10-08-local-monitor-pause-resume.md): historical seven-task Native TDD plan executed through merged PR #60, independently reviewed and exact-main CI green. A production deployment or migration was not performed.
 - [Local Monitor Delete scope](superpowers/specs/2026-10-27-local-monitor-delete-scope-reassessment.md): proposed next R2 increment after the user selected validation path A; durable local hard delete of a Monitor and its CheckRun evidence. Scope-stage proposal only; design and implementation are not authorized.
+- [Local Monitor Delete design](superpowers/specs/2026-10-27-local-monitor-delete-design.md): pre-sweep/lock/re-sweep deletion transaction, delete/claim/pause serialization outcomes, sixth public operation with empty 204, gateway DELETE mutation guards and browser confirmation rules; awaiting design review.
 
 ## Implemented Runtime
 
