@@ -23,6 +23,8 @@ Local development behavior is already demonstrated: Go and Rust exercise real ex
 
 **Recommended order for discussion:** first decide whether A is sufficient for evidence gathering or whether B is genuinely required for the next validation. This is a recommendation, **not** an approved choice. Choosing A cannot be used to describe the product as a protected monitoring beta.
 
+**Recorded 2026-10-27:** the user selected Path A as the validation direction for the next increment and directed a local monitor-deletion scope proposal. The nine R0 decisions below remain OPEN; the Path A selection alone does not approve any release, exposure or beta description.
+
 ## R0 decisions requiring explicit approval
 
 All entries are **OPEN**. A question or candidate is not an implementation requirement until the user records a chosen value and its rationale.
