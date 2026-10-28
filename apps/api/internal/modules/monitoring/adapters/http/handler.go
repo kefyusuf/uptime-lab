@@ -33,6 +33,10 @@ type getMonitorAvailability interface {
 	Execute(context.Context, domain.MonitorID) (application.MonitorAvailability, error)
 }
 
+type deleteMonitor interface {
+	Execute(context.Context, domain.MonitorID) error
+}
+
 // Handler adapts the public Monitoring HTTP contract to the existing application use cases.
 type Handler struct {
 	register        registerMonitor
@@ -42,6 +46,7 @@ type Handler struct {
 	list            listMonitors
 	getScheduling   getMonitorScheduling
 	setScheduling   setMonitorScheduling
+	deletion        deleteMonitor
 }
 
 // NewHandler constructs the isolated public Monitoring HTTP adapter.
@@ -97,11 +102,29 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 	}
 
 	if rawID, ok := monitorIDPathSegment(request.URL.Path); ok {
+		if handler.deletion != nil {
+			handler.serveDeletion(writer, request, rawID)
+			return
+		}
 		handler.serveResource(writer, request, rawID)
 		return
 	}
+	// Recognize resource aliases only to reject their original raw target.
+	if handler.deletion != nil {
+		if rawID, ok := monitorIDPathSegment(path.Clean(strings.ReplaceAll(request.URL.Path, "\\", "/"))); ok {
+			handler.serveDeletion(writer, request, rawID)
+			return
+		}
+	}
 
 	http.NotFound(writer, request)
+}
+
+// NewHandlerWithDeletion adds the irreversible local removal capability.
+func NewHandlerWithDeletion(register registerMonitor, get getMonitor, latest getLatestCheckResult, availability getMonitorAvailability, list listMonitors, schedulingGet getMonitorScheduling, schedulingSet setMonitorScheduling, deletion deleteMonitor) *Handler {
+	handler := NewHandlerWithScheduling(register, get, latest, availability, list, schedulingGet, schedulingSet)
+	handler.deletion = deletion
+	return handler
 }
 
 // NewHandlerWithInventory adds the bounded local collection read capability.
