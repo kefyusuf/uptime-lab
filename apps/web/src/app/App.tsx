@@ -48,7 +48,12 @@ export function App({
         {page.kind === 'create' ? (
           <CreateMonitorPage client={client} onNavigate={navigate} />
         ) : page.kind === 'detail' ? (
-          <MonitorDetailPage key={page.id} id={page.id} client={client} />
+          <MonitorDetailPage
+            key={page.id}
+            id={page.id}
+            client={client}
+            onDeleted={() => navigate('/')}
+          />
         ) : (
           <section className="panel">
             <h2>Page not found</h2>

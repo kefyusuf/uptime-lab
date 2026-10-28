@@ -13,6 +13,7 @@ function api(): MonitorClient {
     getScheduling: vi.fn(),
     setScheduling: vi.fn(),
     listMonitors: vi.fn(),
+    deleteMonitor: vi.fn().mockResolvedValue({ kind: 'deleted' }),
     createMonitor: vi.fn(),
     getMonitor: vi.fn(),
     getAvailability: vi.fn(),

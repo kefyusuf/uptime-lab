@@ -25,6 +25,7 @@ function client(): MonitorClient {
     getMonitor: vi.fn(),
     getAvailability: vi.fn(),
     getLatestResult: vi.fn(),
+    deleteMonitor: vi.fn().mockResolvedValue({ kind: 'deleted' }),
     createMonitor: vi.fn(),
     listMonitors: vi.fn(),
   };
