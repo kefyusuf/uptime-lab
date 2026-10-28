@@ -39,7 +39,11 @@ export interface paths {
         get: operations["getMonitor"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete a monitor and all of its check evidence
+         * @description Permanently removes the Monitor and every CheckRun referencing it, pending and terminal, in one atomic transaction. Deletion is irreversible; no tombstone view or retained evidence exists. After a committed deletion every read of the Monitor is 404 and the inventory excludes it. A repeated delete is 404. No query, including an empty trailing question mark, or request body is accepted. Reject encoded path segments and slash/dot/backslash aliases without redirecting. HEAD and OPTIONS are unsupported. All matched responses use no-store.
+         */
+        delete: operations["deleteMonitor"];
         options?: never;
         head?: never;
         patch?: never;
@@ -411,6 +415,66 @@ export interface operations {
             /** @description Monitor persistence failed. */
             500: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteMonitor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                monitorId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Monitor and all of its check evidence were removed. */
+            204: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid delete request or monitorId is not a valid UUID. */
+            400: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Monitor not found. */
+            404: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unsupported method; HEAD has no response body. */
+            405: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    Allow?: "GET, DELETE";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deletion persistence failed. */
+            500: {
+                headers: {
+                    "Cache-Control"?: "no-store";
                     [name: string]: unknown;
                 };
                 content: {

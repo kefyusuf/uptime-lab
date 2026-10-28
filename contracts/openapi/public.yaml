@@ -166,6 +166,63 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+    delete:
+      operationId: deleteMonitor
+      summary: Delete a monitor and all of its check evidence
+      description: >
+        Permanently removes the Monitor and every CheckRun referencing it,
+        pending and terminal, in one atomic transaction. Deletion is
+        irreversible; no tombstone view or retained evidence exists. After a
+        committed deletion every read of the Monitor is 404 and the inventory
+        excludes it. A repeated delete is 404. No query, including an empty
+        trailing question mark, or request body is accepted. Reject encoded
+        path segments and slash/dot/backslash aliases without redirecting.
+        HEAD and OPTIONS are unsupported. All matched responses use no-store.
+      parameters:
+        - name: monitorId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Monitor and all of its check evidence were removed.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+        '400':
+          description: Invalid delete request or monitorId is not a valid UUID.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: Monitor not found.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '405':
+          description: Unsupported method; HEAD has no response body.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+            Allow:
+              schema: { type: string, const: 'GET, DELETE' }
+        '500':
+          description: Deletion persistence failed.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /monitors/{monitorId}/latest-result:
     get:
       operationId: getLatestCheckResult

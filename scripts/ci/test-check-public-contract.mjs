@@ -29,6 +29,13 @@ function canonicalPublicFixtures() {
     ...inventoryFixtures(),
     'monitor-scheduling-active.json': { state: 'active' },
     'monitor-scheduling-paused.json': { state: 'paused' },
+    'monitor-delete-confirmed.json': {},
+    'monitor-delete-unknown.json': {
+      type: 'about:blank',
+      title: 'Not Found',
+      status: 404,
+      detail: 'The monitor was not found.',
+    },
     ...availabilityFixtures(),
     'latest-result-http-response.json': {
       checkId: '7d9b2eb0-52bb-4dd7-8934-c5ce30d5c675',
@@ -240,7 +247,26 @@ function validDocument() {
   document.components.schemas.MonitorInventoryPage = inventorySchema();
   document.components.schemas.MonitorScheduling = { type: 'object', additionalProperties: false, required: ['state'], properties: { state: { type: 'string', enum: ['active', 'paused'] } } };
   document.paths['/monitors/{monitorId}/scheduling'] = schedulingPath();
+  document.paths['/monitors/{monitorId}'].delete = deletionOperation();
   return document;
+}
+
+function deletionOperation() {
+  const responses = {
+    '204': { description: 'Deleted.' },
+    '400': problemResponse(),
+    '404': problemResponse(),
+    '405': { description: 'Method.', headers: { Allow: { schema: { type: 'string', const: 'GET, DELETE' } } } },
+    '500': problemResponse(),
+  };
+  for (const response of Object.values(responses)) {
+    response.headers = { ...response.headers, 'Cache-Control': { schema: { type: 'string', const: 'no-store' } } };
+  }
+  return {
+    operationId: 'deleteMonitor',
+    parameters: [{ name: 'monitorId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+    responses,
+  };
 }
 
 function schedulingPath() {
@@ -403,6 +429,17 @@ expectReject('schedulingPreservesExistingOperations', d => { delete d.paths['/mo
 expectReject('scheduling request is not immutable Monitor', d => { d.paths['/monitors/{monitorId}/scheduling'].put.requestBody.content['application/json'].schema = { $ref: '#/components/schemas/Monitor' }; }, 'scheduling request');
 expectFixtureReject('scheduling fixture cannot contain extra data', 'monitor-scheduling-paused.json', f => { f.available = true; }, 'scheduling fixture');
 
+expectReject('deleteOperationIsClosed', d => { d.paths['/monitors/{monitorId}'].delete.responses['204'].content = { 'application/json': { schema: { type: 'object' } } }; }, 'deletion 204 content must be absent');
+expectReject('deleteResponsesAreExact', d => { d.paths['/monitors/{monitorId}'].delete.responses['201'] = problemResponse(); }, 'deletion responses');
+expectReject('delete requires exact Allow', d => { d.paths['/monitors/{monitorId}'].delete.responses['405'].headers.Allow.schema.const = 'GET'; }, 'deletion Allow');
+expectReject('delete no-store is required', d => { delete d.paths['/monitors/{monitorId}'].delete.responses['204'].headers; }, 'deletion Cache-Control');
+expectReject('delete must not accept a request body', d => { d.paths['/monitors/{monitorId}'].delete.requestBody = { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/MonitorScheduling' } } } }; }, 'deletion must not accept a request body');
+expectReject('delete operationId is exact', d => { d.paths['/monitors/{monitorId}'].delete.operationId = 'removeMonitor'; }, 'deletion operationId must be deleteMonitor');
+expectReject('delete has no extra method', d => { d.paths['/monitors/{monitorId}'].head = d.paths['/monitors/{monitorId}'].delete; }, '/monitors/{monitorId} operations');
+expectReject('deletePreservesExistingOperations', d => { delete d.paths['/monitors/{monitorId}'].delete; }, '/monitors/{monitorId} operations');
+expectFixtureReject('delete confirmed fixture must be empty', 'monitor-delete-confirmed.json', f => { f.removed = true; }, 'deletion confirmed fixture');
+expectFixtureReject('delete unknown fixture status fails', 'monitor-delete-unknown.json', f => { f.status = 500; }, 'deletion unknown fixture status');
+
 expectReject('inventoryEnvelopeIsClosed', d => { d.components.schemas.MonitorInventoryPage.additionalProperties = true; }, 'MonitorInventoryPage.additionalProperties');
 expectReject('inventory nextCursor is required', d => { d.components.schemas.MonitorInventoryPage.required = ['items']; }, 'MonitorInventoryPage.required');
 expectReject('inventoryQueryBoundsAreExact', d => { d.paths['/monitors'].get.parameters[0].schema.maximum = 51; }, 'inventory limit');
@@ -452,7 +489,7 @@ expectReject('POST latest-result fails', (d) => {
 expectReject('empty inventory GET operation fails', (d) => { d.paths['/monitors'].get = {}; }, 'inventory operationId must be listMonitors');
 expectReject('PUT lifecycle mutation fails', (d) => { d.paths['/monitors/{monitorId}'].put = {}; }, '/monitors/{monitorId} operations');
 expectReject('PATCH lifecycle mutation fails', (d) => { d.paths['/monitors/{monitorId}'].patch = {}; }, '/monitors/{monitorId} operations');
-expectReject('DELETE lifecycle mutation fails', (d) => { d.paths['/monitors/{monitorId}'].delete = {}; }, '/monitors/{monitorId} operations');
+expectReject('empty DELETE operation fails', (d) => { d.paths['/monitors/{monitorId}'].delete = {}; }, 'deletion operationId must be deleteMonitor');
 expectReject('missing POST fails', (d) => { delete d.paths['/monitors'].post; }, '/monitors operations');
 expectReject('missing GET by ID fails', (d) => { delete d.paths['/monitors/{monitorId}'].get; }, '/monitors/{monitorId} operations');
 expectReject('wrong register operationId fails', (d) => { d.paths['/monitors'].post.operationId = 'createMonitor'; }, 'operationId must be registerMonitor');
