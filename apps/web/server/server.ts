@@ -37,7 +37,7 @@ export function createWebServer(
       res.once('finish', () =>
         log({
           category,
-          method: ['GET', 'POST', 'PUT', 'HEAD', 'OPTIONS'].includes(
+          method: ['GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'OPTIONS'].includes(
             req.method || '',
           )
             ? req.method!

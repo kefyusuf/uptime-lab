@@ -44,7 +44,10 @@ export function createGateway(config: WebConfig): RequestListener {
       gatewayError(res, route.status, route.allow);
       return;
     }
-    const mutation = route.method === 'POST' || route.method === 'PUT';
+    const mutation =
+      route.method === 'POST' ||
+      route.method === 'PUT' ||
+      route.method === 'DELETE';
     const boundary = checkBrowserBoundary(req, config, mutation);
     if (boundary) {
       gatewayError(res, boundary.status);
@@ -82,6 +85,18 @@ export function createGateway(config: WebConfig): RequestListener {
     if (Number(req.headers['content-length']) > maxRequestBytes) {
       gatewayError(res, 413);
       req.resume();
+      return;
+    }
+    if (route.method === 'DELETE') {
+      if (
+        req.headers['transfer-encoding'] ||
+        Number(req.headers['content-length']) > 0
+      ) {
+        gatewayError(res, 400);
+        req.resume();
+        return;
+      }
+      forwardApi(req, res, route, Buffer.alloc(0), config);
       return;
     }
     if (route.method === 'GET') {

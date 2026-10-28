@@ -278,6 +278,69 @@ describe('actual HTTP gateway', () => {
     ).toBe(403);
     expect(captured).toHaveLength(0);
   });
+  it('forwards bodyless monitor deletion through the mutation boundary', async () => {
+    status = 204;
+    body = '';
+    const result = await call(
+      '/api/monitors/018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2',
+      'DELETE',
+      { Origin: 'http://127.0.0.1:4173' },
+    );
+    expect(result.status).toBe(204);
+    expect(result.headers['cache-control']).toBe('no-store');
+    expect(captured).toHaveLength(1);
+    expect(captured[0].path).toBe(
+      '/monitors/018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2',
+    );
+    expect(captured[0].body).toBe('');
+    for (const name of ['origin', 'cookie', 'authorization', 'x-extra'])
+      expect(captured[0].headers[name]).toBeUndefined();
+  });
+  it.each([
+    {},
+    { Origin: 'null' },
+    { Origin: 'http://foreign.invalid' },
+    { Origin: 'http://127.0.0.1:4173', 'Sec-Fetch-Site': 'cross-site' },
+    { Origin: 'http://127.0.0.1:4173', Host: 'foreign.invalid' },
+  ] as const)('requires the local browser boundary on DELETE %o', async (headers) => {
+    expect((await call('/api/monitors/id', 'DELETE', headers)).status).toBe(403);
+    expect(captured).toHaveLength(0);
+  });
+  it.each(['Host', 'Origin'])('rejects duplicate %s on DELETE', async (name) => {
+    const headers = [
+      'Host',
+      '127.0.0.1:4173',
+      'Origin',
+      'http://127.0.0.1:4173',
+      name,
+      name === 'Host' ? '127.0.0.1:4173' : 'http://127.0.0.1:4173',
+    ];
+    expect((await call('/api/monitors/id', 'DELETE', headers)).status).toBe(403);
+    expect(captured).toHaveLength(0);
+  });
+  it.each([
+    ['Content-Length', '5'],
+    ['Transfer-Encoding', 'chunked'],
+  ] as const)('rejects DELETE body framing %s', async (name, value) => {
+    const result = await call(
+      '/api/monitors/id',
+      'DELETE',
+      { Origin: 'http://127.0.0.1:4173', [name]: value },
+      'hello',
+    );
+    expect(result.status).toBe(400);
+    expect(captured).toHaveLength(0);
+  });
+  it('keeps internal routes closed to delete at the gateway', async () => {
+    expect(
+      (
+        await call('/api/internal/checks/claim', 'DELETE', {
+          Origin: 'http://127.0.0.1:4173',
+        })
+      ).status,
+    ).toBe(404);
+    expect(captured).toHaveLength(0);
+  });
   it('forwards bounded inventory queries without changing bytes', async () => {
     const cursor = 'A'.repeat(88);
     for (const path of [
