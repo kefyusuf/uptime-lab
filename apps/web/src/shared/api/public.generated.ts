@@ -35,7 +35,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get a monitor */
+        /**
+         * Get a monitor
+         * @description Local read of one Monitor. No query, including an empty trailing question mark, is accepted, and noncanonical raw paths, encoded segments and slash/dot/backslash aliases are rejected without redirecting. Matched responses use no-store.
+         */
         get: operations["getMonitor"];
         put?: never;
         post?: never;

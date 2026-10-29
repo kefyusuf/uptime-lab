@@ -139,6 +139,17 @@ func TestDeleteAliasesNeverRedirect(t *testing.T) {
 	}
 }
 
+func TestDeleteRejectsFragmentTargetsWithoutRequestURI(t *testing.T) {
+	stub := &deleteMonitorStub{}
+	req := httptest.NewRequest(http.MethodDelete, deletionTestPath, nil)
+	req.URL.Fragment = "fragment"
+	recorder := httptest.NewRecorder()
+	deletionTestHandler(stub).ServeHTTP(recorder, req)
+	if recorder.Code != 400 || stub.calls != 0 || recorder.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal(recorder.Code, stub.calls, recorder.Header())
+	}
+}
+
 func TestLegacyResourceKeepsGetOnlyAllow(t *testing.T) {
 	stub := &deleteMonitorStub{}
 	handler := NewHandlerWithLatestResult(&registerMonitorStub{}, &getMonitorStub{}, &getLatestCheckResultStub{})

@@ -17,7 +17,7 @@ func (handler *Handler) serveDeletion(writer http.ResponseWriter, request *http.
 	if rawTarget == "" {
 		rawTarget = request.URL.RequestURI()
 	}
-	if rawTarget != monitorsPath+"/"+rawID {
+	if rawTarget != monitorsPath+"/"+rawID || request.URL.Fragment != "" {
 		writeProblem(writer, http.StatusBadRequest, "Invalid monitor request.")
 		return
 	}
