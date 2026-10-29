@@ -48,8 +48,8 @@ func NewModuleWithScheduling(repository ports.MonitorRepository, latest ports.La
 }
 
 // NewModuleWithDeletion adds the irreversible local removal to the public use cases.
-func NewModuleWithDeletion(repository ports.MonitorRepository, latest ports.LatestCheckResultRepository, inventory ports.MonitorInventoryRepository, idGenerator application.IDGenerator, clock application.Clock, deletion ports.MonitorDeletionRepository) Module {
-	module := NewModuleWithInventory(repository, latest, inventory, idGenerator, clock)
+func NewModuleWithDeletion(repository ports.MonitorRepository, latest ports.LatestCheckResultRepository, inventory ports.MonitorInventoryRepository, idGenerator application.IDGenerator, clock application.Clock, scheduling ports.MonitorSchedulingRepository, deletion ports.MonitorDeletionRepository) Module {
+	module := NewModuleWithScheduling(repository, latest, inventory, idGenerator, clock, scheduling)
 	module.DeleteMonitor = application.NewDeleteMonitor(deletion)
 	return module
 }
