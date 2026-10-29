@@ -242,6 +242,12 @@ Go architecture tests: 24 passed, 0 failed
 
 Cross-runtime Docker acceptance is documented separately in [../testing/single-checker-execution-slice.md](../testing/single-checker-execution-slice.md).
 
+## Durable monitor deletion
+
+`DELETE /monitors/{monitorId}` is the eighth public operation. The adapter recognizes the shared raw Monitor resource once deletion is composed, keeps every matched response `no-store`, answers unsupported methods with `Allow: GET, DELETE`, rejects declared or streamed bodies with 400, and succeeds with an empty `204` after the commit. After deletion every read of the Monitor is 404 and the inventory excludes it; a repeated delete is 404.
+
+`Repository.Delete` runs one explicit Read Committed transaction whose four statements pipeline through a single `pgx.Batch` round trip: sweep the Monitor's CheckRuns, `SELECT ... FOR UPDATE` the Monitor row with not-found detection, sweep again under the lock, and delete the parent row before committing. The identifier binds as a binary `pgtype.UUID` parameter. The re-sweep under the lock is load-bearing: a claim that commits a pending run between the sweep and the lock would otherwise violate the `NO ACTION` foreign key at the parent delete, and the gated interleaving suite reproduces exactly that failure when the re-sweep is removed. Composition wires the deletion repository and use case through `NewModuleWithDeletion` and `NewHandlerWithDeletion`.
+
 ## Bounded inventory read
 
 ListMonitors uses a dedicated bounded port and an88-character raw-base64url position containing version1, a fixed microsecond UTC timestamp and a lowercase nonzero UUID. Separate parameterized first/continuation queries use `(created_at DESC,id DESC)` and the nonunique `monitoring.monitors_inventory_order_idx`, added by00003. Raw targets are projected only at most245760 bytes; larger values return explicit metadata markers. The use case validates at most51 candidates, order and strict anchor bounds. HTTP accounts for escaped JSON,128 framing bytes and all commas, returning complete-prefix continuation or the approved first-item500. A cursor requires no anchor-row lookup and provides no ownership, authentication or snapshot guarantee. CheckRun state is unchanged.

@@ -21,12 +21,21 @@ elif [[ "$*" == *'uptime-lab-migrate up'* ]];then
   [[ "$SCENARIO" != migration ]] || exit 1;touch "$DOCKER_LOG.migrated"
 elif [[ "$*" == *'ps -q api'* ]];then printf 'fake-api'
 elif [[ "$*" == *'ps -q checker'* ]];then printf 'fake-checker'
+elif [[ "$*" == *'stop checker'* ]];then touch "$DOCKER_LOG.checker-stopped"
+elif [[ "$*" == *'exec -T api'* && "$*" == *'/internal/checks/claim'* ]];then printf '{"checkId":"ff29443e-c597-4e7b-9202-a4762e0e04c0","monitorId":"ee29443e-c597-4e7b-9202-a4762e0e04c0","targetUrl":"http://web/","timeoutMs":10000,"maxRedirects":3}'
+elif [[ "$*" == *'exec -T web'* && "$*" == *'/internal/checks/'* ]];then printf '{"status":404,"attempts":1}'
+elif [[ "$*" == *'exec -T web'* ]];then printf '{"monitor":404,"availability":404,"latestResult":404,"scheduling":404}'
 elif [[ "$*" == *'restart api'* ]];then touch "$DOCKER_LOG.api-restarted"
 elif [[ "$*" == *'restart checker'* ]];then touch "$DOCKER_LOG.checker-restarted"
 elif [[ "$*" == inspect* ]];then
   service=api;[[ "$*" != *fake-checker* ]] || service=checker
-  if [[ -f "$DOCKER_LOG.$service-restarted" && "$SCENARIO" != restart ]];then printf '2026-10-08T12:00:02Z';else printf '2026-10-08T12:00:01Z';fi
+  if [[ "$SCENARIO" == restart ]];then printf '2026-10-08T12:00:01Z';else
+    count_file="$DOCKER_LOG.$service-count";count=1;[[ ! -f "$count_file" ]] || count=$(( $(cat "$count_file") + 1 ));printf '%s' "$count" > "$count_file"
+    printf '2026-10-08T12:00:0%sZ' "$count"
+  fi
 elif [[ "$*" == *'logs --no-color'* ]];then printf 'event=claim_no_work\nevent=claim_no_work\nevent=claim_no_work\n'
+elif [[ "$*" == *'deletion-evidence-rows'* ]];then printf '[]'
+elif [[ "$*" == *'deletion-evidence-monitor'* ]];then printf '[]'
 elif [[ "$*" == *'json_build_object'* ]];then
   node --input-type=module -e 'import fs from "node:fs";const phase=fs.readFileSync(process.env.BROWSER_LOG,"utf8").trim().split("\n").at(-1);const ids=["bb29443e-c597-4e7b-9202-a4762e0e04c0","cc29443e-c597-4e7b-9202-a4762e0e04c0"];if(phase==="resume"||(phase==="paused"&&process.env.SCENARIO==="paused-claim"))ids.push("dd29443e-c597-4e7b-9202-a4762e0e04c0");console.log(JSON.stringify({paused:phase!=="resume",pending:0,due:true,checkIds:ids}));'
 elif [[ "$*" == *'FROM monitoring.monitors'* ]];then
@@ -43,7 +52,7 @@ printf '%s\n' "$WEB_BROWSER_PHASE" >> "$BROWSER_LOG"
 if [[ "$WEB_BROWSER_PHASE" == register ]];then
  printf '{"id":"aa29443e-c597-4e7b-9202-a4762e0e04c0","target":"http://web/","raw":{"checkId":"bb29443e-c597-4e7b-9202-a4762e0e04c0","completedAt":"2026-10-02T12:00:00Z","durationMs":0},"availability":{"checkId":"cc29443e-c597-4e7b-9202-a4762e0e04c0","completedAt":"2026-10-02T12:00:01Z"}}' > "$WEB_BROWSER_ARTIFACT"
 fi
-node --input-type=module -e 'import fs from "node:fs";const p=process.env.WEB_BROWSER_ARTIFACT,c=JSON.parse(fs.readFileSync(p,"utf8"));c.inventory={ids:[c.id,...Array.from({length:20},(_,i)=>`018f22d3-1d6a-7cc0-a37b-${(0x1000+i).toString(16).padStart(12,"0")}`)],selectedId:c.id};if(process.env.WEB_BROWSER_PHASE==="pause")c.scheduling={monitorId:c.id,pausedState:"paused"};if(process.env.WEB_BROWSER_PHASE==="resume")c.scheduling.resumedState="active";fs.writeFileSync(p,JSON.stringify(c));'
+node --input-type=module -e 'import fs from "node:fs";const p=process.env.WEB_BROWSER_ARTIFACT,c=JSON.parse(fs.readFileSync(p,"utf8"));c.inventory={ids:[c.id,...Array.from({length:20},(_,i)=>`018f22d3-1d6a-7cc0-a37b-${(0x1000+i).toString(16).padStart(12,"0")}`)],selectedId:c.id};if(process.env.WEB_BROWSER_PHASE==="pause")c.scheduling={monitorId:c.id,pausedState:"paused"};if(process.env.WEB_BROWSER_PHASE==="resume")c.scheduling.resumedState="active";if(process.env.WEB_BROWSER_PHASE==="delete-register")c.deletion={monitorId:"ee29443e-c597-4e7b-9202-a4762e0e04c0"};if(process.env.WEB_BROWSER_PHASE==="delete"){c.deletion.deletedState="deleted";c.deletion.inventoryExcludes=true;}fs.writeFileSync(p,JSON.stringify(c));'
 SH
 chmod +x "$TMP/docker" "$TMP/npm"
 for scenario in success migration browser startup inventory restart paused-claim;do
@@ -63,6 +72,6 @@ if UPTIME_LAB_WEB_PORT=48173 DOCKER_BIN="$TMP/docker" NPM_BIN="$TMP/npm" bash "$
 grep -q 'port is occupied' "$TMP/collision"
 ! grep -q 'build api web checker' "$DOCKER_LOG"
 grep -q 'down -v --remove-orphans' "$DOCKER_LOG"
-kill "$LISTENER_PID";wait "$LISTENER_PID" 2>/dev/null || true;LISTENER_PID=''
+kill "$LISTENER_PID" 2>/dev/null || true;wait "$LISTENER_PID" 2>/dev/null || true;LISTENER_PID=''
 printf 'PASS: occupied loopback port fails before build\n'
 printf 'Browser runner harness: 8 passed (fake orchestration only)\n'

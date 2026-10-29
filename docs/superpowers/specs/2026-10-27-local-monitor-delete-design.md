@@ -43,7 +43,7 @@ On any statement failure the transaction rolls back. On commit uncertainty the a
 | Pause/resume writes before or after a delete commit | Loser of the ordering observes not found (zero-row update or absent lock row) |
 | Two deletes race | One commits; the other observes not found |
 
-A Checker completion for a run removed by a delete receives the existing `409` problem response. Verified reading of the landed runtime: the Rust client maps any 4xx to `SubmitError::Rejected`, and the worker treats that as a final non-retryable delivery (`result_delivery_failed` event) before continuing its loop. No Rust change is required.
+A Checker completion for a run removed by a delete receives the existing not-found problem response, `404 "The check run was not found."` — the landed adapter maps unknown CheckRun completion to 404 and reserves 409 for terminal-row conflicts. Verified reading of the runtime: the Rust client maps any 4xx to `SubmitError::Rejected`, and the worker treats that as a final non-retryable delivery (`result_delivery_failed` event) before continuing its loop. No Rust change is required.
 
 Actual PostgreSQL interleaving tests remain required; this section is design inference, not evidence. Lock-order reasoning must be proven under the real isolation level, including an overlapping claim reconciliation, rather than assumed from statement ordering.
 

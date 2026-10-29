@@ -80,5 +80,38 @@ SQL="$(scheduling sql-rows)"
 compose exec -T db sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"' sh "$SQL" > "$WORK/rows.json"
 MONITOR_SQL="$(node --input-type=module -e 'import fs from "node:fs";const c=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),ids=c.inventory?.ids;if(!Array.isArray(ids)||ids.length!==21||new Set(ids).size!==21||!ids.every(id=>typeof id==="string"&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)))throw new Error("Invalid captured inventory UUIDs");const q=String.fromCharCode(39);console.log(`SELECT coalesce(json_agg(row_to_json(m)), ${q}[]${q}::json) FROM (SELECT id,target_url,paused FROM monitoring.monitors WHERE id IN (${ids.map(id=>q+id+q).join(",")})) m;`);' "$WEB_BROWSER_ARTIFACT")"
 compose exec -T db sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"' sh "$MONITOR_SQL" > "$WORK/monitors.json"
-node "$ROOT/scripts/ci/verify-web-evidence.mjs" "$WEB_BROWSER_ARTIFACT" "$WORK/rows.json" "$WORK/monitors.json"
+# Deletion journey: an isolated active fixture Monitor is claimed, permanently
+# deleted through the real browser control, and proven removed across restarts.
+# The claimed run's completion attempt is an orchestration proof: the real Rust
+# worker never probes it, and its non-retry semantics stay covered by the
+# unchanged Rust suite.
+API_CONTAINER="$(compose ps -q api)"
+CHECKER_CONTAINER="$(compose ps -q checker)"
+compose stop checker
+browser delete-register
+DELETION_ID="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).deletion.monitorId' "$WEB_BROWSER_ARTIFACT")"
+deletion() { node "$ROOT/scripts/ci/web-deletion-evidence.mjs" "$1" "$WEB_BROWSER_ARTIFACT" "${@:2}"; }
+sql "UPDATE monitoring.monitors SET paused=true WHERE id <> '$DELETION_ID';" >/dev/null
+claim_json="$(compose exec -T api wget -q -O - --post-data= http://127.0.0.1:8080/internal/checks/claim)"
+printf '%s' "$claim_json" > "$WORK/claim.json"
+deletion record-claim "$WORK/claim.json"
+browser delete
+for service in api checker;do
+  container="$API_CONTAINER";[[ "$service" != checker ]] || container="$CHECKER_CONTAINER"
+  deletion restart "$service" before "$("$DOCKER_BIN" inspect --format '{{.State.StartedAt}}' "$container")"
+  compose restart "$service"
+  compose up -d --wait --wait-timeout 60 "$service"
+  deletion restart "$service" after "$("$DOCKER_BIN" inspect --format '{{.State.StartedAt}}' "$container")"
+done
+compose exec -T web node --input-type=module -e 'const id=process.argv[1];const paths={monitor:"/monitors/"+id,availability:"/monitors/"+id+"/availability",latestResult:"/monitors/"+id+"/latest-result",scheduling:"/monitors/"+id+"/scheduling"};const out={};for(const name of Object.keys(paths)){const response=await fetch("http://api:8080"+paths[name]);out[name]=response.status;}console.log(JSON.stringify(out));' "$DELETION_ID" > "$WORK/deletion-reads.json"
+deletion record-reads "$WORK/deletion-reads.json"
+CLAIMED_CHECK="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).deletion.checkRunsBeforeDelete[0]' "$WEB_BROWSER_ARTIFACT")"
+compose exec -T web node --input-type=module -e 'const check=process.argv[1];const response=await fetch("http://api:8080/internal/checks/"+check+"/result",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({kind:"http_response",durationMs:123,httpStatus:204})});console.log(JSON.stringify({status:response.status,attempts:1}));' "$CLAIMED_CHECK" > "$WORK/deletion-delivery.json"
+deletion record-delivery "$WORK/deletion-delivery.json"
+DELETION_ROWS_SQL="$(deletion sql-rows)"
+compose exec -T db sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"' sh "$DELETION_ROWS_SQL" > "$WORK/deletion-rows.json"
+DELETION_MON_SQL="$(deletion sql-monitor)"
+compose exec -T db sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"' sh "$DELETION_MON_SQL" > "$WORK/deletion-monitors.json"
+deletion record-final "$WORK/deletion-rows.json"
+node "$ROOT/scripts/ci/verify-web-evidence.mjs" "$WEB_BROWSER_ARTIFACT" "$WORK/rows.json" "$WORK/monitors.json" "$WORK/deletion-rows.json" "$WORK/deletion-monitors.json"
 printf 'Real browser/Go/Checker/PostgreSQL journey passed on loopback port %s\n' "$UPTIME_LAB_WEB_PORT"
