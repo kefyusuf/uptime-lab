@@ -184,6 +184,8 @@ function validateLatestResultFixtures(repositoryRoot) {
       'latest-result-failure.json',
       'latest-result-http-response.json',
       'latest-result-worker-timeout.json',
+      'monitor-delete-confirmed.json',
+      'monitor-delete-unknown.json',
       'monitor-inventory-page.json',
       'monitor-scheduling-active.json', 'monitor-scheduling-paused.json',
       'monitor-inventory-empty.json',
@@ -283,7 +285,7 @@ export function validatePublicContract(document, repositoryRoot = '.') {
   assert(!own(getPath, 'servers'), '/monitors/{monitorId} path item must not define servers');
   assert(!own(latestResultPath, 'servers'), '/monitors/{monitorId}/latest-result path item must not define servers');
   assertExactSet(operationMethods(createPath), ['get', 'post'], '/monitors operations');
-  assertExactSet(operationMethods(getPath), ['get'], '/monitors/{monitorId} operations');
+  assertExactSet(operationMethods(getPath), ['get', 'delete'], '/monitors/{monitorId} operations');
   assertExactSet(operationMethods(latestResultPath), ['get'], '/monitors/{monitorId}/latest-result operations');
 
   const register = createPath.post;
@@ -491,6 +493,33 @@ export function validatePublicContract(document, repositoryRoot = '.') {
   validateAvailability(document, repositoryRoot);
   validateInventory(document, repositoryRoot);
   validateScheduling(document, repositoryRoot);
+  validateDeletion(document, repositoryRoot);
+}
+
+function validateDeletion(document, repositoryRoot) {
+  const label = 'deletion';
+  const pathItem = document.paths['/monitors/{monitorId}'];
+  const operation = pathItem.delete;
+  assert(isObject(operation), 'deletion operation must exist');
+  assertNoOperationSecurityOrServers(operation, label);
+  assert(operation.operationId === 'deleteMonitor', 'deletion operationId must be deleteMonitor');
+  assert(Array.isArray(operation.parameters) && operation.parameters.length === 1, 'deletion requires one parameter');
+  const parameter = operation.parameters[0];
+  assert(parameter.name === 'monitorId' && parameter.in === 'path' && parameter.required === true, 'deletion MonitorID');
+  assertStringFormat(parameter.schema, 'uuid', 'deletion MonitorID');
+  assert(!own(operation, 'requestBody'), 'deletion must not accept a request body');
+  assertExactKeys(operation.responses, ['204', '400', '404', '405', '500'], 'deletion responses');
+  assert(!own(operation.responses['204'], 'content'), 'deletion 204 content must be absent');
+  assertProblemResponses(document, operation, ['400', '404', '500'], label);
+  assertStringConst(operation.responses['405'].headers?.Allow?.schema, 'GET, DELETE', 'deletion Allow');
+  for (const response of Object.values(operation.responses)) {
+    assertStringConst(response.headers?.['Cache-Control']?.schema, 'no-store', 'deletion Cache-Control');
+  }
+  const confirmed = readJSONFixture(repositoryRoot, 'monitor-delete-confirmed.json');
+  assert(isDeepStrictEqual(confirmed, {}), 'deletion confirmed fixture must be the empty object');
+  const unknown = readJSONFixture(repositoryRoot, 'monitor-delete-unknown.json');
+  assertExactKeys(unknown, ['type', 'title', 'status', 'detail'], 'deletion unknown fixture');
+  assert(unknown.status === 404, 'deletion unknown fixture status must be 404');
 }
 
 function validateScheduling(document, repositoryRoot) {

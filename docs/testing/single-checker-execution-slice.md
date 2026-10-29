@@ -262,6 +262,10 @@ Docker:
 ./scripts/ci/smoke-local-dev.sh
 ~~~
 
+## Deleted-run completion
+
+A claimed CheckRun whose Monitor is deleted during the claim loses its row with the Monitor. A later completion attempt observes the existing not-found mapping — `404 "The check run was not found."`, with 409 reserved for terminal-row conflicts — and the unchanged Rust worker maps any 4xx submit to a final non-retried `result_delivery_failed` delivery before continuing its loop. The deletion suite's gated interleaving evidence covers the claimed-then-deleted ordering against real PostgreSQL.
+
 ## Non-Claims
 
 This evidence does not claim:

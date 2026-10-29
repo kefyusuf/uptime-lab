@@ -1,10 +1,14 @@
 # Current Project Handoff
 
-**Updated:** 2026-10-15
-**Verified landed baseline:** `main@a4dae6f224d1bb2af0402bf6030c2b8f9ddac565`
-**Active feature implementation PR:** none; documentation PR #59 and feature PR #60 are both merged.
+**Updated:** 2026-10-29
+**Verified landed baseline:** `main@d975aefad3209cba94da9793ad9d1e5993f963c7`
+**Active feature implementation PR:** [deletion feature PR #69](https://github.com/kefyusuf/uptime-lab/pull/69) (draft, stacked on documentation PR #68); awaiting whole-branch review and final CI before merge approval.
 **Continuation checkout:** resolve the current local worktree and clean Git state before any future change; the historical worktree path below is not a current instruction.
 **Current scope:** reconcile post-merge documentation and assess open R0 release decisions only. No new runtime feature, release, production migration or deployment is authorized.
+
+## Local monitor deletion landing (2026-10-29)
+
+The user selected R0 validation path A on 2026-10-27 and directed durable local monitor deletion as the next work item. The decision chain (scope `3ea70e0`, design `3935e96`, seven-task TDD plan `faece8f`) stacks on documentation PR #68; the feature landed on `feat/local-monitor-delete` through draft [PR #69](https://github.com/kefyusuf/uptime-lab/pull/69): contract `b43c6ec`, use case `373a0e2`, gateway `dc38da5`, client/controls `f8334b1`, adapter `5a6af7d`, serialized deletion `4fe6726`, composition `659b98d`, and qualification/docs `test(api): qualify monitor deletion and browser journey`. Evidence: contract RED 90 -> GREEN 107; gateway RED 11 -> 325/325 full Web; client RED 8 -> 341/341 full Web; real-PostgreSQL three-suite GREEN including ten deletion tests, a re-sweep mutation check reproducing FK 23503 exactly, two tracer-gated interleaving proofs (claim-side gate at TraceQueryEnd plus pg_locks wait observation), and composed 4173/4817 Chromium journeys whose artifact records durable deletion across API restarts with a single non-retried 404 completion attempt. The Mimosa pre-write false positive on parameterized pgx DELETE statements was resolved through the standard `pgx.Batch` pipelined formulation; plain `tx.Exec` mutating statements remain unwritable. Windows wrapper execution requires per-invocation `MSYS2_ARG_CONV_EXCL='/usr'` for container paths. Remaining gates: fresh whole-branch review, final exact-head CI/aggregate, then merge approval. No deployment or production migration is authorized.
 
 ## Current landed state and release boundary
 

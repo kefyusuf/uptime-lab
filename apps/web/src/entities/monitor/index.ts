@@ -11,6 +11,7 @@ export type {
   MonitorClient,
   MonitorScheduling,
   SchedulingOutcome,
+  DeleteOutcome,
   LoadState,
 } from './model';
 export { AvailabilityCard } from './AvailabilityCard';

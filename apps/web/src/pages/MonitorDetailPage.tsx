@@ -7,12 +7,15 @@ import {
 } from '../entities/monitor';
 import { useMonitorReads } from '../features/refresh-monitor';
 import { MonitorSchedulingControl } from '../features/set-monitor-scheduling';
+import { DeleteMonitorControl } from '../features/delete-monitor';
 export function MonitorDetailPage({
   id,
   client,
+  onDeleted,
 }: {
   id: string;
   client: MonitorClient;
+  onDeleted: () => void;
 }) {
   const reads = useMonitorReads(id, client),
     heading = useRef<HTMLHeadingElement>(null);
@@ -72,7 +75,15 @@ export function MonitorDetailPage({
         )}
       </section>
       {schedulingID === id && reads.monitor.kind !== 'error' && (
-        <MonitorSchedulingControl key={id} id={id} client={client} />
+        <>
+          <MonitorSchedulingControl key={id} id={id} client={client} />
+          <DeleteMonitorControl
+            key={id}
+            id={id}
+            client={client}
+            onDeleted={onDeleted}
+          />
+        </>
       )}
       {monitor && (
         <div className="result-layout">

@@ -353,4 +353,52 @@ describe('Monitor client', () => {
       expect.any(Object),
     );
   });
+  it('maps delete 204 and known 404 to deleted without retrying', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(
+        Response.json({ title: 'Not Found', status: 404 }, { status: 404 }),
+      );
+    const client = createMonitorClient(fetcher);
+    expect(await client.deleteMonitor(monitor.id, signal())).toEqual({
+      kind: 'deleted',
+    });
+    expect(await client.deleteMonitor(monitor.id, signal())).toEqual({
+      kind: 'deleted',
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher).toHaveBeenLastCalledWith(
+      '/api/monitors/' + monitor.id,
+      expect.objectContaining({
+        method: 'DELETE',
+        cache: 'no-store',
+        credentials: 'omit',
+        redirect: 'error',
+      }),
+    );
+  });
+  it.each([200, 400, 405, 500, 502])(
+    'treats delete status %d as uncertain',
+    async (status) => {
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
+        status === 200
+          ? new Response(null, { status })
+          : Response.json({}, { status }),
+      );
+      expect(
+        await createMonitorClient(fetcher).deleteMonitor(monitor.id, signal()),
+      ).toMatchObject({ kind: 'uncertain' });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    },
+  );
+  it('treats a lost delete connection as uncertain without retry', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockRejectedValueOnce(new Error('connection lost'));
+    expect(
+      await createMonitorClient(fetcher).deleteMonitor(monitor.id, signal()),
+    ).toMatchObject({ kind: 'uncertain' });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
 });

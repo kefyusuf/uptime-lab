@@ -14,6 +14,7 @@ type Module struct {
 	ListMonitors           application.ListMonitors
 	GetMonitorScheduling   application.GetMonitorScheduling
 	SetMonitorScheduling   application.SetMonitorScheduling
+	DeleteMonitor          application.DeleteMonitor
 }
 
 // NewModule composes Monitoring use cases from their inward-facing dependencies.
@@ -43,6 +44,13 @@ func NewModuleWithScheduling(repository ports.MonitorRepository, latest ports.La
 	module := NewModuleWithInventory(repository, latest, inventory, idGenerator, clock)
 	module.GetMonitorScheduling = application.NewGetMonitorScheduling(scheduling)
 	module.SetMonitorScheduling = application.NewSetMonitorScheduling(scheduling)
+	return module
+}
+
+// NewModuleWithDeletion adds the irreversible local removal to the public use cases.
+func NewModuleWithDeletion(repository ports.MonitorRepository, latest ports.LatestCheckResultRepository, inventory ports.MonitorInventoryRepository, idGenerator application.IDGenerator, clock application.Clock, scheduling ports.MonitorSchedulingRepository, deletion ports.MonitorDeletionRepository) Module {
+	module := NewModuleWithScheduling(repository, latest, inventory, idGenerator, clock, scheduling)
+	module.DeleteMonitor = application.NewDeleteMonitor(deletion)
 	return module
 }
 
