@@ -264,6 +264,9 @@ test('built local monitor journey', async ({ page, request }) => {
       await expect(
         page.locator('a[href="/monitors/' + deletionMonitorId + '"]'),
       ).toHaveCount(0);
+      const gatewayRead = await request.get('/api/monitors/' + deletionMonitorId);
+      expect(gatewayRead.status()).toBe(404);
+      expect(gatewayRead.headers()['cache-control']).toBe('no-store');
       saved.deletion!.deletedState = 'deleted';
       saved.deletion!.inventoryExcludes = true;
       writeFileSync(artifact, JSON.stringify(saved));
