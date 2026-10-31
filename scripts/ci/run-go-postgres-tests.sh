@@ -30,7 +30,7 @@ docker run --rm \
   -e GOCACHE=/tmp/go-build-cache \
   -v "$ROOT/apps/api:/workspace:ro" \
   -w /workspace \
-  golang:1.27.2-alpine3.24 \
+  golang:1.27.3-alpine3.24 \
   sh -euc '
     go test -count=1 -tags=integration ./migrations
     go test -count=1 -tags=integration ./internal/modules/monitoring/adapters/postgres
