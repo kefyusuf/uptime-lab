@@ -1,0 +1,85 @@
+{
+  "touched": [
+    "E:\\projects\\uptime-lab\\apps\\web\\server\\routes.test.ts",
+    "E:\\projects\\uptime-lab\\apps\\web\\server\\gateway.test.ts",
+    "E:\\projects\\uptime-lab\\apps\\web\\server\\server.test.ts"
+  ],
+  "bashMutation": false,
+  "reportedFindings": [],
+  "findingEvents": [],
+  "baseline": {
+    "storageId": "mvo7okjb-29860-6f1d684598",
+    "createdAt": "2026-10-25T19:19:14.423Z",
+    "files": {
+      "assets.test.ts": {
+        "existed": true,
+        "snapshot": "8b82ca785271da5057d470de78bb623012313a32eb55bf96ed5b00895dbc61c5.source"
+      },
+      "assets.ts": {
+        "existed": true,
+        "snapshot": "be010b1c9291053eec50f967679bbb532446029563df6d51a41e3ee9ea7246d7.source"
+      },
+      "config.test.ts": {
+        "existed": true,
+        "snapshot": "a387c041c8cb46cdf6b6213193f7162d11857f98d9e86e7a6c3caa2dfd5b3e15.source"
+      },
+      "config.ts": {
+        "existed": true,
+        "snapshot": "4080351ad328f01a5cb717a600f0dcdd7a30dc29b74fc1e7d42f7a87a74eed55.source"
+      },
+      "gateway.test.ts": {
+        "existed": true,
+        "snapshot": "7b7728920dd3364fb5d9dede78784613350dc5b04ee7df1a5aa56fc4e822e3bb.source"
+      },
+      "gateway.ts": {
+        "existed": true,
+        "snapshot": "36135d59e776230868384132f0270fb653a2e123ee75e7056ea5475969f17a93.source"
+      },
+      "inventory-query.test.ts": {
+        "existed": true,
+        "snapshot": "000a93f826bb98fd590c6a2b52e60be4108e06e2a55b344a8e1b255734a1de45.source"
+      },
+      "inventory-query.ts": {
+        "existed": true,
+        "snapshot": "9fb8c226f5cde11b536c8d6b84deda4786c46f10ef527b5dd569e9a26fe26a81.source"
+      },
+      "main.ts": {
+        "existed": true,
+        "snapshot": "564c860307257bfac9176f554a35aa858c350a59d75c0dcd0a5d63a480805bd0.source"
+      },
+      "proxy.ts": {
+        "existed": true,
+        "snapshot": "84ebb7b78a17bdd955d464accb5232ffd9eadafd97d6ca56e90c5281b7201775.source"
+      },
+      "routes.test.ts": {
+        "existed": true,
+        "snapshot": "dbcf249dbabc8d2f4962481062b7b4565948b5b28eb28a335c9fa6ce77415bc6.source"
+      },
+      "routes.ts": {
+        "existed": true,
+        "snapshot": "1791cf1bb9060c7d42e1be85610f1d90c55e40f66514d1e735fc686b60641f88.source"
+      },
+      "server.test.ts": {
+        "existed": true,
+        "snapshot": "a43876710cb0cc91baf226932c5fa20a34332dc751f8ec1e34a97d5f4d6aed2c.source"
+      },
+      "server.ts": {
+        "existed": true,
+        "snapshot": "1ba718c1eb8aa39cd20c2562d92523068c734d75f54655e97d652b992d9b4259.source"
+      }
+    },
+    "complete": true,
+    "candidateLimit": 5000,
+    "discoveredFiles": 14,
+    "capturedFiles": 14,
+    "truncated": false,
+    "omittedAtLeast": 0,
+    "firstOmitted": "",
+    "errors": []
+  },
+  "stateErrors": [],
+  "omittedReportedFindings": 0,
+  "omittedFindingEvents": 0,
+  "processing": null,
+  "updatedAt": "2026-10-28T18:09:53.277Z"
+}

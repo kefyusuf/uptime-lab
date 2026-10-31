@@ -381,11 +381,13 @@ describe('Monitor client', () => {
   it.each([200, 400, 405, 500, 502])(
     'treats delete status %d as uncertain',
     async (status) => {
-      const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
-        status === 200
-          ? new Response(null, { status })
-          : Response.json({}, { status }),
-      );
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          status === 200
+            ? new Response(null, { status })
+            : Response.json({}, { status }),
+        );
       expect(
         await createMonitorClient(fetcher).deleteMonitor(monitor.id, signal()),
       ).toMatchObject({ kind: 'uncertain' });

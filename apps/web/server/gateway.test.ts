@@ -302,22 +302,32 @@ describe('actual HTTP gateway', () => {
     { Origin: 'http://foreign.invalid' },
     { Origin: 'http://127.0.0.1:4173', 'Sec-Fetch-Site': 'cross-site' },
     { Origin: 'http://127.0.0.1:4173', Host: 'foreign.invalid' },
-  ] as const)('requires the local browser boundary on DELETE %o', async (headers) => {
-    expect((await call('/api/monitors/id', 'DELETE', headers)).status).toBe(403);
-    expect(captured).toHaveLength(0);
-  });
-  it.each(['Host', 'Origin'])('rejects duplicate %s on DELETE', async (name) => {
-    const headers = [
-      'Host',
-      '127.0.0.1:4173',
-      'Origin',
-      'http://127.0.0.1:4173',
-      name,
-      name === 'Host' ? '127.0.0.1:4173' : 'http://127.0.0.1:4173',
-    ];
-    expect((await call('/api/monitors/id', 'DELETE', headers)).status).toBe(403);
-    expect(captured).toHaveLength(0);
-  });
+  ] as const)(
+    'requires the local browser boundary on DELETE %o',
+    async (headers) => {
+      expect((await call('/api/monitors/id', 'DELETE', headers)).status).toBe(
+        403,
+      );
+      expect(captured).toHaveLength(0);
+    },
+  );
+  it.each(['Host', 'Origin'])(
+    'rejects duplicate %s on DELETE',
+    async (name) => {
+      const headers = [
+        'Host',
+        '127.0.0.1:4173',
+        'Origin',
+        'http://127.0.0.1:4173',
+        name,
+        name === 'Host' ? '127.0.0.1:4173' : 'http://127.0.0.1:4173',
+      ];
+      expect((await call('/api/monitors/id', 'DELETE', headers)).status).toBe(
+        403,
+      );
+      expect(captured).toHaveLength(0);
+    },
+  );
   it.each([
     ['Content-Length', '5'],
     ['Transfer-Encoding', 'chunked'],

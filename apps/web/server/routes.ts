@@ -42,11 +42,12 @@ export function matchApiRoute(
       return { kind: 'reject', status: 405, allow: 'GET, DELETE' };
     return { kind: 'forward', path: rawTarget.slice(4), method };
   }
-  const allowed = /^\/api\/monitors\/[A-Za-z0-9-]+\/(?:latest-result|availability)$/.test(
+  const allowed =
+    /^\/api\/monitors\/[A-Za-z0-9-]+\/(?:latest-result|availability)$/.test(
       rawTarget,
     )
-    ? 'GET'
-    : null;
+      ? 'GET'
+      : null;
   if (!allowed) return { kind: 'reject', status: 404 };
   if (method !== allowed)
     return { kind: 'reject', status: 405, allow: allowed };

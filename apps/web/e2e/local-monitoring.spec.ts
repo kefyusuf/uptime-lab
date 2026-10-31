@@ -255,16 +255,16 @@ test('built local monitor journey', async ({ page, request }) => {
         deletionMonitorId,
       );
       await page.getByRole('button', { name: 'Delete monitor' }).click();
-      await page
-        .getByRole('button', { name: 'Delete permanently' })
-        .click();
+      await page.getByRole('button', { name: 'Delete permanently' }).click();
       await page.waitForURL('/');
       const inventoryRows = page.getByTestId('inventory-row');
       await expect(inventoryRows.first()).toBeVisible();
       await expect(
         page.locator('a[href="/monitors/' + deletionMonitorId + '"]'),
       ).toHaveCount(0);
-      const gatewayRead = await request.get('/api/monitors/' + deletionMonitorId);
+      const gatewayRead = await request.get(
+        '/api/monitors/' + deletionMonitorId,
+      );
       expect(gatewayRead.status()).toBe(404);
       expect(gatewayRead.headers()['cache-control']).toBe('no-store');
       saved.deletion!.deletedState = 'deleted';

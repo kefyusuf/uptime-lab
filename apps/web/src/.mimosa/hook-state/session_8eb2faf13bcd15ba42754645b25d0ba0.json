@@ -1,0 +1,38 @@
+{
+  "touched": [
+    "E:\\projects\\uptime-lab\\apps\\web\\src\\features\\delete-monitor\\useMonitorDelete.test.tsx",
+    "E:\\projects\\uptime-lab\\apps\\web\\src\\features\\delete-monitor\\DeleteMonitorControl.test.tsx"
+  ],
+  "bashMutation": true,
+  "reportedFindings": [],
+  "findingEvents": [],
+  "baseline": {
+    "storageId": "mvsfugv0-53312-a53140cc29",
+    "createdAt": "2026-10-28T18:18:51.228Z",
+    "files": {
+      "features/delete-monitor/useMonitorDelete.test.tsx": { "existed": false },
+      "features/delete-monitor/DeleteMonitorControl.test.tsx": {
+        "existed": false
+      }
+    },
+    "complete": false,
+    "candidateLimit": 5000,
+    "discoveredFiles": 0,
+    "capturedFiles": 2,
+    "truncated": false,
+    "omittedAtLeast": 0,
+    "firstOmitted": "",
+    "errors": [
+      {
+        "stage": "baseline-capture",
+        "target": ".",
+        "reason": "global task baseline was unavailable; captured only the touched file"
+      }
+    ]
+  },
+  "stateErrors": [],
+  "omittedReportedFindings": 0,
+  "omittedFindingEvents": 0,
+  "processing": null,
+  "updatedAt": "2026-10-28T18:19:19.257Z"
+}

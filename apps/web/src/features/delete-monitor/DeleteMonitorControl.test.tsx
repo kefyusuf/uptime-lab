@@ -35,24 +35,22 @@ it('requires the permanent-deletion confirmation before deleting', async () => {
   expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled();
   expect(api.deleteMonitor).not.toHaveBeenCalled();
   await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-  expect(
-    screen.getByRole('button', { name: 'Delete monitor' }),
-  ).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Delete monitor' })).toBeEnabled();
   await userEvent.click(screen.getByRole('button', { name: 'Delete monitor' }));
   await userEvent.click(
     screen.getByRole('button', { name: 'Delete permanently' }),
   );
   await waitFor(() => expect(onDeleted).toHaveBeenCalledTimes(1));
-  expect(api.deleteMonitor).toHaveBeenCalledWith(
-    'a',
-    expect.any(AbortSignal),
-  );
+  expect(api.deleteMonitor).toHaveBeenCalledWith('a', expect.any(AbortSignal));
 });
 it('shows an uncertain outcome with an explicit refresh and no retry', async () => {
   const api = client();
   api.deleteMonitor = vi.fn().mockResolvedValue({
     kind: 'uncertain',
-    error: { kind: 'transport', message: 'The deletion outcome is unknown. Refresh to check.' },
+    error: {
+      kind: 'transport',
+      message: 'The deletion outcome is unknown. Refresh to check.',
+    },
   });
   api.getMonitor = vi.fn().mockResolvedValue({
     kind: 'error',

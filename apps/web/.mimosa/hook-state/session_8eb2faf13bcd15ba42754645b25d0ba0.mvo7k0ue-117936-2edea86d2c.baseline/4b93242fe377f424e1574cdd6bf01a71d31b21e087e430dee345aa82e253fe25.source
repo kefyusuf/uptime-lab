@@ -1,0 +1,1 @@
+export { MonitorInventory } from './MonitorInventory';

@@ -98,7 +98,9 @@ it('keeps scheduling write alive while evidence is refreshed', async () => {
 });
 it('shows separately identified snapshots and a plain escaped target; focuses the heading', async () => {
   const api = client();
-  const { container } = render(<MonitorDetailPage id={id} client={api} onDeleted={() => {}} />);
+  const { container } = render(
+    <MonitorDetailPage id={id} client={api} onDeleted={() => {}} />,
+  );
   expect(screen.getByRole('heading', { name: 'Monitor detail' })).toHaveFocus();
   expect(await screen.findByTestId('availability-check-id')).toHaveTextContent(
     id,
@@ -193,7 +195,9 @@ it('composes the delete control after a known monitor and navigates on confirmat
   const onDeleted = vi.fn();
   render(<MonitorDetailPage id={id} client={api} onDeleted={onDeleted} />);
   await waitFor(() =>
-    expect(screen.getByRole('button', { name: 'Delete monitor' })).toBeEnabled(),
+    expect(
+      screen.getByRole('button', { name: 'Delete monitor' }),
+    ).toBeEnabled(),
   );
   await userEvent.click(screen.getByRole('button', { name: 'Delete monitor' }));
   await userEvent.click(

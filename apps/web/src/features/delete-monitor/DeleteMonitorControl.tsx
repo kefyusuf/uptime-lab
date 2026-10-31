@@ -39,13 +39,8 @@ export function DeleteMonitorControl({
           {state.kind === 'uncertain' && (
             <p role="alert">{state.error.message}</p>
           )}
-          {state.kind === 'deleting' && (
-            <p role="status">Deleting monitor…</p>
-          )}
-          <button
-            disabled={state.kind === 'deleting'}
-            onClick={requestDelete}
-          >
+          {state.kind === 'deleting' && <p role="status">Deleting monitor…</p>}
+          <button disabled={state.kind === 'deleting'} onClick={requestDelete}>
             Delete monitor
           </button>
           {state.kind === 'uncertain' && (

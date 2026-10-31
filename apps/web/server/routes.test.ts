@@ -140,7 +140,10 @@ it.each([
   '/api/monitors/id/',
   '/api/monitors/%69d',
 ])('rejects delete query and alias tricks %s', (path) => {
-  expect(matchApiRoute(path, 'DELETE')).toEqual({ kind: 'reject', status: 400 });
+  expect(matchApiRoute(path, 'DELETE')).toEqual({
+    kind: 'reject',
+    status: 400,
+  });
 });
 it('keeps internal and unknown routes closed to delete', () => {
   expect(matchApiRoute('/api/internal/checks/claim', 'DELETE')).toEqual({
