@@ -40,7 +40,6 @@ export function useMonitorDelete(id: string, client: MonitorClient) {
       live: true,
     };
     active.current = session;
-    setSnapshot({ session, view: session.view });
     return () => {
       session.live = false;
       session.serial++;
