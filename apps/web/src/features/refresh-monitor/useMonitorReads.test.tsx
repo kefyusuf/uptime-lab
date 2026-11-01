@@ -31,6 +31,7 @@ function client(): MonitorClient {
   return {
     getScheduling: vi.fn(),
     setScheduling: vi.fn(),
+    deleteMonitor: vi.fn().mockResolvedValue({ kind: 'deleted' }),
     createMonitor: vi.fn(),
     listMonitors: vi.fn().mockResolvedValue({
       kind: 'success',

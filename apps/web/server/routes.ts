@@ -1,6 +1,6 @@
 import { validateInventoryQuery } from './inventory-query.js';
 export type RouteDecision =
-  | { kind: 'forward'; path: string; method: 'GET' | 'POST' | 'PUT' }
+  | { kind: 'forward'; path: string; method: 'GET' | 'POST' | 'PUT' | 'DELETE' }
   | { kind: 'reject'; status: number; allow?: string }
   | { kind: 'not_api' };
 export function matchApiRoute(
@@ -37,14 +37,17 @@ export function matchApiRoute(
       return { kind: 'reject', status: 405, allow: 'GET, PUT' };
     return { kind: 'forward', path: rawTarget.slice(4), method };
   }
+  if (/^\/api\/monitors\/[A-Za-z0-9-]+$/.test(rawTarget)) {
+    if (method !== 'GET' && method !== 'DELETE')
+      return { kind: 'reject', status: 405, allow: 'GET, DELETE' };
+    return { kind: 'forward', path: rawTarget.slice(4), method };
+  }
   const allowed =
-    rawTarget === '/api/monitors'
-      ? 'POST'
-      : /^\/api\/monitors\/[A-Za-z0-9-]+(?:\/(?:latest-result|availability))?$/.test(
-            rawTarget,
-          )
-        ? 'GET'
-        : null;
+    /^\/api\/monitors\/[A-Za-z0-9-]+\/(?:latest-result|availability)$/.test(
+      rawTarget,
+    )
+      ? 'GET'
+      : null;
   if (!allowed) return { kind: 'reject', status: 404 };
   if (method !== allowed)
     return { kind: 'reject', status: 405, allow: allowed };

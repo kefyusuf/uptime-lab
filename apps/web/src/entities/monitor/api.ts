@@ -187,6 +187,32 @@ export function createMonitorClient(fetchImpl: typeof fetch): MonitorClient {
       }
     },
     getMonitor: (id, signal) => read(resource(id), signal, decodeMonitor),
+    async deleteMonitor(id, signal) {
+      try {
+        const response = await requestJson(fetchImpl, resource(id), {
+          method: 'DELETE',
+          signal,
+        });
+        if (response.status === 204 || response.status === 404)
+          return { kind: 'deleted' };
+        return {
+          kind: 'uncertain',
+          error: {
+            kind: 'http',
+            status: response.status,
+            message: 'The deletion outcome is unknown. Refresh to check.',
+          },
+        };
+      } catch {
+        return {
+          kind: 'uncertain',
+          error: {
+            kind: 'transport',
+            message: 'The deletion outcome is unknown. Refresh to check.',
+          },
+        };
+      }
+    },
     getLatestResult: (id, signal) =>
       read<import('./model').LatestResult | null>(
         resource(id) + '/latest-result',

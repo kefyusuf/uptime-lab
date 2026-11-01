@@ -14,6 +14,7 @@ function client(): MonitorClient {
     setScheduling: vi
       .fn()
       .mockResolvedValue({ kind: 'confirmed', data: { state: 'paused' } }),
+    deleteMonitor: vi.fn().mockResolvedValue({ kind: 'deleted' }),
     createMonitor: vi.fn(),
     listMonitors: vi.fn().mockResolvedValue({
       kind: 'success',
@@ -56,7 +57,7 @@ it('starts scheduling only after a known monitor and keeps evidence refresh inde
       resolve = done;
     }),
   );
-  render(<MonitorDetailPage id={id} client={api} />);
+  render(<MonitorDetailPage id={id} client={api} onDeleted={() => {}} />);
   expect(api.getScheduling).not.toHaveBeenCalled();
   await act(async () =>
     resolve({
@@ -78,7 +79,7 @@ it('keeps scheduling write alive while evidence is refreshed', async () => {
       finish = done;
     }),
   );
-  render(<MonitorDetailPage id={id} client={api} />);
+  render(<MonitorDetailPage id={id} client={api} onDeleted={() => {}} />);
   await waitFor(() =>
     expect(screen.getByRole('button', { name: 'Pause' })).toBeEnabled(),
   );
@@ -97,7 +98,9 @@ it('keeps scheduling write alive while evidence is refreshed', async () => {
 });
 it('shows separately identified snapshots and a plain escaped target; focuses the heading', async () => {
   const api = client();
-  const { container } = render(<MonitorDetailPage id={id} client={api} />);
+  const { container } = render(
+    <MonitorDetailPage id={id} client={api} onDeleted={() => {}} />,
+  );
   expect(screen.getByRole('heading', { name: 'Monitor detail' })).toHaveFocus();
   expect(await screen.findByTestId('availability-check-id')).toHaveTextContent(
     id,
@@ -121,7 +124,7 @@ it('distinguishes an empty raw result from the server no_result assessment', asy
     kind: 'success',
     data: { status: 'unknown', reason: 'no_result', evaluatedAt },
   });
-  render(<MonitorDetailPage id={id} client={api} />);
+  render(<MonitorDetailPage id={id} client={api} onDeleted={() => {}} />);
   await waitFor(() =>
     expect(screen.getAllByText('No completed result yet')).toHaveLength(2),
   );
@@ -141,7 +144,7 @@ it.each([
       kind: 'error',
       error: { kind: 'http', status, message: 'untrusted' },
     });
-    render(<MonitorDetailPage id={id} client={api} />);
+    render(<MonitorDetailPage id={id} client={api} onDeleted={() => {}} />);
     expect(await screen.findByRole('alert')).toHaveTextContent(message);
     expect(api.getAvailability).not.toHaveBeenCalled();
     expect(
@@ -151,7 +154,7 @@ it.each([
 );
 it('a current Monitor404 removes previously successful snapshots after refresh', async () => {
   const api = client();
-  render(<MonitorDetailPage id={id} client={api} />);
+  render(<MonitorDetailPage id={id} client={api} onDeleted={() => {}} />);
   await screen.findByTestId('availability-status');
   api.getMonitor = vi.fn().mockResolvedValue({
     kind: 'error',
@@ -168,7 +171,7 @@ it('a current Monitor404 removes previously successful snapshots after refresh',
 });
 it('time passing does not reclassify a snapshot or poll', async () => {
   const api = client();
-  render(<MonitorDetailPage id={id} client={api} />);
+  render(<MonitorDetailPage id={id} client={api} onDeleted={() => {}} />);
   await screen.findByTestId('availability-status');
   const time = screen.getByLabelText('Assessment time');
   expect(time).toHaveAttribute('datetime', evaluatedAt);
@@ -185,4 +188,32 @@ it('time passing does not reclassify a snapshot or poll', async () => {
   } finally {
     vi.useRealTimers();
   }
+});
+it('composes the delete control after a known monitor and navigates on confirmation', async () => {
+  const api = client();
+  api.deleteMonitor = vi.fn().mockResolvedValue({ kind: 'deleted' });
+  const onDeleted = vi.fn();
+  render(<MonitorDetailPage id={id} client={api} onDeleted={onDeleted} />);
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Delete monitor' }),
+    ).toBeEnabled(),
+  );
+  await userEvent.click(screen.getByRole('button', { name: 'Delete monitor' }));
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Delete permanently' }),
+  );
+  await waitFor(() => expect(onDeleted).toHaveBeenCalledTimes(1));
+});
+it('hides the delete control while the monitor is unknown', async () => {
+  const api = client();
+  api.getMonitor = vi.fn().mockResolvedValue({
+    kind: 'error',
+    error: { kind: 'http', status: 404, message: 'Monitor not found.' },
+  });
+  render(<MonitorDetailPage id={id} client={api} onDeleted={() => {}} />);
+  await waitFor(() =>
+    expect(screen.getByRole('alert')).toHaveTextContent('Monitor not found.'),
+  );
+  expect(screen.queryByRole('button', { name: 'Delete monitor' })).toBeNull();
 });

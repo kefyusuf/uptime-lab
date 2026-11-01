@@ -215,6 +215,62 @@ test('built local monitor journey', async ({ page, request }) => {
       saved.scheduling!.resumedState = 'active';
     }
     writeFileSync(artifact, JSON.stringify(saved));
+  } else if (
+    ['delete-register', 'delete'].includes(process.env.WEB_BROWSER_PHASE || '')
+  ) {
+    const saved = JSON.parse(readFileSync(artifact, 'utf8')) as {
+      id: string;
+      deletion?: Record<string, unknown>;
+    };
+    const phase = process.env.WEB_BROWSER_PHASE;
+    if (phase === 'delete-register') {
+      await page.goto('/');
+      await page.getByLabel('Target URL').fill(target);
+      await page.getByLabel('Target URL').press('Enter');
+      await expect(
+        page.getByRole('heading', { name: 'Monitor detail' }),
+      ).toBeFocused();
+      const id = await page.getByTestId('monitor-id').textContent();
+      expect(id).toMatch(/^[0-9a-f-]{36}$/);
+      expect(id).not.toBe(saved.id);
+      await expect(page.getByTestId('scheduling-state')).toHaveText('Active');
+      const deleteButton = page.getByRole('button', { name: 'Delete monitor' });
+      await expect(deleteButton).toBeEnabled();
+      await deleteButton.click();
+      await expect(
+        page.getByRole('button', { name: 'Delete permanently' }),
+      ).toBeVisible();
+      await page.getByRole('button', { name: 'Cancel' }).click();
+      await expect(deleteButton).toBeEnabled();
+      await expect(page.getByTestId('monitor-id')).toHaveText(id!);
+      writeFileSync(
+        artifact,
+        JSON.stringify({ ...saved, deletion: { monitorId: id } }),
+      );
+    } else {
+      const deletionMonitorId = (saved.deletion as { monitorId: string })
+        .monitorId;
+      await page.goto('/monitors/' + deletionMonitorId);
+      await expect(page.getByTestId('monitor-id')).toHaveText(
+        deletionMonitorId,
+      );
+      await page.getByRole('button', { name: 'Delete monitor' }).click();
+      await page.getByRole('button', { name: 'Delete permanently' }).click();
+      await page.waitForURL('/');
+      const inventoryRows = page.getByTestId('inventory-row');
+      await expect(inventoryRows.first()).toBeVisible();
+      await expect(
+        page.locator('a[href="/monitors/' + deletionMonitorId + '"]'),
+      ).toHaveCount(0);
+      const gatewayRead = await request.get(
+        '/api/monitors/' + deletionMonitorId,
+      );
+      expect(gatewayRead.status()).toBe(404);
+      expect(gatewayRead.headers()['cache-control']).toBe('no-store');
+      saved.deletion!.deletedState = 'deleted';
+      saved.deletion!.inventoryExcludes = true;
+      writeFileSync(artifact, JSON.stringify(saved));
+    }
   } else throw new Error('Unknown browser phase.');
   expect(errors).toEqual([]);
 });

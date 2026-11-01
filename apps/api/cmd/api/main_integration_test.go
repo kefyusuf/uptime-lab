@@ -220,6 +220,40 @@ func TestProductionMonitoringCompositionAgainstPostgreSQL(t *testing.T) {
 		t.Fatalf("missing availability: %d %v", missingAvailability.StatusCode, missingAvailability.Header)
 	}
 	missingAvailability.Body.Close()
+
+	// Deletion composition: a second Monitor is registered, permanently
+	// removed, and reads 404 afterwards, including a repeated delete.
+	secondResponse, err := client.Post(baseURL+"/monitors", "application/json", strings.NewReader(`{"targetUrl":"https://example.com/delete-composition"}`))
+	if err != nil {
+		t.Fatalf("POST /monitors for deletion error = %v", err)
+	}
+	second := decodeMonitorPayload(t, secondResponse)
+	if secondResponse.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /monitors for deletion status = %d, want %d", secondResponse.StatusCode, http.StatusCreated)
+	}
+
+	deleteResponse := doRequest(t, client, http.MethodDelete, baseURL+"/monitors/"+second.ID, "", "")
+	deleteBody, _ := io.ReadAll(deleteResponse.Body)
+	deleteResponse.Body.Close()
+	if deleteResponse.StatusCode != http.StatusNoContent ||
+		len(deleteBody) != 0 ||
+		deleteResponse.Header.Get("Cache-Control") != "no-store" ||
+		deleteResponse.Header.Get("Location") != "" {
+		t.Fatalf("deletion response = %d %q %v", deleteResponse.StatusCode, deleteBody, deleteResponse.Header)
+	}
+
+	deletedGet := doRequest(t, client, http.MethodGet, baseURL+"/monitors/"+second.ID, "", "")
+	if deletedGet.StatusCode != http.StatusNotFound || deletedGet.Header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("deleted monitor read = %d %v", deletedGet.StatusCode, deletedGet.Header)
+	}
+	deletedGet.Body.Close()
+
+	repeatedDelete := doRequest(t, client, http.MethodDelete, baseURL+"/monitors/"+second.ID, "", "")
+	if repeatedDelete.StatusCode != http.StatusNotFound {
+		t.Fatalf("repeated delete = %d, want 404", repeatedDelete.StatusCode)
+	}
+	repeatedDelete.Body.Close()
+
 	claimResponse := doRequest(t, client, http.MethodPost, baseURL+"/internal/checks/claim", "", "")
 	if claimResponse.StatusCode != http.StatusOK {
 		defer claimResponse.Body.Close()

@@ -95,3 +95,66 @@ it.each([
 ])('rejects scheduling query %s', (target) => {
   expect(matchApiRoute(target, 'PUT')).toEqual({ kind: 'reject', status: 400 });
 });
+it('maps monitor deletion beside get', () => {
+  expect(matchApiRoute('/api/monitors/id', 'DELETE')).toEqual({
+    kind: 'forward',
+    method: 'DELETE',
+    path: '/monitors/id',
+  });
+  expect(matchApiRoute('/api/monitors/id', 'GET')).toEqual({
+    kind: 'forward',
+    method: 'GET',
+    path: '/monitors/id',
+  });
+});
+it.each(['HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH'])(
+  'keeps monitor resource verbs closed to get and delete: %s',
+  (method) => {
+    expect(matchApiRoute('/api/monitors/id', method)).toEqual({
+      kind: 'reject',
+      status: 405,
+      allow: 'GET, DELETE',
+    });
+  },
+);
+it('keeps sub-resource deletion closed', () => {
+  expect(matchApiRoute('/api/monitors/id/latest-result', 'DELETE')).toEqual({
+    kind: 'reject',
+    status: 405,
+    allow: 'GET',
+  });
+  expect(matchApiRoute('/api/monitors/id/availability', 'DELETE')).toEqual({
+    kind: 'reject',
+    status: 405,
+    allow: 'GET',
+  });
+  expect(matchApiRoute('/api/monitors/id/scheduling', 'DELETE')).toEqual({
+    kind: 'reject',
+    status: 405,
+    allow: 'GET, PUT',
+  });
+});
+it.each([
+  '/api/monitors/id?',
+  '/api/monitors/id?x=1',
+  '/api/monitors/id/',
+  '/api/monitors/%69d',
+])('rejects delete query and alias tricks %s', (path) => {
+  expect(matchApiRoute(path, 'DELETE')).toEqual({
+    kind: 'reject',
+    status: 400,
+  });
+});
+it('keeps internal and unknown routes closed to delete', () => {
+  expect(matchApiRoute('/api/internal/checks/claim', 'DELETE')).toEqual({
+    kind: 'reject',
+    status: 404,
+  });
+  expect(matchApiRoute('/internal/checks/claim', 'DELETE')).toEqual({
+    kind: 'not_api',
+  });
+  expect(matchApiRoute('/api/monitors/id/history', 'DELETE')).toEqual({
+    kind: 'reject',
+    status: 404,
+  });
+});

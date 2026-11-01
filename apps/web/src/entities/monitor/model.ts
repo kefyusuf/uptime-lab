@@ -14,6 +14,8 @@ export type SchedulingOutcome =
   | { kind: 'confirmed'; data: MonitorScheduling }
   | { kind: 'rejected'; error: ClientError }
   | { kind: 'uncertain'; error: ClientError };
+export type DeleteOutcome =
+  { kind: 'deleted' } | { kind: 'uncertain'; error: ClientError };
 export interface Evidence {
   checkId: string;
   completedAt: string;
@@ -77,6 +79,7 @@ export interface MonitorClient {
     state: MonitorScheduling['state'],
     signal: AbortSignal,
   ): Promise<SchedulingOutcome>;
+  deleteMonitor(id: string, signal: AbortSignal): Promise<DeleteOutcome>;
   listMonitors(
     input: { limit: number; cursor: string | null },
     signal: AbortSignal,

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { verifyEvidence, verifyInventoryEvidence, verifySchedulingEvidence } from "./verify-web-evidence.mjs";
+import { verifyEvidence, verifyInventoryEvidence, verifySchedulingEvidence, verifyDeletionEvidence } from "./verify-web-evidence.mjs";
 const id = "aa29443e-c597-4e7b-9202-a4762e0e04c0",
   a = "bb29443e-c597-4e7b-9202-a4762e0e04c0",
   b = "cc29443e-c597-4e7b-9202-a4762e0e04c0";
@@ -43,6 +43,24 @@ test('scheduling rejects resumed claim without durable linkage',()=>{
  assert.throws(()=>verifySchedulingEvidence(schedulingCapture,rows,schedulingMonitors));
  assert.throws(()=>verifySchedulingEvidence(schedulingCapture,[...rows,{...schedulingRows.at(-1),monitor_id:a}],schedulingMonitors));
  assert.throws(()=>verifySchedulingEvidence(schedulingCapture,schedulingRows,schedulingMonitors.map(row=>({...row,paused:true}))));
+});
+const deletedMonitor='ee29443e-c597-4e7b-9202-a4762e0e04c0';
+const claimedRun='ff29443e-c597-4e7b-9202-a4762e0e04c0';
+const deletionCapture={...inventoryCapture,deletion:{monitorId:deletedMonitor,deletedState:'deleted',readsAfterDelete:{monitor:404,availability:404,latestResult:404,scheduling:404},inventoryExcludes:true,checkRunsBeforeDelete:[claimedRun],checkRunsAfterDelete:[],deliveryFailures:{attempts:1,status:404},restarts:{api:{beforeStartedAt:'2026-10-28T12:00:00.123456789Z',afterStartedAt:'2026-10-28T12:00:00.123456790Z'},checker:{beforeStartedAt:'2026-10-28T12:00:01Z',afterStartedAt:'2026-10-28T12:00:02Z'}}}};
+test('deletion links durable removal and actual restart checkpoints',()=>assert.doesNotThrow(()=>verifyDeletionEvidence(deletionCapture,[],[])));
+for(const mutation of [
+ c=>{delete c.deletion},c=>{delete c.deletion.restarts.api},c=>{delete c.deletion.restarts.checker.afterStartedAt},
+ c=>{c.deletion.monitorId=id},c=>{c.deletion.monitorId='invalid'},c=>{c.deletion.deletedState='active'},
+ c=>{c.deletion.readsAfterDelete.monitor=200},c=>{c.deletion.readsAfterDelete.latestResult=503},
+ c=>{c.deletion.inventoryExcludes=false},
+ c=>{c.deletion.checkRunsBeforeDelete=[]},c=>{c.deletion.checkRunsBeforeDelete.push('bad')},
+ c=>{c.deletion.checkRunsAfterDelete.push(claimedRun)},c=>{c.deletion.deliveryFailures.attempts=2},
+ c=>{c.deletion.deliveryFailures.status=409},c=>{c.deletion.deliveryFailures.status=200},c=>{c.deletion.restarts.api.afterStartedAt=c.deletion.restarts.api.beforeStartedAt},
+ c=>{c.deletion.restarts.checker.afterStartedAt='2026-10-28T12:00:00Z'},c=>{c.deletion.extra=true},
+])test('deletion rejects mutated acceptance evidence '+mutation.toString(),()=>{const mutated=structuredClone(deletionCapture);mutation(mutated);assert.throws(()=>verifyDeletionEvidence(mutated,[],[]))});
+test('deletion rejects orphan durable rows and surviving monitor',()=>{
+ assert.throws(()=>verifyDeletionEvidence(deletionCapture,[{id:claimedRun,monitor_id:deletedMonitor}],[]));
+ assert.throws(()=>verifyDeletionEvidence(deletionCapture,[],[{id:deletedMonitor,target_url:'http://web/'}]));
 });
 test('inventory captures match their durable Monitor rows',()=>assert.doesNotThrow(()=>verifyInventoryEvidence(inventoryCapture,monitors)));
 for(const field of ['id','target_url']) test(`inventory rejects wrong ${field}`,()=>{
