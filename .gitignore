@@ -36,3 +36,6 @@ apps/web/playwright-report/
 
 # Local Mimosa hook state
 .mimosa/
+
+# Local Rust build output
+apps/checker/target/
