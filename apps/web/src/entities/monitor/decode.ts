@@ -1,4 +1,10 @@
-import type { Availability, Evidence, LatestResult, Monitor } from './model';
+import type {
+  Availability,
+  Evidence,
+  LatestResult,
+  Monitor,
+  MonitorHistoryPage,
+} from './model';
 
 export class ResponseDecodeError extends Error {
   constructor() {
@@ -153,4 +159,23 @@ export function decodeAvailability(value: unknown): Availability {
     }
   }
   return fail();
+}
+
+export function decodeMonitorHistoryPage(value: unknown): MonitorHistoryPage {
+  const page = record(value, ['items', 'nextCursor']);
+  if (!Array.isArray(page.items) || page.items.length > 50) return fail();
+  const items = page.items.map((item) => decodeLatestResult(item));
+  const seen = new Set<string>();
+  for (const item of items) {
+    if (seen.has(item.checkId)) return fail();
+    seen.add(item.checkId);
+  }
+  if (
+    page.nextCursor !== null &&
+    (typeof page.nextCursor !== 'string' ||
+      !/^[A-Za-z0-9_-]{88}$/.test(page.nextCursor))
+  )
+    return fail();
+  if (items.length === 0 && page.nextCursor !== null) return fail();
+  return { items, nextCursor: page.nextCursor };
 }

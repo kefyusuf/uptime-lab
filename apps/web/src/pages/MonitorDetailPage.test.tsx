@@ -8,6 +8,10 @@ const id = 'aa29443e-c597-4e7b-9202-a4762e0e04c0',
 const evaluatedAt = '2026-10-02T12:00:00.123456789Z';
 function client(): MonitorClient {
   return {
+    getHistory: vi.fn().mockResolvedValue({
+      kind: 'success',
+      data: { items: [], nextCursor: null },
+    }),
     getScheduling: vi
       .fn()
       .mockResolvedValue({ kind: 'success', data: { state: 'active' } }),

@@ -7,6 +7,10 @@ export interface MonitorInventoryPage {
   items: Monitor[];
   nextCursor: string | null;
 }
+export interface MonitorHistoryPage {
+  items: LatestResult[];
+  nextCursor: string | null;
+}
 export interface MonitorScheduling {
   state: 'active' | 'paused';
 }
@@ -80,6 +84,11 @@ export interface MonitorClient {
     signal: AbortSignal,
   ): Promise<SchedulingOutcome>;
   deleteMonitor(id: string, signal: AbortSignal): Promise<DeleteOutcome>;
+  getHistory(
+    id: string,
+    cursor: string | null,
+    signal: AbortSignal,
+  ): Promise<ReadResult<MonitorHistoryPage>>;
   listMonitors(
     input: { limit: number; cursor: string | null },
     signal: AbortSignal,

@@ -11,6 +11,10 @@ function client(): MonitorClient {
       kind: 'error',
       error: { kind: 'http', status: 404, message: 'Monitor not found.' },
     }),
+    getHistory: vi.fn().mockResolvedValue({
+      kind: 'success',
+      data: { items: [], nextCursor: null },
+    }),
     getScheduling: vi.fn(),
     setScheduling: vi.fn(),
     createMonitor: vi.fn(),

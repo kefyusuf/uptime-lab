@@ -5,6 +5,10 @@ import type { MonitorClient, SchedulingOutcome } from '../../entities/monitor';
 import { MonitorSchedulingControl } from './MonitorSchedulingControl';
 function client(): MonitorClient {
   return {
+    getHistory: vi.fn().mockResolvedValue({
+      kind: 'success',
+      data: { items: [], nextCursor: null },
+    }),
     getScheduling: vi
       .fn()
       .mockResolvedValue({ kind: 'success', data: { state: 'active' } }),
