@@ -17,7 +17,7 @@ The next proposed R2 increment adds a bounded, terminal-only, keyset-paginated c
 
 | Approach | Benefit | Cost |
 |---|---|---|
-| Bounded keyset-paginated history read (recommended) | Reuses the proven inventory cursor/budget conventions and the existing terminal index; no new mutation semantics | No retention, no aggregation — the page is bounded and older evidence stays queryable only through future increments |
+| Bounded keyset-paginated history read (recommended) | Reuses the proven inventory cursor/budget conventions; the existing terminal index serves the monitor and time predicate, with equal-completion ties sorted within the page — no new mutation semantics | No retention, no aggregation — the page is bounded and older evidence stays queryable only through future increments |
 | Unbounded full history | Complete trail | No supported Monitor count or response budget; capacity stays unqualified; contradicts the bounded-response discipline |
 | Extending `latest-result` with more rows | One fewer operation | Changes a closed schema and the empty-204 contract; couples the single-snapshot semantics to list semantics |
 | Availability/uptime timeline or aggregation | Product-shaped reporting | R3 territory — mixes raw execution facts with verdict/aggregation design before incidents exist |
@@ -31,7 +31,7 @@ The next proposed R2 increment adds a bounded, terminal-only, keyset-paginated c
 3. Unknown Monitor is 404; a known Monitor without terminal history is a successful empty page, deliberately distinct from the unknown-Monitor 404. The read never samples a clock and never mutates state.
 4. Pagination is a strict position, not an identity lookup or snapshot guarantee, matching the inventory cursor contract: no ownership, no consistency promise across pages, no authorization boundary. Concurrent completions may shift page contents between reads.
 5. No new migration: the existing `check_runs_latest_terminal_idx (monitor_id, completed_at DESC) WHERE completed_at IS NOT NULL` serves the ordering predicate; the readiness migration set stays at four. Rust, the internal Checker contract and every existing public schema remain unchanged.
-6. The cursor is decode-only input: malformed, noncanonical, foreign-monitor or over-budget cursors are rejected before application work, following the inventory grammar. Deleting a Monitor removes its history with it; a cursor anchored on deleted evidence yields an empty continuation, not an error.
+6. The cursor is decode-only input: malformed, noncanonical, foreign-monitor or over-budget cursors are rejected before application work, following the inventory grammar. Deleting a Monitor removes its history with it and turns every read of it into 404, so while a Monitor exists every terminal row under an anchored cursor persists — there is no removed-anchor case in this increment. A future retention increment would define removed-anchor behavior explicitly.
 
 ## Architecture and contract direction
 
