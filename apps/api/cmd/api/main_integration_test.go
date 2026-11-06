@@ -318,6 +318,30 @@ func TestProductionMonitoringCompositionAgainstPostgreSQL(t *testing.T) {
 		)
 	}
 
+	historyResponse := doRequest(t, client, http.MethodGet, baseURL+"/monitors/"+postPayload.ID+"/history?limit=20", "", "")
+	historyBody, _ := io.ReadAll(historyResponse.Body)
+	historyResponse.Body.Close()
+	if historyResponse.StatusCode != http.StatusOK ||
+		historyResponse.Header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("history read = %d %v", historyResponse.StatusCode, historyResponse.Header)
+	}
+	var historyPage struct {
+		Items []struct {
+			CheckID    string `json:"checkId"`
+			ResultKind string `json:"resultKind"`
+		} `json:"items"`
+		NextCursor *string `json:"nextCursor"`
+	}
+	if err := json.Unmarshal(historyBody, &historyPage); err != nil {
+		t.Fatalf("decode history page: %v", err)
+	}
+	if len(historyPage.Items) != 1 ||
+		historyPage.Items[0].CheckID != claimPayload.CheckID ||
+		historyPage.Items[0].ResultKind != "http_response" ||
+		historyPage.NextCursor != nil {
+		t.Fatalf("history page = %s", historyBody)
+	}
+
 	latestHTTPResponse := doRequest(
 		t,
 		client,

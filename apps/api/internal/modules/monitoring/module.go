@@ -15,6 +15,7 @@ type Module struct {
 	GetMonitorScheduling   application.GetMonitorScheduling
 	SetMonitorScheduling   application.SetMonitorScheduling
 	DeleteMonitor          application.DeleteMonitor
+	GetMonitorHistory      application.GetMonitorHistory
 }
 
 // NewModule composes Monitoring use cases from their inward-facing dependencies.
@@ -51,6 +52,13 @@ func NewModuleWithScheduling(repository ports.MonitorRepository, latest ports.La
 func NewModuleWithDeletion(repository ports.MonitorRepository, latest ports.LatestCheckResultRepository, inventory ports.MonitorInventoryRepository, idGenerator application.IDGenerator, clock application.Clock, scheduling ports.MonitorSchedulingRepository, deletion ports.MonitorDeletionRepository) Module {
 	module := NewModuleWithScheduling(repository, latest, inventory, idGenerator, clock, scheduling)
 	module.DeleteMonitor = application.NewDeleteMonitor(deletion)
+	return module
+}
+
+// NewModuleWithHistory adds the bounded terminal-history read to the public use cases.
+func NewModuleWithHistory(repository ports.MonitorRepository, latest ports.LatestCheckResultRepository, inventory ports.MonitorInventoryRepository, idGenerator application.IDGenerator, clock application.Clock, scheduling ports.MonitorSchedulingRepository, deletion ports.MonitorDeletionRepository, history ports.MonitorHistoryRepository) Module {
+	module := NewModuleWithDeletion(repository, latest, inventory, idGenerator, clock, scheduling, deletion)
+	module.GetMonitorHistory = application.NewGetMonitorHistory(history)
 	return module
 }
 
