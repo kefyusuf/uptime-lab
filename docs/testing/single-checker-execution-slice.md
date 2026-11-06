@@ -270,6 +270,10 @@ A claimed CheckRun whose Monitor is deleted during the claim loses its row with 
 
 The bounded history read is a Go-owned page over durable terminal rows; the Rust Checker's claim/completion behavior is unaffected, and pending runs stay invisible to history exactly as they are to the latest-result read. The deletion landing's completion-conflict mapping (unknown CheckRun completes as 404 not-found) is unchanged.
 
+## Retention boundary
+
+The claim transaction now also enforces the retained history window (newest 50 terminal rows per Monitor). Claims remain the only writer that periodically touches every Monitor's evidence; no background reconciler is introduced, and the Rust Checker's behavior is unchanged. A completion racing retention resolves benignly: the completion commits, and an over-cap removed row's later replay observes the existing not-found mapping.
+
 ## Non-Claims
 
 This evidence does not claim:

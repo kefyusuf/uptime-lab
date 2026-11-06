@@ -46,6 +46,10 @@ func (repository *Repository) ClaimDueCheck(
 		return ports.ClaimedCheck{}, fmt.Errorf("reconcile expired check runs: %w", err)
 	}
 
+	if err := repository.retainHistoryWindow(ctx, tx); err != nil {
+		return ports.ClaimedCheck{}, err
+	}
+
 	var (
 		rawMonitorID string
 		rawTargetURL string
