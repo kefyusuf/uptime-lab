@@ -36,6 +36,36 @@ function canonicalPublicFixtures() {
       status: 404,
       detail: 'The monitor was not found.',
     },
+    'monitor-history-empty.json': { items: [], nextCursor: null },
+    'monitor-history-page.json': (() => {
+      const checkId = '7d9b2eb0-52bb-4dd7-8934-c5ce30d5c675';
+      const completedAt = '2026-11-01T12:00:00.123456Z';
+      return {
+        items: [
+          {
+            checkId,
+            resultKind: 'http_response',
+            httpStatus: 204,
+            durationMs: 123,
+            completedAt,
+          },
+        ],
+        nextCursor: Buffer.from('2|' + completedAt + '|' + checkId).toString(
+          'base64url',
+        ),
+      };
+    })(),
+    'monitor-history-continuation.json': {
+      items: [
+        {
+          checkId: 'aa29443e-c597-4e7b-9202-a4762e0e04c0',
+          resultKind: 'policy_rejected',
+          durationMs: 5,
+          completedAt: '2026-11-01T11:59:00Z',
+        },
+      ],
+      nextCursor: null,
+    },
     ...availabilityFixtures(),
     'latest-result-http-response.json': {
       checkId: '7d9b2eb0-52bb-4dd7-8934-c5ce30d5c675',
@@ -248,7 +278,95 @@ function validDocument() {
   document.components.schemas.MonitorScheduling = { type: 'object', additionalProperties: false, required: ['state'], properties: { state: { type: 'string', enum: ['active', 'paused'] } } };
   document.paths['/monitors/{monitorId}/scheduling'] = schedulingPath();
   document.paths['/monitors/{monitorId}'].delete = deletionOperation();
+  document.paths['/monitors/{monitorId}/history'] = { get: historyOperation() };
+  document.components.schemas.MonitorHistoryEntry = {
+    oneOf: [
+      { $ref: '#/components/schemas/LatestHTTPResponseResult' },
+      { $ref: '#/components/schemas/LatestFailureResult' },
+      { $ref: '#/components/schemas/LatestWorkerTimeoutResult' },
+    ],
+  };
+  document.components.schemas.MonitorHistoryPage = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['items', 'nextCursor'],
+    properties: {
+      items: {
+        type: 'array',
+        maxItems: 50,
+        items: { $ref: '#/components/schemas/MonitorHistoryEntry' },
+      },
+      nextCursor: {
+        type: ['string', 'null'],
+        minLength: 88,
+        maxLength: 88,
+        pattern: '^[A-Za-z0-9_-]{88}$',
+      },
+    },
+    allOf: [
+      {
+        if: { properties: { items: { maxItems: 0 } } },
+        then: { properties: { nextCursor: { const: null } } },
+      },
+    ],
+  };
   return document;
+}
+
+function historyOperation() {
+  const responses = {
+    '200': {
+      description: 'History page.',
+      content: {
+        'application/json': {
+          schema: { $ref: '#/components/schemas/MonitorHistoryPage' },
+        },
+      },
+    },
+    '400': problemResponse(),
+    '404': problemResponse(),
+    '500': problemResponse(),
+    '405': {
+      description: 'Method.',
+      headers: { Allow: { schema: { type: 'string', const: 'GET' } } },
+    },
+  };
+  for (const response of Object.values(responses)) {
+    response.headers = {
+      ...response.headers,
+      'Cache-Control': { schema: { type: 'string', const: 'no-store' } },
+    };
+  }
+  return {
+    operationId: 'getMonitorHistory',
+    'x-max-body-bytes': 245760,
+    parameters: [
+      {
+        name: 'monitorId',
+        in: 'path',
+        required: true,
+        schema: { type: 'string', format: 'uuid' },
+      },
+      {
+        name: 'limit',
+        in: 'query',
+        required: false,
+        schema: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
+      },
+      {
+        name: 'cursor',
+        in: 'query',
+        required: false,
+        schema: {
+          type: 'string',
+          minLength: 88,
+          maxLength: 88,
+          pattern: '^[A-Za-z0-9_-]{88}$',
+        },
+      },
+    ],
+    responses,
+  };
 }
 
 function deletionOperation() {
@@ -439,6 +557,25 @@ expectReject('delete has no extra method', d => { d.paths['/monitors/{monitorId}
 expectReject('deletePreservesExistingOperations', d => { delete d.paths['/monitors/{monitorId}'].delete; }, '/monitors/{monitorId} operations');
 expectFixtureReject('delete confirmed fixture must be empty', 'monitor-delete-confirmed.json', f => { f.removed = true; }, 'deletion confirmed fixture');
 expectFixtureReject('delete unknown fixture status fails', 'monitor-delete-unknown.json', f => { f.status = 500; }, 'deletion unknown fixture status');
+
+expectReject('historyOperationIsClosed', d => { d.components.schemas.MonitorHistoryPage.additionalProperties = true; }, 'MonitorHistoryPage.additionalProperties');
+expectReject('historyResponsesAreExact', d => { d.paths['/monitors/{monitorId}/history'].get.responses['204'] = {}; }, 'history responses');
+expectReject('historyQueryBoundsAreExact', d => { d.paths['/monitors/{monitorId}/history'].get.parameters[1].schema.maximum = 51; }, 'history limit');
+expectReject('history default limit is exact', d => { d.paths['/monitors/{monitorId}/history'].get.parameters[1].schema.default = 50; }, 'history limit');
+expectReject('history cursor schema is exact', d => { d.paths['/monitors/{monitorId}/history'].get.parameters[2].schema.maxLength = 89; }, 'history cursor');
+expectReject('history body budget is exact', d => { d.paths['/monitors/{monitorId}/history'].get['x-max-body-bytes'] = 262144; }, 'history body budget');
+expectReject('history method set is exact', d => { d.paths['/monitors/{monitorId}/history'].head = d.paths['/monitors/{monitorId}/history'].get; }, '/monitors/{monitorId}/history operations');
+expectReject('historyPreservesExistingOperations', d => { delete d.paths['/monitors/{monitorId}/history'].get; }, '/monitors/{monitorId}/history operations');
+expectReject('history no-store is required', d => { delete d.paths['/monitors/{monitorId}/history'].get.responses['500'].headers; }, 'history 500 Cache-Control');
+expectReject('history Allow is exact', d => { d.paths['/monitors/{monitorId}/history'].get.responses['405'].headers.Allow.schema.const = 'GET, POST'; }, 'history 405 Allow');
+expectReject('history status set is exact', d => { d.paths['/monitors/{monitorId}/history'].get.responses['404'] = problemResponse(); delete d.paths['/monitors/{monitorId}/history'].get.responses['404'].headers; }, 'history 404 Cache-Control');
+expectReject('history empty continuation schema', d => { delete d.components.schemas.MonitorHistoryPage.allOf; }, 'history empty continuation rule');
+expectReject('history item cap is exact', d => { d.components.schemas.MonitorHistoryPage.properties.items.maxItems = 51; }, 'history items cap');
+expectReject('history entry schema target fails', d => { d.components.schemas.MonitorHistoryPage.properties.items.items = { $ref: '#/components/schemas/Monitor' }; }, 'history item');
+expectFixtureReject('history empty cannot continue', 'monitor-history-empty.json', f => { f.nextCursor = 'A'.repeat(88); }, 'history empty continuation');
+expectFixtureReject('history duplicate check IDs rejected', 'monitor-history-page.json', f => { f.items.push({ ...f.items[0] }); }, 'history duplicate check ID');
+expectFixtureReject('history continuation names included key', 'monitor-history-page.json', f => { f.nextCursor = Buffer.from('2|2026-11-01T12:00:00.123456Z|aa29443e-c597-4e7b-9202-a4762e0e04c0').toString('base64url'); }, 'history continuation key');
+expectFixtureReject('history worker timeout cannot expose status', 'monitor-history-continuation.json', f => { f.items[0].resultKind = 'worker_timeout'; f.items[0].httpStatus = 204; delete f.items[0].durationMs; }, 'history worker timeout shape');
 
 expectReject('inventoryEnvelopeIsClosed', d => { d.components.schemas.MonitorInventoryPage.additionalProperties = true; }, 'MonitorInventoryPage.additionalProperties');
 expectReject('inventory nextCursor is required', d => { d.components.schemas.MonitorInventoryPage.required = ['items']; }, 'MonitorInventoryPage.required');

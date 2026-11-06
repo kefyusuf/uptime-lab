@@ -116,10 +116,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/monitors/{monitorId}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read bounded terminal check-run history
+         * @description Bounded terminal-only history page for one Monitor, ordered by terminal completion descending then CheckRun UUID descending. Default 20 and at most 50 rows. A cursor is a strict versioned ordering position, not an authorization or snapshot guarantee. Only optional limit and cursor query keys, each once in either order, are accepted. Reject noncanonical decimal limits, empty queries/values, duplicate or unknown keys, percent escapes, plus signs, semicolons, whitespace and query bodies. Raw queries are at most 128 ASCII bytes. HEAD is unsupported. All matched responses use no-store.
+         */
+        get: operations["getMonitorHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        MonitorHistoryEntry: components["schemas"]["LatestHTTPResponseResult"] | components["schemas"]["LatestFailureResult"] | components["schemas"]["LatestWorkerTimeoutResult"];
+        MonitorHistoryPage: {
+            items: components["schemas"]["MonitorHistoryEntry"][];
+            /** @description Last included key when more terminal rows exist, otherwise null. */
+            nextCursor: string | null;
+        } & unknown;
         MonitorScheduling: {
             /** @enum {string} */
             state: "active" | "paused";
@@ -737,6 +763,74 @@ export interface operations {
                 };
             };
             /** @description The server could not complete the request. */
+            500: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getMonitorHistory: {
+        parameters: {
+            query?: {
+                /** @description Canonical decimal integer without signs or leading zeroes. */
+                limit?: number;
+                /** @description Unpadded base64url of version2, persisted UTC microsecond terminal completion instant and nonzero canonical CheckRun UUID. No client time reconstruction. */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Stable monitor UUID. */
+                monitorId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded terminal history page; empty history is a successful empty page. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonitorHistoryPage"];
+                };
+            };
+            /** @description Invalid history request or cursor. */
+            400: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Monitor not found. */
+            404: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unsupported method; no response body. */
+            405: {
+                headers: {
+                    Allow?: "GET";
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description History persistence read failed. */
             500: {
                 headers: {
                     "Cache-Control"?: "no-store";

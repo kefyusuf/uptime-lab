@@ -14,6 +14,10 @@ const row = {
 };
 function client(): MonitorClient {
   return {
+    getHistory: vi.fn().mockResolvedValue({
+      kind: 'success',
+      data: { items: [], nextCursor: null },
+    }),
     getScheduling: vi.fn(),
     setScheduling: vi.fn(),
     listMonitors: vi.fn(),

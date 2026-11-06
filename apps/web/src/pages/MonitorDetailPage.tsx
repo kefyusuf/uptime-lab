@@ -8,6 +8,7 @@ import {
 import { useMonitorReads } from '../features/refresh-monitor';
 import { MonitorSchedulingControl } from '../features/set-monitor-scheduling';
 import { DeleteMonitorControl } from '../features/delete-monitor';
+import { MonitorHistorySection } from '../features/monitor-history';
 export function MonitorDetailPage({
   id,
   client,
@@ -77,6 +78,7 @@ export function MonitorDetailPage({
       {schedulingID === id && reads.monitor.kind !== 'error' && (
         <>
           <MonitorSchedulingControl key={id} id={id} client={client} />
+          <MonitorHistorySection key={id} id={id} client={client} />
           <DeleteMonitorControl
             key={id}
             id={id}

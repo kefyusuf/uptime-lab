@@ -266,6 +266,10 @@ Docker:
 
 A claimed CheckRun whose Monitor is deleted during the claim loses its row with the Monitor. A later completion attempt observes the existing not-found mapping — `404 "The check run was not found."`, with 409 reserved for terminal-row conflicts — and the unchanged Rust worker maps any 4xx submit to a final non-retried `result_delivery_failed` delivery before continuing its loop. The deletion suite's gated interleaving evidence covers the claimed-then-deleted ordering against real PostgreSQL.
 
+## History read boundary
+
+The bounded history read is a Go-owned page over durable terminal rows; the Rust Checker's claim/completion behavior is unaffected, and pending runs stay invisible to history exactly as they are to the latest-result read. The deletion landing's completion-conflict mapping (unknown CheckRun completes as 404 not-found) is unchanged.
+
 ## Non-Claims
 
 This evidence does not claim:

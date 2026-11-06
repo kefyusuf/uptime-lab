@@ -37,6 +37,10 @@ type deleteMonitor interface {
 	Execute(context.Context, domain.MonitorID) error
 }
 
+type getMonitorHistory interface {
+	Execute(context.Context, domain.MonitorID, application.HistoryInput) (application.HistoryCandidates, error)
+}
+
 // Handler adapts the public Monitoring HTTP contract to the existing application use cases.
 type Handler struct {
 	register        registerMonitor
@@ -47,6 +51,7 @@ type Handler struct {
 	getScheduling   getMonitorScheduling
 	setScheduling   setMonitorScheduling
 	deletion        deleteMonitor
+	history         getMonitorHistory
 }
 
 // NewHandler constructs the isolated public Monitoring HTTP adapter.
@@ -100,6 +105,10 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		handler.serveLatestResult(writer, request, rawID)
 		return
 	}
+	if rawID, ok := historyMonitorIDPathSegment(request.URL.Path); ok && handler.history != nil {
+		handler.serveHistory(writer, request, rawID)
+		return
+	}
 
 	if rawID, ok := monitorIDPathSegment(request.URL.Path); ok {
 		if handler.deletion != nil {
@@ -116,6 +125,13 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 			return
 		}
 	}
+	// Recognize history aliases only to reject their original raw target.
+	if handler.history != nil {
+		if rawID, ok := historyMonitorIDPathSegment(path.Clean(strings.ReplaceAll(request.URL.Path, "\\", "/"))); ok {
+			handler.serveHistory(writer, request, rawID)
+			return
+		}
+	}
 
 	http.NotFound(writer, request)
 }
@@ -124,6 +140,13 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 func NewHandlerWithDeletion(register registerMonitor, get getMonitor, latest getLatestCheckResult, availability getMonitorAvailability, list listMonitors, schedulingGet getMonitorScheduling, schedulingSet setMonitorScheduling, deletion deleteMonitor) *Handler {
 	handler := NewHandlerWithScheduling(register, get, latest, availability, list, schedulingGet, schedulingSet)
 	handler.deletion = deletion
+	return handler
+}
+
+// NewHandlerWithHistory adds the bounded terminal-history read capability.
+func NewHandlerWithHistory(register registerMonitor, get getMonitor, latest getLatestCheckResult, availability getMonitorAvailability, list listMonitors, schedulingGet getMonitorScheduling, schedulingSet setMonitorScheduling, deletion deleteMonitor, history getMonitorHistory) *Handler {
+	handler := NewHandlerWithDeletion(register, get, latest, availability, list, schedulingGet, schedulingSet, deletion)
+	handler.history = history
 	return handler
 }
 

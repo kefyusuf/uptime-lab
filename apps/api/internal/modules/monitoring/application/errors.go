@@ -5,6 +5,8 @@ import "errors"
 var (
 	// ErrInvalidInventoryQuery is the stable invalid inventory input result.
 	ErrInvalidInventoryQuery = errors.New("invalid monitor inventory query")
+	// ErrInvalidHistoryQuery is the stable invalid history input result.
+	ErrInvalidHistoryQuery = errors.New("invalid monitor history query")
 	// ErrAvailabilityEvaluation is the stable invalid assessment or clock failure.
 	ErrAvailabilityEvaluation = errors.New("availability evaluation failed")
 	// ErrMonitorNotFound is the stable application-level not-found result.

@@ -103,10 +103,10 @@ func composeMonitoring(pool *pgxpool.Pool) (http.Handler, *migrations.Compatibil
 	}
 
 	repository := monitoringpostgres.NewRepository(pool)
-	publicModule := monitoring.NewModuleWithDeletion(repository, repository, repository, newMonitorID, productionClock, repository, repository)
+	publicModule := monitoring.NewModuleWithHistory(repository, repository, repository, newMonitorID, productionClock, repository, repository, repository)
 	executionModule := monitoring.NewExecutionModule(repository, newCheckID, productionClock)
 
-	publicHandler := monitoringhttp.NewHandlerWithDeletion(
+	publicHandler := monitoringhttp.NewHandlerWithHistory(
 		publicModule.RegisterMonitor,
 		publicModule.GetMonitor,
 		publicModule.GetLatestCheckResult,
@@ -115,6 +115,7 @@ func composeMonitoring(pool *pgxpool.Pool) (http.Handler, *migrations.Compatibil
 		publicModule.GetMonitorScheduling,
 		publicModule.SetMonitorScheduling,
 		publicModule.DeleteMonitor,
+		publicModule.GetMonitorHistory,
 	)
 	internalHandler := checkerhttp.NewHandler(
 		executionModule.ClaimDueCheck,

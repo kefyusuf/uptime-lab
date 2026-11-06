@@ -10,6 +10,10 @@ const monitor = {
   createdAt: '2026-10-02T12:00:00Z',
 };
 const client: MonitorClient = {
+  getHistory: vi.fn().mockResolvedValue({
+    kind: 'success',
+    data: { items: [], nextCursor: null },
+  }),
   getScheduling: vi
     .fn()
     .mockResolvedValue({ kind: 'success', data: { state: 'active' } }),

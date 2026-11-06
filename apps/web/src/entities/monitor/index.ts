@@ -5,6 +5,7 @@ export type {
   LatestResult,
   Monitor,
   MonitorInventoryPage,
+  MonitorHistoryPage,
   ClientError,
   ReadResult,
   CreateOutcome,

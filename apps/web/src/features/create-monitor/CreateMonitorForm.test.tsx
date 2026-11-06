@@ -13,6 +13,10 @@ const monitor = {
   createdAt: '2026-10-02T12:00:00Z',
 };
 const client = (create: MonitorClient['createMonitor']): MonitorClient => ({
+  getHistory: vi.fn().mockResolvedValue({
+    kind: 'success',
+    data: { items: [], nextCursor: null },
+  }),
   getScheduling: vi.fn(),
   setScheduling: vi.fn(),
   deleteMonitor: vi.fn().mockResolvedValue({ kind: 'deleted' }),
