@@ -125,7 +125,7 @@ export interface paths {
         };
         /**
          * Read bounded terminal check-run history
-         * @description Bounded terminal-only history page for one Monitor, ordered by terminal completion descending then CheckRun UUID descending. Default 20 and at most 50 rows. A cursor is a strict versioned ordering position, not an authorization or snapshot guarantee. Only optional limit and cursor query keys, each once in either order, are accepted. Reject noncanonical decimal limits, empty queries/values, duplicate or unknown keys, percent escapes, plus signs, semicolons, whitespace and query bodies. Raw queries are at most 128 ASCII bytes. HEAD is unsupported. All matched responses use no-store.
+         * @description Bounded terminal-only history page for one Monitor, ordered by terminal completion descending then CheckRun UUID descending. Default 20 and at most 50 rows. A cursor is a strict versioned ordering position, not an authorization or snapshot guarantee. Only optional limit and cursor query keys, each once in either order, are accepted. Reject noncanonical decimal limits, empty queries/values, duplicate or unknown keys, percent escapes, plus signs, semicolons, whitespace and query bodies. Raw queries are at most 128 ASCII bytes. HEAD is unsupported. All matched responses use no-store. The retained window keeps the newest 50 terminal rows per Monitor, so older terminal rows disappear over time and cursors anchored on removed rows continue with strictly older rows or an empty page.
          */
         get: operations["getMonitorHistory"];
         put?: never;
