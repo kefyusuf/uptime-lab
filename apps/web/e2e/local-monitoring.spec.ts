@@ -271,6 +271,53 @@ test('built local monitor journey', async ({ page, request }) => {
       saved.deletion!.inventoryExcludes = true;
       writeFileSync(artifact, JSON.stringify(saved));
     }
+  } else if (process.env.WEB_BROWSER_PHASE === 'history') {
+    const saved = JSON.parse(readFileSync(artifact, 'utf8')) as {
+      history?: Record<string, unknown>;
+    };
+    const historyMonitorId = (saved.history as { monitorId: string }).monitorId;
+    await page.goto('/monitors/' + historyMonitorId);
+    await expect(page.getByTestId('history-list')).toBeVisible();
+    const firstIds = await page
+      .getByTestId('history-entry')
+      .evaluateAll((elements) =>
+        elements.map((element) => element.getAttribute('data-check-id')),
+      );
+    const times = await page
+      .getByTestId('history-entry')
+      .evaluateAll((elements) =>
+        elements.map((element) =>
+          element.querySelector('time')?.getAttribute('datetime'),
+        ),
+      );
+    const orderConfirmed = times.every(
+      (value, index) => index === 0 || value! <= times[index - 1]!,
+    );
+    await page.getByRole('button', { name: 'Next history page' }).click();
+    await page.waitForFunction(
+      (previous) =>
+        document
+          .querySelector('[data-testid="history-entry"]')
+          ?.getAttribute('data-check-id') !== previous,
+      firstIds[0],
+    );
+    const secondIds = await page
+      .getByTestId('history-entry')
+      .evaluateAll((elements) =>
+        elements.map((element) => element.getAttribute('data-check-id')),
+      );
+    writeFileSync(
+      artifact,
+      JSON.stringify({
+        ...saved,
+        history: {
+          ...saved.history,
+          firstPageIds: firstIds,
+          secondPageIds: secondIds,
+          orderConfirmed,
+        },
+      }),
+    );
   } else throw new Error('Unknown browser phase.');
   expect(errors).toEqual([]);
 });

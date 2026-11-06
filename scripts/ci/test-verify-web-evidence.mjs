@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { verifyEvidence, verifyInventoryEvidence, verifySchedulingEvidence, verifyDeletionEvidence } from "./verify-web-evidence.mjs";
+import { verifyEvidence, verifyInventoryEvidence, verifySchedulingEvidence, verifyDeletionEvidence, verifyHistoryEvidence } from "./verify-web-evidence.mjs";
 const id = "aa29443e-c597-4e7b-9202-a4762e0e04c0",
   a = "bb29443e-c597-4e7b-9202-a4762e0e04c0",
   b = "cc29443e-c597-4e7b-9202-a4762e0e04c0";
@@ -61,6 +61,23 @@ for(const mutation of [
 test('deletion rejects orphan durable rows and surviving monitor',()=>{
  assert.throws(()=>verifyDeletionEvidence(deletionCapture,[{id:claimedRun,monitor_id:deletedMonitor}],[]));
  assert.throws(()=>verifyDeletionEvidence(deletionCapture,[],[{id:deletedMonitor,target_url:'http://web/'}]));
+});
+const historyMonitor='018f22d3-1d6a-7cc0-a37b-46fc3fafd501';
+const historyIds=Array.from({length:25},(_,i)=>`7d9b2eb0-52bb-4dd7-8934-c5ce30d5c${(0x800+i).toString(16).padStart(3,'0')}`);
+const historyRows=historyIds.map((id,index)=>({id,completed_at:`2026-11-01T12:00:${String(25-index).padStart(2,'0')}.000000+00:00`}));
+const historyCapture={...inventoryCapture,history:{monitorId:historyMonitor,firstPageIds:historyIds.slice(0,20),secondPageIds:historyIds.slice(20),orderConfirmed:true,readsAfterRestart:{history:200},restarts:{api:{beforeStartedAt:'2026-11-01T12:00:00.123456789Z',afterStartedAt:'2026-11-01T12:00:00.123456790Z'}}}};
+test('history links durable pages in durable order',()=>assert.doesNotThrow(()=>verifyHistoryEvidence(historyCapture,historyRows)));
+for(const mutation of [
+ c=>{delete c.history},c=>{delete c.history.restarts},
+ c=>{c.history.monitorId=id},c=>{c.history.monitorId='invalid'},
+ c=>{c.history.firstPageIds=[]},c=>{c.history.firstPageIds.reverse()},
+ c=>{c.history.firstPageIds[0]=claimedRun},
+ c=>{c.history.secondPageIds=[]},c=>{c.history.orderConfirmed=false},
+ c=>{c.history.readsAfterRestart.history=404},c=>{c.history.restarts.api.afterStartedAt=c.history.restarts.api.beforeStartedAt},c=>{c.history.extra=true},
+])test('history rejects mutated acceptance evidence '+mutation.toString(),()=>{const mutated=structuredClone(historyCapture);mutation(mutated);assert.throws(()=>verifyHistoryEvidence(mutated,historyRows))});
+test('history rejects broken durable linkage',()=>{
+ assert.throws(()=>verifyHistoryEvidence(historyCapture,historyRows.slice(1)));
+ assert.throws(()=>verifyHistoryEvidence(historyCapture,[]));
 });
 test('inventory captures match their durable Monitor rows',()=>assert.doesNotThrow(()=>verifyInventoryEvidence(inventoryCapture,monitors)));
 for(const field of ['id','target_url']) test(`inventory rejects wrong ${field}`,()=>{

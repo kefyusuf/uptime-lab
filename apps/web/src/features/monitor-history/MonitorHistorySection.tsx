@@ -26,7 +26,11 @@ export function MonitorHistorySection({
       {ready && state.data.items.length > 0 && (
         <ul data-testid="history-list">
           {state.data.items.map((entry) => (
-            <li key={entry.checkId} data-testid="history-entry">
+            <li
+              key={entry.checkId}
+              data-testid="history-entry"
+              data-check-id={entry.checkId}
+            >
               <span data-testid="history-kind">{entry.resultKind}</span>{' '}
               <UtcTime value={entry.completedAt} label="Completion time" />
             </li>

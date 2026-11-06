@@ -113,5 +113,24 @@ compose exec -T db sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POST
 DELETION_MON_SQL="$(deletion sql-monitor)"
 compose exec -T db sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"' sh "$DELETION_MON_SQL" > "$WORK/deletion-monitors.json"
 deletion record-final "$WORK/deletion-rows.json"
-node "$ROOT/scripts/ci/verify-web-evidence.mjs" "$WEB_BROWSER_ARTIFACT" "$WORK/rows.json" "$WORK/monitors.json" "$WORK/deletion-rows.json" "$WORK/deletion-monitors.json"
+# History journey: a dedicated paused fixture Monitor with 25 backfilled
+# terminal rows is paged through the real browser control across an API restart.
+HISTORY_ID="$(sql "INSERT INTO monitoring.monitors (id,target_url,created_at,paused) VALUES (gen_random_uuid(),'http://web/',now() - interval '2 hours',true) RETURNING id::text;" | head -1 | tr -d '
+')"
+history() { node "$ROOT/scripts/ci/web-history-evidence.mjs" "$1" "$WEB_BROWSER_ARTIFACT" "${@:2}"; }
+history record-monitor "$HISTORY_ID"
+sql "INSERT INTO monitoring.check_runs (id, monitor_id, issued_at, deadline_at, completed_at, result_kind) SELECT gen_random_uuid(), '$HISTORY_ID', now() - (i || ' minutes')::interval, now() - (i || ' minutes')::interval + interval '10 seconds', now() - (i || ' minutes')::interval, 'worker_timeout' FROM generate_series(1,25) AS i;" >/dev/null
+sql "UPDATE monitoring.monitors SET paused=true WHERE id='$HISTORY_ID';" >/dev/null
+browser history
+API_CONTAINER="$(compose ps -q api)"
+history restart api before "$("$DOCKER_BIN" inspect --format '{{.State.StartedAt}}' "$API_CONTAINER")"
+compose restart api
+compose up -d --wait --wait-timeout 60 api
+history restart api after "$("$DOCKER_BIN" inspect --format '{{.State.StartedAt}}' "$(compose ps -q api)")"
+HISTORY_READS="$(compose exec -T web node --input-type=module -e 'const id=process.argv[1];const r=await fetch("http://api:8080/monitors/"+id+"/history?limit=20");console.log(JSON.stringify({history:r.status}));' "$HISTORY_ID")"
+printf '%s' "$HISTORY_READS" > "$WORK/history-reads.json"
+history record-reads "$WORK/history-reads.json"
+HISTORY_ROWS_SQL="$(history sql-rows)"
+compose exec -T db sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"' sh "$HISTORY_ROWS_SQL" > "$WORK/history-rows.json"
+node "$ROOT/scripts/ci/verify-web-evidence.mjs" "$WEB_BROWSER_ARTIFACT" "$WORK/rows.json" "$WORK/monitors.json" "$WORK/deletion-rows.json" "$WORK/deletion-monitors.json" "$WORK/history-rows.json"
 printf 'Real browser/Go/Checker/PostgreSQL journey passed on loopback port %s\n' "$UPTIME_LAB_WEB_PORT"

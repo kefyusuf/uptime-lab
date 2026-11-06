@@ -83,6 +83,26 @@ export function verifyDeletionEvidence(capture, rows, monitors) {
   if(rows.some(row=>row.monitor_id===value.monitorId||row.id===value.monitorId))throw Error('Orphan durable CheckRun survived deletion');
   if(monitors.some(row=>row.id===value.monitorId))throw Error('Deleted Monitor row survived');
 }
+export function verifyHistoryEvidence(capture, rows) {
+  const uuid=value=>typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value)&&value!=='00000000-0000-0000-0000-000000000000';
+  const closed=(value,keys)=>value!==null&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key));
+  const value=capture?.history;
+  if(!closed(value,['monitorId','firstPageIds','secondPageIds','orderConfirmed','readsAfterRestart','restarts']) || !uuid(value.monitorId) || value.monitorId===capture.id)throw Error('Invalid history evidence');
+  for(const ids of [value.firstPageIds,value.secondPageIds])if(!Array.isArray(ids)||!ids.every(uuid)||new Set(ids).size!==ids.length)throw Error('Invalid history CheckRun IDs');
+  if(value.firstPageIds.length!==20||value.secondPageIds.length===0)throw Error('History pages must be 20 newest rows plus a real continuation');
+  if(value.orderConfirmed!==true)throw Error('History order was not confirmed');
+  const reads=closed(value.readsAfterRestart,['history'])?Object.values(value.readsAfterRestart):null;
+  if(!reads||reads.length!==1||reads[0]!==200)throw Error('Restarted history read must be 200');
+  if(!closed(value.restarts,['api']))throw Error('Missing history restart checkpoints');
+  const restart=value.restarts.api;
+  if(!closed(restart,['beforeStartedAt','afterStartedAt']))throw Error('Invalid history restart checkpoint');
+  for(const time of Object.values(restart))if(typeof time!=='string'||!/^[^T]+T[0-9:.]+Z$/.test(time))throw Error('Invalid restart UTC time');
+  if(instant(restart.afterStartedAt)<=instant(restart.beforeStartedAt))throw Error('Restart timestamp did not advance');
+  if(!Array.isArray(rows)||rows.length!==25)throw Error('Durable history rows must back the captured pages');
+  const ordered=[...rows].sort((a,b)=>{const delta=instant(b.completed_at)-instant(a.completed_at);return delta===0n?(a.id<b.id?1:a.id>b.id?-1:0):delta>0n?1:-1;});
+  const durableIds=ordered.map(row=>row.id);
+  if(JSON.stringify(value.firstPageIds)!==JSON.stringify(durableIds.slice(0,20))||JSON.stringify(value.secondPageIds)!==JSON.stringify(durableIds.slice(20)))throw Error('Durable history page linkage mismatch');
+}
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
@@ -94,7 +114,8 @@ if (
   verifyInventoryEvidence(JSON.parse(readFileSync(process.argv[2],"utf8")),JSON.parse(readFileSync(process.argv[4],"utf8")));
   verifySchedulingEvidence(JSON.parse(readFileSync(process.argv[2],"utf8")),JSON.parse(readFileSync(process.argv[3],"utf8")),JSON.parse(readFileSync(process.argv[4],"utf8")));
   verifyDeletionEvidence(JSON.parse(readFileSync(process.argv[2],"utf8")),JSON.parse(readFileSync(process.argv[5],"utf8")),JSON.parse(readFileSync(process.argv[6],"utf8")));
+  verifyHistoryEvidence(JSON.parse(readFileSync(process.argv[2],"utf8")),JSON.parse(readFileSync(process.argv[7],"utf8")));
   console.log(
-    "Independent browser snapshots, inventory IDs, scheduling and deletion evidence match durable rows.",
+    "Independent browser snapshots, inventory IDs, scheduling, deletion and history evidence match durable rows.",
   );
 }

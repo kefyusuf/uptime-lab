@@ -24,6 +24,10 @@ The container runs as `10001:10001` with read-only storage and compiled assets/s
 
 The detail page composes a `features/delete-monitor` control only while the Monitor is known. Deleting requires an explicit confirmation step ("Delete monitor" reveals "Delete permanently" / "Cancel"), runs one mutation at a time, never retries automatically, and treats a valid `204` and a known `404` alike as deleted. Transport or 5xx failures show an uncertain outcome with an explicit "Refresh monitor state" resolution: a follow-up read returning 404 resolves the uncertainty as deleted, a 200 as not deleted. A confirmed deletion navigates back to the start page, where the inventory no longer lists the Monitor.
 
+## Detail history section
+
+The detail page composes a `features/monitor-history` section only while the Monitor is known. It reads one bounded terminal-only history page on Monitor success, with explicit Refresh and Next-page traversal mirroring the inventory start-page behaviour: one in-flight read, stale responses fenced after navigation or refresh, no polling, and no coupling to the scheduling or deletion controls. Rows render the existing result vocabulary with UTC completion instants; an empty history renders as a successful empty page, distinct from a read error.
+
 ## Inventory on the start page
 
 A newly mounted start page loads one20-row inventory page. Next replaces it; Refresh returns to the first page; Retry uses the attempted cursor. Pending reads clear old rows and abort/generation guards suppress stale completions. Exact targets wrap as escaped text without outbound links. The decoder checks the existing string field and preserves Go-accepted text without imposing WHATWG URL policy. ID, UTC creation time and native local detail links remain usable by keyboard and modified clicks. List rows make no health/detail requests.
