@@ -342,6 +342,12 @@ function historyOperation() {
     'x-max-body-bytes': 245760,
     parameters: [
       {
+        name: 'monitorId',
+        in: 'path',
+        required: true,
+        schema: { type: 'string', format: 'uuid' },
+      },
+      {
         name: 'limit',
         in: 'query',
         required: false,
@@ -554,9 +560,9 @@ expectFixtureReject('delete unknown fixture status fails', 'monitor-delete-unkno
 
 expectReject('historyOperationIsClosed', d => { d.components.schemas.MonitorHistoryPage.additionalProperties = true; }, 'MonitorHistoryPage.additionalProperties');
 expectReject('historyResponsesAreExact', d => { d.paths['/monitors/{monitorId}/history'].get.responses['204'] = {}; }, 'history responses');
-expectReject('historyQueryBoundsAreExact', d => { d.paths['/monitors/{monitorId}/history'].get.parameters[0].schema.maximum = 51; }, 'history limit');
-expectReject('history default limit is exact', d => { d.paths['/monitors/{monitorId}/history'].get.parameters[0].schema.default = 50; }, 'history limit');
-expectReject('history cursor schema is exact', d => { d.paths['/monitors/{monitorId}/history'].get.parameters[1].schema.maxLength = 89; }, 'history cursor');
+expectReject('historyQueryBoundsAreExact', d => { d.paths['/monitors/{monitorId}/history'].get.parameters[1].schema.maximum = 51; }, 'history limit');
+expectReject('history default limit is exact', d => { d.paths['/monitors/{monitorId}/history'].get.parameters[1].schema.default = 50; }, 'history limit');
+expectReject('history cursor schema is exact', d => { d.paths['/monitors/{monitorId}/history'].get.parameters[2].schema.maxLength = 89; }, 'history cursor');
 expectReject('history body budget is exact', d => { d.paths['/monitors/{monitorId}/history'].get['x-max-body-bytes'] = 262144; }, 'history body budget');
 expectReject('history method set is exact', d => { d.paths['/monitors/{monitorId}/history'].head = d.paths['/monitors/{monitorId}/history'].get; }, '/monitors/{monitorId}/history operations');
 expectReject('historyPreservesExistingOperations', d => { delete d.paths['/monitors/{monitorId}/history'].get; }, '/monitors/{monitorId}/history operations');

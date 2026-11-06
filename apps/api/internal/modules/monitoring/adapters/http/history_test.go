@@ -31,11 +31,11 @@ func historyTestInstant() time.Time {
 }
 
 type getMonitorHistoryStub struct {
-	calls     int
-	gotInput  application.HistoryInput
-	gotID     domain.MonitorID
-	page      application.HistoryCandidates
-	err       error
+	calls    int
+	gotInput application.HistoryInput
+	gotID    domain.MonitorID
+	page     application.HistoryCandidates
+	err      error
 }
 
 func (stub *getMonitorHistoryStub) Execute(_ context.Context, id domain.MonitorID, input application.HistoryInput) (application.HistoryCandidates, error) {
@@ -193,8 +193,8 @@ func TestHistoryPageResponseShape(t *testing.T) {
 		t.Fatalf("latest-result mapping error = %v", entryErr)
 	}
 	stub := &getMonitorHistoryStub{page: application.HistoryCandidates{
-		Items:   []application.LatestCheckResult{entry},
-		Limit:   20,
+		Items: []application.LatestCheckResult{entry},
+		Limit: 20,
 	}}
 	recorder := httptest.NewRecorder()
 	historyTestHandler(stub).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, historyTestPath, nil))

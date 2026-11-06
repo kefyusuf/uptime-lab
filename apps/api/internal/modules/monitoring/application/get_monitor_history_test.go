@@ -40,10 +40,10 @@ func TestGetMonitorHistoryRejectsInvalidInputBeforeRepository(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		name   string
+		name    string
 		monitor domain.MonitorID
-		limit  int
-		cursor string
+		limit   int
+		cursor  string
 	}{
 		{name: "zero monitor", monitor: domain.MonitorID{}, limit: 20},
 		{name: "zero limit", monitor: id, limit: 0},

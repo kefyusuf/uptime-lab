@@ -510,8 +510,11 @@ function validateHistory(document, repositoryRoot) {
   assert(isObject(operation) && operation.operationId === 'getMonitorHistory', 'history operationId must be getMonitorHistory');
   assertNoOperationSecurityOrServers(operation, 'history');
   assert(operation['x-max-body-bytes'] === 245760, 'history body budget must be 245760');
-  assert(Array.isArray(operation.parameters) && operation.parameters.length === 2, 'history requires limit/cursor parameters');
-  const [limit, cursor] = operation.parameters;
+  assert(Array.isArray(operation.parameters) && operation.parameters.length === 3, 'history requires monitorId/limit/cursor parameters');
+  const monitorIdParameter = operation.parameters[0];
+  assert(monitorIdParameter.name === 'monitorId' && monitorIdParameter.in === 'path' && monitorIdParameter.required === true, 'history monitorId must be a required path parameter');
+  assertStringFormat(monitorIdParameter.schema, 'uuid', 'history monitorId');
+  const [limit, cursor] = [operation.parameters[1], operation.parameters[2]];
   assert(limit.name === 'limit' && limit.in === 'query' && limit.required === false, 'history limit parameter');
   assertIntegerRange(limit.schema, 1, 50, 'history limit');
   assert(limit.schema.default === 20, 'history limit default must be 20');

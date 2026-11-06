@@ -783,7 +783,10 @@ export interface operations {
                 cursor?: string;
             };
             header?: never;
-            path?: never;
+            path: {
+                /** @description Stable monitor UUID. */
+                monitorId: string;
+            };
             cookie?: never;
         };
         requestBody?: never;

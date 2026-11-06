@@ -426,6 +426,13 @@ paths:
         All matched responses use no-store.
       x-max-body-bytes: 245760
       parameters:
+        - name: monitorId
+          in: path
+          required: true
+          description: Stable monitor UUID.
+          schema:
+            type: string
+            format: uuid
         - name: limit
           in: query
           required: false
