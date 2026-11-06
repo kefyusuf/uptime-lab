@@ -37,8 +37,9 @@ it('never proxies an internal or unknown API path', () => {
     status: 404,
   });
   expect(matchApiRoute('/api/monitors/id/history', 'GET')).toEqual({
-    kind: 'reject',
-    status: 404,
+    kind: 'forward',
+    method: 'GET',
+    path: '/monitors/id/history',
   });
   expect(matchApiRoute('/internal/checks/claim', 'POST')).toEqual({
     kind: 'not_api',
@@ -94,6 +95,74 @@ it.each([
   '/api/monitors/id/scheduling?state=paused',
 ])('rejects scheduling query %s', (target) => {
   expect(matchApiRoute(target, 'PUT')).toEqual({ kind: 'reject', status: 400 });
+});
+it('maps monitor history beside the other reads', () => {
+  expect(matchApiRoute('/api/monitors/id/history', 'GET')).toEqual({
+    kind: 'forward',
+    method: 'GET',
+    path: '/monitors/id/history',
+  });
+  expect(matchApiRoute('/api/monitors/id/history?limit=7', 'GET')).toEqual({
+    kind: 'forward',
+    method: 'GET',
+    path: '/monitors/id/history?limit=7',
+  });
+  const cursor = Buffer.from(
+    '2|2026-11-01T12:00:00.123456Z|7d9b2eb0-52bb-4dd7-8934-c5ce30d5c675',
+  ).toString('base64url');
+  expect(
+    matchApiRoute('/api/monitors/id/history?cursor=' + cursor, 'GET'),
+  ).toEqual({
+    kind: 'forward',
+    method: 'GET',
+    path: '/monitors/id/history?cursor=' + cursor,
+  });
+  expect(
+    matchApiRoute('/api/monitors/id/history?limit=7&cursor=' + cursor, 'GET'),
+  ).toEqual({
+    kind: 'forward',
+    method: 'GET',
+    path: '/monitors/id/history?limit=7&cursor=' + cursor,
+  });
+});
+it('keeps history query grammar strict', () => {
+  const cursor = 'A'.repeat(88);
+  for (const bad of [
+    '/api/monitors/id/history?limit=0',
+    '/api/monitors/id/history?limit=51',
+    '/api/monitors/id/history?limit=abc',
+    '/api/monitors/id/history?unknown=1',
+    '/api/monitors/id/history?limit=7&limit=7',
+    '/api/monitors/id/history?cursor=' + cursor + '&cursor=' + cursor,
+    '/api/monitors/id/history?cursor=' + 'B'.repeat(129),
+  ]) {
+    expect(matchApiRoute(bad, 'GET')).toEqual({ kind: 'reject', status: 400 });
+  }
+  expect(matchApiRoute('/api/monitors/id?limit=7', 'GET')).toEqual({
+    kind: 'reject',
+    status: 400,
+  });
+  expect(
+    matchApiRoute('/api/monitors/id/latest-result?limit=7', 'GET'),
+  ).toEqual({
+    kind: 'reject',
+    status: 400,
+  });
+});
+it('keeps history verbs and internal routes closed', () => {
+  expect(matchApiRoute('/api/monitors/id/history', 'POST')).toEqual({
+    kind: 'reject',
+    status: 405,
+    allow: 'GET',
+  });
+  expect(matchApiRoute('/api/internal/checks/claim', 'GET')).toEqual({
+    kind: 'reject',
+    status: 404,
+  });
+  expect(matchApiRoute('/api/monitors/id/history/extra', 'GET')).toEqual({
+    kind: 'reject',
+    status: 404,
+  });
 });
 it('maps monitor deletion beside get', () => {
   expect(matchApiRoute('/api/monitors/id', 'DELETE')).toEqual({
@@ -155,6 +224,7 @@ it('keeps internal and unknown routes closed to delete', () => {
   });
   expect(matchApiRoute('/api/monitors/id/history', 'DELETE')).toEqual({
     kind: 'reject',
-    status: 404,
+    status: 405,
+    allow: 'GET',
   });
 });

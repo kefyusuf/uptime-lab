@@ -16,13 +16,7 @@ export function matchApiRoute(
     rawPath.split('/').some((segment) => segment === '.' || segment === '..')
   )
     return { kind: 'reject', status: 400 };
-  if (
-    queryAt !== -1 &&
-    (rawPath !== '/api/monitors' ||
-      method !== 'GET' ||
-      queryAt === rawTarget.length - 1 ||
-      !validateInventoryQuery(rawTarget.slice(queryAt + 1)))
-  )
+  if (queryAt !== -1 && !validQueryFor(rawPath, method, rawTarget, queryAt))
     return { kind: 'reject', status: 400 };
   if (rawPath === '/api/monitors') {
     if (method !== 'GET' && method !== 'POST')
@@ -43,8 +37,8 @@ export function matchApiRoute(
     return { kind: 'forward', path: rawTarget.slice(4), method };
   }
   const allowed =
-    /^\/api\/monitors\/[A-Za-z0-9-]+\/(?:latest-result|availability)$/.test(
-      rawTarget,
+    /^\/api\/monitors\/[A-Za-z0-9-]+\/(?:latest-result|availability|history)$/.test(
+      rawPath,
     )
       ? 'GET'
       : null;
@@ -52,4 +46,27 @@ export function matchApiRoute(
   if (method !== allowed)
     return { kind: 'reject', status: 405, allow: allowed };
   return { kind: 'forward', path: rawTarget.slice(4), method: allowed };
+}
+
+function validQueryFor(
+  rawPath: string,
+  method: string,
+  rawTarget: string,
+  queryAt: number,
+): boolean {
+  if (queryAt === rawTarget.length - 1) return false;
+  const query = rawTarget.slice(queryAt + 1);
+  if (
+    rawPath === '/api/monitors' &&
+    method === 'GET' &&
+    validateInventoryQuery(query)
+  )
+    return true;
+  if (
+    /^\/api\/monitors\/[A-Za-z0-9-]+\/history$/.test(rawPath) &&
+    method === 'GET' &&
+    validateInventoryQuery(query)
+  )
+    return true;
+  return false;
 }
