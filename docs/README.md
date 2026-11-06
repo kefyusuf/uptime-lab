@@ -33,6 +33,7 @@ Design/spec/plan documents preserve the decision history for the phase in which 
 - [Local Monitor Delete implementation plan](superpowers/plans/2026-10-27-local-monitor-delete.md): historical seven-task Native TDD plan executed through feature PR #69; the delete-side tracer gate was realized as a claim-side gate plus pg_locks observation, recorded in the feature PR. Remaining finish gates: fresh whole-branch review and final CI.
 - [Local Check-Run History scope](superpowers/specs/2026-11-01-local-check-run-history-scope-reassessment.md): proposed next R2 increment; bounded terminal-only keyset-paginated check-run history read on the detail page, mirroring inventory cursor/budget conventions. Scope-stage proposal only; design and implementation are not authorized.
 - [Local Check-Run History design](superpowers/specs/2026-11-01-local-check-run-history-design.md): version-2 keyset cursor, existence-probe-plus-page Read Committed transaction over the existing terminal index, ninth public operation with inventory-mirrored query grammar and budget, and a detail-page history section; awaiting design review.
+- [Local Check-Run History implementation plan](superpowers/plans/2026-11-01-local-check-run-history.md): seven dependent TDD tasks with exact interfaces, real-PostgreSQL paging/tie-break/atomicity acceptance and browser/restart evidence; awaiting plan review before Native execution.
 
 ## Implemented Runtime
 
