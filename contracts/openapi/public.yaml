@@ -410,8 +410,117 @@ paths:
           <<: *schedulingInvalid
           description: The server could not complete the request.
         '405': *schedulingMethod
+  /monitors/{monitorId}/history:
+    get:
+      operationId: getMonitorHistory
+      summary: Read bounded terminal check-run history
+      description: >
+        Bounded terminal-only history page for one Monitor, ordered by terminal
+        completion descending then CheckRun UUID descending. Default 20 and at
+        most 50 rows. A cursor is a strict versioned ordering position, not an
+        authorization or snapshot guarantee. Only optional limit and cursor
+        query keys, each once in either order, are accepted. Reject
+        noncanonical decimal limits, empty queries/values, duplicate or unknown
+        keys, percent escapes, plus signs, semicolons, whitespace and query
+        bodies. Raw queries are at most 128 ASCII bytes. HEAD is unsupported.
+        All matched responses use no-store.
+      x-max-body-bytes: 245760
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Canonical decimal integer without signs or leading zeroes.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: cursor
+          in: query
+          required: false
+          description: >
+            Unpadded base64url of version2, persisted UTC microsecond terminal
+            completion instant and nonzero canonical CheckRun UUID. No client
+            time reconstruction.
+          schema:
+            type: string
+            minLength: 88
+            maxLength: 88
+            pattern: '^[A-Za-z0-9_-]{88}$'
+      responses:
+        '200':
+          description: Bounded terminal history page; empty history is a successful empty page.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorHistoryPage'
+        '400':
+          description: Invalid history request or cursor.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: Monitor not found.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          description: History persistence read failed.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '405':
+          description: Unsupported method; no response body.
+          headers:
+            Allow:
+              schema: { type: string, const: 'GET' }
+            Cache-Control:
+              schema: { type: string, const: no-store }
 components:
   schemas:
+    MonitorHistoryEntry:
+      oneOf:
+        - $ref: '#/components/schemas/LatestHTTPResponseResult'
+        - $ref: '#/components/schemas/LatestFailureResult'
+        - $ref: '#/components/schemas/LatestWorkerTimeoutResult'
+    MonitorHistoryPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/MonitorHistoryEntry'
+        nextCursor:
+          type: [string, 'null']
+          minLength: 88
+          maxLength: 88
+          pattern: '^[A-Za-z0-9_-]{88}$'
+          description: Last included key when more terminal rows exist, otherwise null.
+      allOf:
+        - if:
+            properties:
+              items: { maxItems: 0 }
+          then:
+            properties:
+              nextCursor: { const: null }
     MonitorScheduling:
       type: object
       additionalProperties: false

@@ -186,6 +186,9 @@ function validateLatestResultFixtures(repositoryRoot) {
       'latest-result-worker-timeout.json',
       'monitor-delete-confirmed.json',
       'monitor-delete-unknown.json',
+      'monitor-history-empty.json',
+      'monitor-history-page.json',
+      'monitor-history-continuation.json',
       'monitor-inventory-page.json',
       'monitor-scheduling-active.json', 'monitor-scheduling-paused.json',
       'monitor-inventory-empty.json',
@@ -258,6 +261,8 @@ export function validatePublicContract(document, repositoryRoot = '.') {
       'LatestHTTPResponseResult',
       'LatestWorkerTimeoutResult',
       'Monitor',
+      'MonitorHistoryEntry',
+      'MonitorHistoryPage',
       'MonitorInventoryPage',
       'MonitorScheduling',
       'Problem',
@@ -271,7 +276,7 @@ export function validatePublicContract(document, repositoryRoot = '.') {
   const publicPaths = Object.keys(document.paths).filter((key) => key.startsWith('/'));
   assertExactSet(
     publicPaths,
-    ['/monitors', '/monitors/{monitorId}', '/monitors/{monitorId}/latest-result', '/monitors/{monitorId}/availability', '/monitors/{monitorId}/scheduling'],
+    ['/monitors', '/monitors/{monitorId}', '/monitors/{monitorId}/latest-result', '/monitors/{monitorId}/availability', '/monitors/{monitorId}/scheduling', '/monitors/{monitorId}/history'],
     'public path set',
   );
 
@@ -494,6 +499,85 @@ export function validatePublicContract(document, repositoryRoot = '.') {
   validateInventory(document, repositoryRoot);
   validateScheduling(document, repositoryRoot);
   validateDeletion(document, repositoryRoot);
+  validateHistory(document, repositoryRoot);
+}
+
+function validateHistory(document, repositoryRoot) {
+  const pathItem = document.paths['/monitors/{monitorId}/history'];
+  assert(isObject(pathItem), 'history path item must be an object');
+  assertExactSet(operationMethods(pathItem), ['get'], '/monitors/{monitorId}/history operations');
+  const operation = pathItem.get;
+  assert(isObject(operation) && operation.operationId === 'getMonitorHistory', 'history operationId must be getMonitorHistory');
+  assertNoOperationSecurityOrServers(operation, 'history');
+  assert(operation['x-max-body-bytes'] === 245760, 'history body budget must be 245760');
+  assert(Array.isArray(operation.parameters) && operation.parameters.length === 2, 'history requires limit/cursor parameters');
+  const [limit, cursor] = operation.parameters;
+  assert(limit.name === 'limit' && limit.in === 'query' && limit.required === false, 'history limit parameter');
+  assertIntegerRange(limit.schema, 1, 50, 'history limit');
+  assert(limit.schema.default === 20, 'history limit default must be 20');
+  assert(cursor.name === 'cursor' && cursor.in === 'query' && cursor.required === false, 'history cursor parameter');
+  assert(isDeepStrictEqual(cursor.schema, { type: 'string', minLength: 88, maxLength: 88, pattern: '^[A-Za-z0-9_-]{88}$' }), 'history cursor schema must be exact');
+  assertExactKeys(operation.responses, ['200', '400', '404', '405', '500'], 'history responses');
+  assertResponseContent(document, operation.responses['200'], 'application/json', 'MonitorHistoryPage', 'history 200');
+  assertProblemResponses(document, operation, ['400', '404', '500'], 'history');
+  assert(!own(operation.responses['405'], 'content'), 'history 405 has no body');
+  assertStringConst(operation.responses['405'].headers?.Allow?.schema, 'GET', 'history 405 Allow');
+  for (const [code, response] of Object.entries(operation.responses)) {
+    assertStringConst(response.headers?.['Cache-Control']?.schema, 'no-store', 'history ' + code + ' Cache-Control');
+  }
+  const page = document.components.schemas.MonitorHistoryPage;
+  assertObjectShape(page, ['items', 'nextCursor'], ['items', 'nextCursor'], 'MonitorHistoryPage');
+  assert(page.properties.items.type === 'array' && page.properties.items.maxItems === 50, 'history items cap must be 50');
+  assertSchemaTarget(document, page.properties.items.items, 'MonitorHistoryEntry', 'history item');
+  const { description: cursorDescription, ...cursorShape } = page.properties.nextCursor;
+  assert(isDeepStrictEqual(cursorShape, { type: ['string', 'null'], minLength: 88, maxLength: 88, pattern: '^[A-Za-z0-9_-]{88}$' }), 'history cursor nullable schema must be exact');
+  assert(isDeepStrictEqual(page.allOf, [{ if: { properties: { items: { maxItems: 0 } } }, then: { properties: { nextCursor: { const: null } } } }]), 'history empty continuation rule must be exact');
+  const entry = document.components.schemas.MonitorHistoryEntry;
+  assertOneOfRefs(
+    entry,
+    [
+      '#/components/schemas/LatestHTTPResponseResult',
+      '#/components/schemas/LatestFailureResult',
+      '#/components/schemas/LatestWorkerTimeoutResult',
+    ],
+    'MonitorHistoryEntry',
+  );
+  for (const name of ['empty', 'page', 'continuation']) {
+    const value = readJSONFixture(repositoryRoot, 'monitor-history-' + name + '.json');
+    assertExactKeys(value, ['items', 'nextCursor'], 'history page fixture');
+    assert(Array.isArray(value.items) && value.items.length <= 50, 'history item count');
+    assert(value.nextCursor === null || (typeof value.nextCursor === 'string' && /^[A-Za-z0-9_-]{88}$/.test(value.nextCursor)), 'history cursor representation');
+    assert(value.items.length > 0 || value.nextCursor === null, 'history empty continuation must be null');
+    const seen = new Set();
+    for (const item of value.items) {
+      assertFixtureString(item.checkId, 'history checkId');
+      assert(typeof item.checkId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(item.checkId) && item.checkId !== '00000000-0000-0000-0000-000000000000', 'history checkId must be a nonzero UUID');
+      assert(!seen.has(item.checkId), 'history duplicate check ID');
+      seen.add(item.checkId);
+      assertFixtureString(item.completedAt, 'history completedAt');
+      assertUTCTimestamp(item.completedAt, 'history completedAt');
+      if (item.resultKind === 'http_response') {
+        assert(Number.isInteger(item.httpStatus) && item.httpStatus >= 100 && item.httpStatus <= 599, 'history httpStatus range');
+        assert(Number.isInteger(item.durationMs) && item.durationMs >= 0 && item.durationMs <= 20000, 'history durationMs range');
+      } else if (item.resultKind === 'worker_timeout') {
+        assert(item.httpStatus === undefined && item.durationMs === undefined, 'history worker timeout shape');
+      } else {
+        assert(
+          ['dns_error', 'policy_rejected', 'timeout', 'connect_error', 'tls_error', 'protocol_error', 'internal_error'].includes(item.resultKind),
+          'history resultKind must be a classified failure',
+        );
+        assert(Number.isInteger(item.durationMs) && item.durationMs >= 0 && item.durationMs <= 20000, 'history durationMs range');
+        assert(item.httpStatus === undefined, 'history failure cannot expose httpStatus');
+      }
+    }
+    if (value.nextCursor !== null) {
+      const last = value.items.at(-1);
+      const match = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d{1,6}))?Z$/.exec(last.completedAt);
+      assert(match, 'history persisted microsecond time');
+      const payload = '2|' + match[1] + '.' + (match[2] || '').padEnd(6, '0') + 'Z|' + last.checkId;
+      assert(value.nextCursor === Buffer.from(payload).toString('base64url'), 'history continuation key must equal last included CheckRun');
+    }
+  }
 }
 
 function validateDeletion(document, repositoryRoot) {
