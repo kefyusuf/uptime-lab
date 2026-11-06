@@ -75,6 +75,16 @@ for(const mutation of [
  c=>{c.history.secondPageIds=[]},c=>{c.history.orderConfirmed=false},
  c=>{c.history.readsAfterRestart.history=404},c=>{c.history.restarts.api.afterStartedAt=c.history.restarts.api.beforeStartedAt},c=>{c.history.extra=true},
 ])test('history rejects mutated acceptance evidence '+mutation.toString(),()=>{const mutated=structuredClone(historyCapture);mutation(mutated);assert.throws(()=>verifyHistoryEvidence(mutated,historyRows))});
+test('history tie-breaks equal instants by check id descending',()=>{
+ const tieA='7d9b2eb0-52bb-4dd7-8934-c5ce30d5c901';
+ const tieB='7d9b2eb0-52bb-4dd7-8934-c5ce30d5c902';
+ const instant='2026-11-01T12:00:30.000000+00:00';
+ const tieRows=[{id:tieA,completed_at:instant},{id:tieB,completed_at:instant},...historyRows.slice(0,23)];
+ const tieCapture={...historyCapture,history:{...historyCapture.history,firstPageIds:[tieB,tieA,...historyIds.slice(0,18)],secondPageIds:historyIds.slice(18,23)}};
+ assert.doesNotThrow(()=>verifyHistoryEvidence(tieCapture,tieRows));
+ const swapped={...tieCapture,history:{...tieCapture.history,firstPageIds:[tieA,tieB,...historyIds.slice(0,18)]}};
+ assert.throws(()=>verifyHistoryEvidence(swapped,tieRows));
+});
 test('history rejects broken durable linkage',()=>{
  assert.throws(()=>verifyHistoryEvidence(historyCapture,historyRows.slice(1)));
  assert.throws(()=>verifyHistoryEvidence(historyCapture,[]));

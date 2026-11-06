@@ -16,9 +16,11 @@ var _ ports.MonitorHistoryRepository = (*Repository)(nil)
 
 // Page reads one bounded terminal-history window inside one Read Committed
 // transaction: the Monitor existence probe and the keyset page query pipeline
-// through one batch round trip and share a snapshot, so a concurrent deletion
-// resolves as a consistent page or a 404. Identifiers bind as binary uuid
-// parameters, matching the deletion adapter's discipline.
+// through one batch round trip. Under READ COMMITTED each statement observes
+// its own snapshot, and because the probe executes first the page statement's
+// snapshot is never older: a concurrent deletion resolves as a consistent
+// pre-delete page or a 404, never rows for a vanished Monitor. Identifiers
+// bind as binary uuid parameters, matching the deletion adapter's discipline.
 func (repository *Repository) Page(ctx context.Context, monitorID domain.MonitorID, anchor *ports.HistoryAnchor, maxRows int) ([]ports.LatestCheckResultRecord, error) {
 	if maxRows < 1 || maxRows > 51 {
 		return nil, errors.New("invalid history repository bounds")

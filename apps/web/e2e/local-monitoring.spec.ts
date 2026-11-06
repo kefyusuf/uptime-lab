@@ -290,8 +290,9 @@ test('built local monitor journey', async ({ page, request }) => {
           element.querySelector('time')?.getAttribute('datetime'),
         ),
       );
-    const orderConfirmed = times.every(
-      (value, index) => index === 0 || value! <= times[index - 1]!,
+    const instants = times.map((value) => new Date(value!).getTime());
+    const orderConfirmed = instants.every(
+      (value, index) => index === 0 || value <= instants[index - 1],
     );
     await page.getByRole('button', { name: 'Next history page' }).click();
     await page.waitForFunction(

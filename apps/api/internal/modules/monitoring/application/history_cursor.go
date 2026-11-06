@@ -45,5 +45,9 @@ func DecodeHistoryCursor(token string) (ports.HistoryAnchor, error) {
 	if err != nil || id == (domain.CheckID{}) {
 		return invalid, ErrInvalidHistoryQuery
 	}
+	canonical, err := EncodeHistoryCursor(ports.HistoryAnchor{CompletedAt: at, CheckID: id})
+	if err != nil || canonical != token {
+		return invalid, ErrInvalidHistoryQuery
+	}
 	return ports.HistoryAnchor{CompletedAt: at, CheckID: id}, nil
 }
