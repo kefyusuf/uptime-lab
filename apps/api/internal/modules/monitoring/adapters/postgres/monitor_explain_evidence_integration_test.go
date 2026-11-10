@@ -19,6 +19,7 @@ import (
 //   - latest terminal read:        adapters/postgres/latest_check_result.go
 //   - claim candidate:             adapters/postgres/check_execution.go (claimCandidate)
 //   - retention:                   adapters/postgres/retention.go (retainHistoryWindow)
+//
 // Any change to those queries must update these copies and the committed
 // evidence document (docs/testing/populated-explain-evidence.md) in the same
 // commits.
