@@ -13,12 +13,13 @@ import (
 	"github.com/kefyusuf/uptime-lab/apps/api/internal/modules/monitoring/domain"
 )
 
-// The four exercised query shapes mirror the adapter sources one-to-one:
-//   - inventory first page:        adapters/postgres/monitor_inventory.go (inventoryPageFirst)
-//   - history first/anchored page: adapters/postgres/monitor_history.go (firstPage / anchoredPage)
-//   - latest terminal read:        adapters/postgres/latest_check_result.go
-//   - claim candidate:             adapters/postgres/check_execution.go (claimCandidate)
-//   - retention:                   adapters/postgres/retention.go (retainHistoryWindow)
+// The exercised query shapes below are documented copies of the adapter
+// sources, verified for sync at whole-branch review:
+//   - inventory first page:        adapters/postgres/monitor_inventory.go (inline queries in Candidates)
+//   - history first/anchored page: adapters/postgres/monitor_history.go (firstPage / anchoredPage consts)
+//   - latest terminal read:        adapters/postgres/latest_check_result.go (inline query in LatestTerminalByMonitorID)
+//   - claim candidate:             adapters/postgres/check_execution.go (inline query in ClaimDueCheck)
+//   - retention:                   adapters/postgres/retention.go (retainHistoryWindow const)
 //
 // Any change to those queries must update these copies and the committed
 // evidence document (docs/testing/populated-explain-evidence.md) in the same
@@ -31,7 +32,32 @@ const explainEvidenceQueryHistoryFirst = "SELECT id::text, result_kind, http_sta
 
 const explainEvidenceQueryHistoryAnchored = "SELECT id::text, result_kind, http_status, duration_ms, completed_at FROM monitoring.check_runs WHERE monitor_id = $1 AND completed_at IS NOT NULL AND (completed_at, id) < ($2, $3) ORDER BY completed_at DESC, id DESC LIMIT $4"
 
-const explainEvidenceQueryLatest = "SELECT id::text, result_kind, http_status, duration_ms, completed_at FROM monitoring.check_runs WHERE monitor_id = $1 AND completed_at IS NOT NULL ORDER BY completed_at DESC LIMIT 1"
+const explainEvidenceQueryLatest = `
+			SELECT
+				latest.id::text,
+				latest.result_kind,
+				latest.http_status,
+				latest.duration_ms,
+				latest.completed_at
+			FROM monitoring.monitors AS monitor
+			LEFT JOIN LATERAL (
+				SELECT
+					run.id,
+					run.result_kind,
+					run.http_status,
+					run.duration_ms,
+					run.completed_at
+				FROM monitoring.check_runs AS run
+				WHERE run.monitor_id = monitor.id
+				  AND run.completed_at IS NOT NULL
+				ORDER BY
+					run.completed_at DESC,
+					run.issued_at DESC,
+					run.id DESC
+				LIMIT 1
+			) AS latest ON true
+			WHERE monitor.id = $1::uuid
+		`
 
 const explainEvidenceQueryClaim = `
 			SELECT
@@ -141,14 +167,18 @@ func TestExplainEvidenceOverPopulatedDataset(t *testing.T) {
 	assertPlanUsesIndex(t, plans["inventory"], "monitors_inventory_order_idx", "inventory")
 	assertPlanUsesIndex(t, plans["history-first"], "check_runs_latest_terminal_idx", "history-first")
 	assertPlanUsesIndex(t, plans["history-anchored"], "check_runs_latest_terminal_idx", "history-anchored")
-	assertPlanUsesIndex(t, plans["latest-terminal"], "check_runs_latest_terminal_idx", "latest-terminal")
+	assertPlanUsesIndex(t, plans["latest-terminal"], "check_runs_latest_terminal_idx", "latest-terminal (lateral)")
+	assertPlanUsesIndex(t, plans["claim-candidate"], "check_runs_latest_terminal_idx", "claim-candidate (lateral)")
 
 	// The index-usage assertion is load-bearing: dropping the terminal index
-	// (test-owned drop, restored immediately) must make the asserted index
-	// disappear from the plan.
+	// (test-owned drop, restored via t.Cleanup so a failure cannot leave the
+	// schema without it) must make the asserted index disappear from the plan.
 	if _, err := pool.Exec(context.Background(), "DROP INDEX monitoring.check_runs_latest_terminal_idx"); err != nil {
 		t.Fatalf("drop terminal index: %v", err)
 	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), "CREATE INDEX check_runs_latest_terminal_idx ON monitoring.check_runs (monitor_id, completed_at DESC) WHERE completed_at IS NOT NULL")
+	})
 	broken := explainPool(t, pool, explainEvidenceQueryHistoryFirst, monitors[0].String(), 21)
 	if strings.Contains(broken, "check_runs_latest_terminal_idx") {
 		t.Fatal("terminal index still used after drop")
@@ -158,4 +188,10 @@ func TestExplainEvidenceOverPopulatedDataset(t *testing.T) {
 	}
 	restored := explainPool(t, pool, explainEvidenceQueryHistoryFirst, monitors[0].String(), 21)
 	assertPlanUsesIndex(t, restored, "check_runs_latest_terminal_idx", "history-first restored")
+
+	for label, plan := range plans {
+		t.Logf("EXPLAIN-EVIDENCE-BEGIN %s", label)
+		t.Logf("%s", plan)
+		t.Logf("EXPLAIN-EVIDENCE-END %s", label)
+	}
 }
