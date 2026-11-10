@@ -5,8 +5,8 @@ package postgres
 import (
 	"context"
 	"errors"
-	"sync"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -298,7 +298,6 @@ func TestTargetEditConcurrentLastCommittedWins(t *testing.T) {
 		t.Fatal("final target empty")
 	}
 }
-
 
 func itoa(value int) string {
 	return strconv.Itoa(value)
