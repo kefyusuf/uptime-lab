@@ -218,7 +218,7 @@ paths:
             Cache-Control:
               schema: { type: string, const: no-store }
             Allow:
-              schema: { type: string, const: 'GET, DELETE' }
+              schema: { type: string, const: 'GET, PATCH, DELETE' }
         '500':
           description: Deletion persistence failed.
           headers:
@@ -410,6 +410,88 @@ paths:
           <<: *schedulingInvalid
           description: The server could not complete the request.
         '405': *schedulingMethod
+    patch:
+      operationId: editMonitorTarget
+      summary: Edit a monitor's target URL
+      description: >
+        Replaces the target URL of one Monitor on its existing immutable
+        identity; the UUID, creation time, evidence rows, scheduling state and
+        deletion semantics are unchanged. The new target passes the exact
+        registration validation; policy rejection stays a probe-time fact.
+        Already claimed work completes against the target captured at claim
+        time. No query, including an empty trailing question mark, is accepted.
+        Reject encoded path segments and slash/dot/backslash aliases without
+        redirecting. HEAD and OPTIONS are unsupported. All matched responses
+        use no-store.
+      x-max-body-bytes: 16384
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MonitorTargetEditRequest'
+      responses:
+        '200':
+          description: Target edited; the closed Monitor shape reflects the updated target.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Monitor'
+        '400':
+          description: Malformed request content or monitorId is not a valid UUID.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: Monitor not found.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '415':
+          description: Unsupported request media type.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Request content is understood but violates the monitor contract.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          description: Target edit persistence failed.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '405':
+          description: Unsupported method; HEAD has no response body.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+            Allow:
+              schema: { type: string, const: 'GET, PATCH, DELETE' }
   /monitors/{monitorId}/history:
     get:
       operationId: getMonitorHistory
@@ -503,6 +585,23 @@ paths:
               schema: { type: string, const: no-store }
 components:
   schemas:
+    MonitorTargetEditRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - targetUrl
+      properties:
+        targetUrl:
+          type: string
+          description: >
+            Exact replacement target text. The Monitoring domain accepts an
+            absolute HTTP or HTTPS target with a hostname, rejects embedded
+            userinfo and fragments, permits query strings and explicit ports,
+            and preserves accepted input text. The public contract intentionally
+            does not apply RFC 3986 format: uri because the existing domain
+            parser can accept and preserve values outside that syntax.
+            Edit validation is syntactic only and is not SSRF or
+            execution-safety approval.
     MonitorHistoryEntry:
       oneOf:
         - $ref: '#/components/schemas/LatestHTTPResponseResult'

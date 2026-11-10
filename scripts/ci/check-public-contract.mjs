@@ -186,6 +186,9 @@ function validateLatestResultFixtures(repositoryRoot) {
       'latest-result-worker-timeout.json',
       'monitor-delete-confirmed.json',
       'monitor-delete-unknown.json',
+      'monitor-target-edited.json',
+      'monitor-target-edit-unknown.json',
+      'monitor-target-edit-invalid.json',
       'monitor-history-empty.json',
       'monitor-history-page.json',
       'monitor-history-continuation.json',
@@ -261,6 +264,7 @@ export function validatePublicContract(document, repositoryRoot = '.') {
       'LatestHTTPResponseResult',
       'LatestWorkerTimeoutResult',
       'Monitor',
+      'MonitorTargetEditRequest',
       'MonitorHistoryEntry',
       'MonitorHistoryPage',
       'MonitorInventoryPage',
@@ -290,7 +294,7 @@ export function validatePublicContract(document, repositoryRoot = '.') {
   assert(!own(getPath, 'servers'), '/monitors/{monitorId} path item must not define servers');
   assert(!own(latestResultPath, 'servers'), '/monitors/{monitorId}/latest-result path item must not define servers');
   assertExactSet(operationMethods(createPath), ['get', 'post'], '/monitors operations');
-  assertExactSet(operationMethods(getPath), ['get', 'delete'], '/monitors/{monitorId} operations');
+  assertExactSet(operationMethods(getPath), ['get', 'patch', 'delete'], '/monitors/{monitorId} operations');
   assertExactSet(operationMethods(latestResultPath), ['get'], '/monitors/{monitorId}/latest-result operations');
 
   const register = createPath.post;
@@ -499,7 +503,47 @@ export function validatePublicContract(document, repositoryRoot = '.') {
   validateInventory(document, repositoryRoot);
   validateScheduling(document, repositoryRoot);
   validateDeletion(document, repositoryRoot);
+  validateTargetEdit(document, repositoryRoot);
   validateHistory(document, repositoryRoot);
+}
+
+function validateTargetEdit(document, repositoryRoot) {
+  const label = 'target edit';
+  const pathItem = document.paths['/monitors/{monitorId}'];
+  const operation = pathItem.patch;
+  assert(isObject(operation), 'target edit operation must exist');
+  assertNoOperationSecurityOrServers(operation, label);
+  assert(operation.operationId === 'editMonitorTarget', 'target edit operationId must be editMonitorTarget');
+  assert(operation['x-max-body-bytes'] === 16384, 'target edit body budget must be 16384');
+  assert(Array.isArray(operation.parameters) && operation.parameters.length === 1, 'target edit requires one parameter');
+  const monitorIdParameter = operation.parameters[0];
+  assert(monitorIdParameter.name === 'monitorId' && monitorIdParameter.in === 'path' && monitorIdParameter.required === true, 'target edit monitorId must be a required path parameter');
+  assertStringFormat(monitorIdParameter.schema, 'uuid', 'target edit monitorId');
+  assert(isObject(operation.requestBody) && operation.requestBody.required === true, 'target edit requestBody must be required');
+  assertExactKeys(operation.requestBody.content, ['application/json'], 'target edit request content');
+  assertSchemaTarget(document, operation.requestBody.content['application/json'].schema, 'MonitorTargetEditRequest', 'target edit request schema');
+  assertExactKeys(operation.responses, ['200', '400', '404', '415', '422', '405', '500'], 'target edit responses');
+  assertResponseContent(document, operation.responses['200'], 'application/json', 'Monitor', 'target edit 200');
+  assertProblemResponses(document, operation, ['400', '404', '415', '422', '500'], label);
+  assert(!own(operation.responses['405'], 'content'), 'target edit 405 has no body');
+  assertStringConst(operation.responses['405'].headers?.Allow?.schema, 'GET, PATCH, DELETE', 'target edit Allow');
+  for (const response of Object.values(operation.responses)) {
+    assertStringConst(response.headers?.['Cache-Control']?.schema, 'no-store', 'target edit Cache-Control');
+  }
+  const requestSchema = document.components.schemas.MonitorTargetEditRequest;
+  assertObjectShape(requestSchema, ['targetUrl'], ['targetUrl'], 'MonitorTargetEditRequest');
+  assertStringWithoutFormat(requestSchema.properties.targetUrl, 'MonitorTargetEditRequest.targetUrl');
+  const edited = readJSONFixture(repositoryRoot, 'monitor-target-edited.json');
+  assertExactKeys(edited, ['id', 'targetUrl', 'createdAt'], 'target edited fixture');
+  assertFixtureString(edited.id, 'target edited fixture id');
+  assertFixtureString(edited.targetUrl, 'target edited fixture targetUrl');
+  assertFixtureString(edited.createdAt, 'target edited fixture createdAt');
+  const unknown = readJSONFixture(repositoryRoot, 'monitor-target-edit-unknown.json');
+  assertExactKeys(unknown, ['type', 'title', 'status', 'detail'], 'target edit unknown fixture');
+  assert(unknown.status === 404, 'target edit unknown fixture status must be 404');
+  const invalid = readJSONFixture(repositoryRoot, 'monitor-target-edit-invalid.json');
+  assertExactKeys(invalid, ['type', 'title', 'status', 'detail'], 'target edit invalid fixture');
+  assert(invalid.status === 422, 'target edit invalid fixture status must be 422');
 }
 
 function validateHistory(document, repositoryRoot) {
@@ -598,7 +642,7 @@ function validateDeletion(document, repositoryRoot) {
   assertExactKeys(operation.responses, ['204', '400', '404', '405', '500'], 'deletion responses');
   assert(!own(operation.responses['204'], 'content'), 'deletion 204 content must be absent');
   assertProblemResponses(document, operation, ['400', '404', '500'], label);
-  assertStringConst(operation.responses['405'].headers?.Allow?.schema, 'GET, DELETE', 'deletion Allow');
+  assertStringConst(operation.responses['405'].headers?.Allow?.schema, 'GET, PATCH, DELETE', 'deletion Allow');
   for (const response of Object.values(operation.responses)) {
     assertStringConst(response.headers?.['Cache-Control']?.schema, 'no-store', 'deletion Cache-Control');
   }
