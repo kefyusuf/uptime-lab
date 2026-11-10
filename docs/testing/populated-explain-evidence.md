@@ -199,4 +199,3 @@ The per-page id tie-break sort visible in the history plans is the acknowledged 
         Planning Time: 0.124 ms
         Execution Time: 0.840 ms
 ```
-
