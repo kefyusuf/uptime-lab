@@ -351,6 +351,122 @@ describe('actual HTTP gateway', () => {
     ).toBe(404);
     expect(captured).toHaveLength(0);
   });
+  it('forwards buffered monitor patches through the mutation boundary', async () => {
+    body = '{"targetUrl":"https://example.com/edited"}';
+    const result = await call(
+      '/api/monitors/018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2',
+      'PATCH',
+      {
+        Origin: 'http://127.0.0.1:4173',
+        'Content-Type': 'application/json',
+      },
+      body,
+    );
+    expect(result.status).toBe(200);
+    expect(result.headers['cache-control']).toBe('no-store');
+    expect(captured).toHaveLength(1);
+    expect(captured[0].path).toBe(
+      '/monitors/018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2',
+    );
+    expect(captured[0].body).toBe(body);
+    for (const name of ['origin', 'cookie', 'authorization', 'x-extra'])
+      expect(captured[0].headers[name]).toBeUndefined();
+  });
+  it.each([false, true])(
+    'forwards monitor patches at the exact edit budget, streamed=%s',
+    async (streamed) => {
+      for (const size of [16384, 16385]) {
+        const payload = '{"targetUrl":"https://example.com/x"}';
+        const padded = payload + ' '.repeat(Math.max(0, size - payload.length));
+        const headers = {
+          Origin: 'http://127.0.0.1:4173',
+          'Content-Type': 'application/json',
+          ...(streamed ? { 'Transfer-Encoding': 'chunked' } : {}),
+        };
+        const framing = streamed
+          ? headers
+          : { ...headers, 'Content-Length': String(size) };
+        const result = await call('/api/monitors/id', 'PATCH', framing, padded);
+        expect(result.status).toBe(size === 16384 ? 200 : 413);
+        expect(result.headers['cache-control']).toBe('no-store');
+      }
+      expect(captured).toHaveLength(1);
+      expect(captured[0].body).toHaveLength(16384);
+    },
+  );
+  it.each([
+    ['', '', 415, 0],
+    ['application/json; charset=latin1', '', 200, 1],
+    ['application/json; other=1', '', 415, 0],
+    ['application/json', 'gzip', 200, 1],
+    ['application/json', 'identity', 200, 1],
+  ] as const)(
+    'mirrors creation media handling on PATCH %s %s',
+    async (media, encoding, want, forwards) => {
+      const result = await call(
+        '/api/monitors/id',
+        'PATCH',
+        {
+          Origin: 'http://127.0.0.1:4173',
+          'Content-Type': media,
+          'Content-Encoding': encoding,
+        },
+        '{}',
+      );
+      expect(result.status).toBe(want);
+      expect(captured).toHaveLength(forwards);
+    },
+  );
+  it.each([
+    {},
+    { Origin: 'null' },
+    { Origin: 'http://foreign.invalid' },
+    { Origin: 'http://127.0.0.1:4173', 'Sec-Fetch-Site': 'cross-site' },
+    { Origin: 'http://127.0.0.1:4173', Host: 'foreign.invalid' },
+  ] as const)(
+    'requires the local browser boundary on PATCH %o',
+    async (headers) => {
+      expect(
+        (await call('/api/monitors/id', 'PATCH', headers, '{}')).status,
+      ).toBe(403);
+      expect(captured).toHaveLength(0);
+    },
+  );
+  it.each(['HEAD', 'OPTIONS'])(
+    'rejects monitor resource %s with the patch allow',
+    async (method) => {
+      const result = await call('/api/monitors/id', method);
+      expect(result).toMatchObject({
+        status: 405,
+        headers: { allow: 'GET, PATCH, DELETE', 'cache-control': 'no-store' },
+      });
+      if (method === 'HEAD') expect(result.body).toBe('');
+      expect(captured).toHaveLength(0);
+    },
+  );
+  it('keeps internal routes closed to patch at the gateway', async () => {
+    expect(
+      (
+        await call(
+          '/api/internal/checks/claim',
+          'PATCH',
+          {
+            Origin: 'http://127.0.0.1:4173',
+            'Content-Type': 'application/json',
+          },
+          '{}',
+        )
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await call('/api/monitors/id/history', 'PATCH', {
+          Origin: 'http://127.0.0.1:4173',
+        })
+      ).status,
+    ).toBe(405);
+    expect(captured).toHaveLength(0);
+  });
   it('forwards bounded inventory queries without changing bytes', async () => {
     const cursor = 'A'.repeat(88);
     for (const path of [

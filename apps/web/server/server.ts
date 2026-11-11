@@ -37,9 +37,15 @@ export function createWebServer(
       res.once('finish', () =>
         log({
           category,
-          method: ['GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'OPTIONS'].includes(
-            req.method || '',
-          )
+          method: [
+            'GET',
+            'POST',
+            'PUT',
+            'PATCH',
+            'DELETE',
+            'HEAD',
+            'OPTIONS',
+          ].includes(req.method || '')
             ? req.method!
             : 'OTHER',
           status: res.statusCode,
