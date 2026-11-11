@@ -49,7 +49,11 @@ export interface paths {
         delete: operations["deleteMonitor"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Edit a monitor's target URL
+         * @description Replaces the target URL of one Monitor on its existing immutable identity; the UUID, creation time, evidence rows, scheduling state and deletion semantics are unchanged. The new target passes the exact registration validation; policy rejection stays a probe-time fact. Already claimed work completes against the target captured at claim time. No query, including an empty trailing question mark, is accepted. Reject encoded path segments and slash/dot/backslash aliases without redirecting. HEAD and OPTIONS are unsupported. All matched responses use no-store.
+         */
+        patch: operations["editMonitorTarget"];
         trace?: never;
     };
     "/monitors/{monitorId}/latest-result": {
@@ -113,11 +117,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /**
-         * Edit a monitor's target URL
-         * @description Replaces the target URL of one Monitor on its existing immutable identity; the UUID, creation time, evidence rows, scheduling state and deletion semantics are unchanged. The new target passes the exact registration validation; policy rejection stays a probe-time fact. Already claimed work completes against the target captured at claim time. No query, including an empty trailing question mark, is accepted. Reject encoded path segments and slash/dot/backslash aliases without redirecting. HEAD and OPTIONS are unsupported. All matched responses use no-store.
-         */
-        patch: operations["editMonitorTarget"];
+        patch?: never;
         trace?: never;
     };
     "/monitors/{monitorId}/history": {
@@ -520,6 +520,93 @@ export interface operations {
             };
         };
     };
+    editMonitorTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Stable monitor UUID. */
+                monitorId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MonitorTargetEditRequest"];
+            };
+        };
+        responses: {
+            /** @description Target edited; the closed Monitor shape reflects the updated target. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Monitor"];
+                };
+            };
+            /** @description Malformed request content or monitorId is not a valid UUID. */
+            400: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Monitor not found. */
+            404: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unsupported method; HEAD has no response body. */
+            405: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    Allow?: "GET, PATCH, DELETE";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unsupported request media type. */
+            415: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request content is understood but violates the monitor contract. */
+            422: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Target edit persistence failed. */
+            500: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     getLatestCheckResult: {
         parameters: {
             query?: never;
@@ -771,90 +858,6 @@ export interface operations {
                 };
             };
             /** @description The server could not complete the request. */
-            500: {
-                headers: {
-                    "Cache-Control"?: "no-store";
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    editMonitorTarget: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MonitorTargetEditRequest"];
-            };
-        };
-        responses: {
-            /** @description Target edited; the closed Monitor shape reflects the updated target. */
-            200: {
-                headers: {
-                    "Cache-Control"?: "no-store";
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Monitor"];
-                };
-            };
-            /** @description Malformed request content or monitorId is not a valid UUID. */
-            400: {
-                headers: {
-                    "Cache-Control"?: "no-store";
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Monitor not found. */
-            404: {
-                headers: {
-                    "Cache-Control"?: "no-store";
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unsupported method; HEAD has no response body. */
-            405: {
-                headers: {
-                    "Cache-Control"?: "no-store";
-                    Allow?: "GET, PATCH, DELETE";
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unsupported request media type. */
-            415: {
-                headers: {
-                    "Cache-Control"?: "no-store";
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Request content is understood but violates the monitor contract. */
-            422: {
-                headers: {
-                    "Cache-Control"?: "no-store";
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Target edit persistence failed. */
             500: {
                 headers: {
                     "Cache-Control"?: "no-store";
