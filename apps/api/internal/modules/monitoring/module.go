@@ -16,6 +16,7 @@ type Module struct {
 	SetMonitorScheduling   application.SetMonitorScheduling
 	DeleteMonitor          application.DeleteMonitor
 	GetMonitorHistory      application.GetMonitorHistory
+	EditMonitorTarget      application.EditMonitorTarget
 }
 
 // NewModule composes Monitoring use cases from their inward-facing dependencies.
@@ -59,6 +60,13 @@ func NewModuleWithDeletion(repository ports.MonitorRepository, latest ports.Late
 func NewModuleWithHistory(repository ports.MonitorRepository, latest ports.LatestCheckResultRepository, inventory ports.MonitorInventoryRepository, idGenerator application.IDGenerator, clock application.Clock, scheduling ports.MonitorSchedulingRepository, deletion ports.MonitorDeletionRepository, history ports.MonitorHistoryRepository) Module {
 	module := NewModuleWithDeletion(repository, latest, inventory, idGenerator, clock, scheduling, deletion)
 	module.GetMonitorHistory = application.NewGetMonitorHistory(history)
+	return module
+}
+
+// NewModuleWithTargetEdit adds the durable target edit to the public use cases.
+func NewModuleWithTargetEdit(repository ports.MonitorRepository, latest ports.LatestCheckResultRepository, inventory ports.MonitorInventoryRepository, idGenerator application.IDGenerator, clock application.Clock, scheduling ports.MonitorSchedulingRepository, deletion ports.MonitorDeletionRepository, history ports.MonitorHistoryRepository, targetEdit ports.MonitorTargetEditRepository) Module {
+	module := NewModuleWithHistory(repository, latest, inventory, idGenerator, clock, scheduling, deletion, history)
+	module.EditMonitorTarget = application.NewEditMonitorTarget(targetEdit)
 	return module
 }
 

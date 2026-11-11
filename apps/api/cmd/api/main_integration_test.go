@@ -562,6 +562,83 @@ func TestProductionMonitoringCompositionAgainstPostgreSQL(t *testing.T) {
 	}
 
 	assertProductionAvailability(t, client, baseURL, lateMonitor.ID, "unknown", "execution_failure", lateClaim.CheckID, lateCompleted)
+
+	// The target edit replaces one monitor's target on the same identity: the
+	// response and the subsequent read expose the new target with the original
+	// createdAt, recorded evidence is untouched, and invalid edits are rejected
+	// with the creation-mirrored status codes.
+	editResponse := doRequest(t, client, http.MethodPatch, baseURL+"/monitors/"+lateMonitor.ID, "application/json", `{"targetUrl":"https://example.com/edited-target"}`)
+	editBody, _ := io.ReadAll(editResponse.Body)
+	editResponse.Body.Close()
+	if editResponse.StatusCode != http.StatusOK ||
+		editResponse.Header.Get("Cache-Control") != "no-store" ||
+		editResponse.Header.Get("Allow") != "" {
+		t.Fatalf("target edit response = %d %v %s", editResponse.StatusCode, editResponse.Header, editBody)
+	}
+	var editedMonitor monitorPayload
+	if err := json.Unmarshal(editBody, &editedMonitor); err != nil {
+		t.Fatalf("decode edited monitor: %v", err)
+	}
+	if editedMonitor.ID != lateMonitor.ID ||
+		editedMonitor.TargetURL != "https://example.com/edited-target" ||
+		editedMonitor.CreatedAt != lateMonitor.CreatedAt {
+		t.Fatalf("edited monitor = %s, want same identity and createdAt", editBody)
+	}
+
+	editedGet := doRequest(t, client, http.MethodGet, baseURL+"/monitors/"+lateMonitor.ID, "", "")
+	editedGetBody, _ := io.ReadAll(editedGet.Body)
+	editedGet.Body.Close()
+	if editedGet.StatusCode != http.StatusOK {
+		t.Fatalf("edited monitor read = %d %s", editedGet.StatusCode, editedGetBody)
+	}
+	var rereadMonitor monitorPayload
+	if err := json.Unmarshal(editedGetBody, &rereadMonitor); err != nil {
+		t.Fatalf("decode reread monitor: %v", err)
+	}
+	if rereadMonitor.TargetURL != "https://example.com/edited-target" || rereadMonitor.CreatedAt != lateMonitor.CreatedAt {
+		t.Fatalf("reread monitor = %s, want edited target with unchanged createdAt", editedGetBody)
+	}
+
+	// The recorded evidence survives the edit unchanged.
+	assertProductionAvailability(t, client, baseURL, lateMonitor.ID, "unknown", "execution_failure", lateClaim.CheckID, lateCompleted)
+
+	assertStatusWithContentType(
+		t,
+		client,
+		http.MethodPatch,
+		baseURL+"/monitors/"+lateMonitor.ID,
+		"application/json",
+		`{"targetUrl":"not-a-url"}`,
+		http.StatusUnprocessableEntity,
+	)
+	assertStatusWithContentType(
+		t,
+		client,
+		http.MethodPatch,
+		baseURL+"/monitors/"+lateMonitor.ID,
+		"application/json",
+		`{"targetUrl":"https://example.com/edited-target","extra":1}`,
+		http.StatusUnprocessableEntity,
+	)
+	assertStatusWithContentType(
+		t,
+		client,
+		http.MethodPatch,
+		baseURL+"/monitors/"+lateMonitor.ID,
+		"application/json",
+		`{"targetUrl":"https://example.com/edited-target"`,
+		http.StatusBadRequest,
+	)
+	assertStatusWithContentType(
+		t,
+		client,
+		http.MethodPatch,
+		baseURL+"/monitors/"+uuid.NewV7().String(),
+		"application/json",
+		`{"targetUrl":"https://example.com/edited-target"}`,
+		http.StatusNotFound,
+	)
+
 	now := productionClock()
 	for _, tc := range []struct {
 		name, status, reason string
