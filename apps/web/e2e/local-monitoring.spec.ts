@@ -319,6 +319,56 @@ test('built local monitor journey', async ({ page, request }) => {
         },
       }),
     );
+  } else if (
+    ['edit-register', 'edit'].includes(process.env.WEB_BROWSER_PHASE || '')
+  ) {
+    const saved = JSON.parse(readFileSync(artifact, 'utf8')) as {
+      id: string;
+      targetEdit?: Record<string, unknown>;
+    };
+    const phase = process.env.WEB_BROWSER_PHASE;
+    if (phase === 'edit-register') {
+      await page.goto('/');
+      await page.getByLabel('Target URL').fill(target);
+      await page.getByLabel('Target URL').press('Enter');
+      await expect(
+        page.getByRole('heading', { name: 'Monitor detail' }),
+      ).toBeFocused();
+      const id = await page.getByTestId('monitor-id').textContent();
+      expect(id).toMatch(/^[0-9a-f-]{36}$/);
+      expect(id).not.toBe(saved.id);
+      await expect(page.getByTestId('scheduling-state')).toHaveText('Active');
+      await expect(page.getByTestId('monitor-target')).toHaveText(target);
+      writeFileSync(
+        artifact,
+        JSON.stringify({
+          ...saved,
+          targetEdit: { monitorId: id, oldTarget: target },
+        }),
+      );
+    } else {
+      const edit = saved.targetEdit as { monitorId: string; oldTarget: string };
+      await page.goto('/monitors/' + edit.monitorId);
+      await expect(page.getByTestId('monitor-id')).toHaveText(edit.monitorId);
+      const editButton = page.getByRole('button', { name: 'Edit target' });
+      await expect(editButton).toBeEnabled();
+      await editButton.click();
+      const input = page.getByLabel('Target URL');
+      await expect(input).toHaveValue(edit.oldTarget);
+      await input.fill('http://web/edited');
+      await page.getByRole('button', { name: 'Save target' }).click();
+      await expect(page.getByText('Target updated.')).toBeVisible();
+      await expect(page.getByTestId('monitor-target')).toHaveText(
+        'http://web/edited',
+      );
+      writeFileSync(
+        artifact,
+        JSON.stringify({
+          ...saved,
+          targetEdit: { ...edit, newTarget: 'http://web/edited' },
+        }),
+      );
+    }
   } else throw new Error('Unknown browser phase.');
   expect(errors).toEqual([]);
 });

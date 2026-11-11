@@ -369,6 +369,9 @@ describe('actual HTTP gateway', () => {
       '/monitors/018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2',
     );
     expect(captured[0].body).toBe(body);
+    expect(captured[0].headers['content-type']).toBe('application/json');
+    expect(captured[0].headers['content-length']).toBe(String(body.length));
+    expect(captured[0].headers['transfer-encoding']).toBeUndefined();
     for (const name of ['origin', 'cookie', 'authorization', 'x-extra'])
       expect(captured[0].headers[name]).toBeUndefined();
   });
