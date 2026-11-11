@@ -88,6 +88,7 @@ Real PostgreSQL tests protect:
 - pending/terminal row-shape constraints;
 - one pending CheckRun per Monitor;
 - due ordering and atomic claim;
+- target edits serialize with claims and deletions: an in-flight run probes and completes on the claimed target, the next claim probes the edited target, and concurrent edits are last-committed-wins;
 - expired-pending reconciliation;
 - exact duplicate completion;
 - conflicting/late result behavior;

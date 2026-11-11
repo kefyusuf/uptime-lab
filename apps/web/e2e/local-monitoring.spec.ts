@@ -295,13 +295,14 @@ test('built local monitor journey', async ({ page, request }) => {
       (value, index) => index === 0 || value <= instants[index - 1],
     );
     await page.getByRole('button', { name: 'Next history page' }).click();
-    await page.waitForFunction(
-      (previous) =>
-        document
-          .querySelector('[data-testid="history-entry"]')
-          ?.getAttribute('data-check-id') !== previous,
-      firstIds[0],
-    );
+    // The section unmounts the list while the continuation loads, so wait for
+    // a rendered first entry whose check id differs from the previous page.
+    await page.waitForFunction((previous) => {
+      const element = document.querySelector('[data-testid="history-entry"]');
+      return (
+        element !== null && element.getAttribute('data-check-id') !== previous
+      );
+    }, firstIds[0]);
     const secondIds = await page
       .getByTestId('history-entry')
       .evaluateAll((elements) =>

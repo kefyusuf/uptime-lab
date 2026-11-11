@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { verifyEvidence, verifyInventoryEvidence, verifySchedulingEvidence, verifyDeletionEvidence, verifyHistoryEvidence } from "./verify-web-evidence.mjs";
+import { verifyEvidence, verifyInventoryEvidence, verifySchedulingEvidence, verifyDeletionEvidence, verifyHistoryEvidence, verifyTargetEditEvidence } from "./verify-web-evidence.mjs";
 const id = "aa29443e-c597-4e7b-9202-a4762e0e04c0",
   a = "bb29443e-c597-4e7b-9202-a4762e0e04c0",
   b = "cc29443e-c597-4e7b-9202-a4762e0e04c0";
@@ -118,3 +118,20 @@ for (const field of [
       field === "http_status" ? 200 : field === "duration_ms" ? null : "wrong";
     assert.throws(() => verifyEvidence(capture, mutated));
   });
+const editMonitor='018f22d3-1d6a-7cc0-a37b-46fc3fafd601';
+const editCapture={...inventoryCapture,targetEdit:{monitorId:editMonitor,oldTarget:'http://web/',newTarget:'http://web/edited',claimAfterEditTarget:'http://web/edited',readsAfterRestart:{monitor:200}}};
+const editRows=[{id:'7d9b2eb0-52bb-4dd7-8934-c5ce30d5d001',monitor_id:editMonitor,completed_at:'2026-11-01T12:00:00.000000+00:00'}];
+const editMonitors=[{id:editMonitor,target_url:'http://web/edited'}];
+test('target edit links the edited target to durable rows',()=>assert.doesNotThrow(()=>verifyTargetEditEvidence(editCapture,editRows,editMonitors)));
+for(const mutation of [
+ c=>{delete c.targetEdit},c=>{c.targetEdit.extra=true},
+ c=>{c.targetEdit.monitorId=id},c=>{c.targetEdit.monitorId='invalid'},
+ c=>{c.targetEdit.oldTarget='http://other/'},c=>{c.targetEdit.newTarget=c.targetEdit.oldTarget},
+ c=>{c.targetEdit.claimAfterEditTarget='http://web/'},c=>{delete c.targetEdit.claimAfterEditTarget},
+ c=>{c.targetEdit.readsAfterRestart.monitor=404},c=>{c.targetEdit.readsAfterRestart={monitor:200,extra:1}},
+])test('target edit rejects mutated acceptance evidence '+mutation.toString(),()=>{const mutated=structuredClone(editCapture);mutation(mutated);assert.throws(()=>verifyTargetEditEvidence(mutated,editRows,editMonitors))});
+test('target edit rejects missing durable linkage',()=>{
+ assert.throws(()=>verifyTargetEditEvidence(editCapture,[],editMonitors));
+ assert.throws(()=>verifyTargetEditEvidence(editCapture,editRows,[{id:editMonitor,target_url:'http://web/'}]));
+ assert.throws(()=>verifyTargetEditEvidence(editCapture,editRows,[]));
+});

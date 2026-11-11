@@ -103,6 +103,19 @@ export function verifyHistoryEvidence(capture, rows) {
   const durableIds=ordered.map(row=>row.id);
   if(JSON.stringify(value.firstPageIds)!==JSON.stringify(durableIds.slice(0,20))||JSON.stringify(value.secondPageIds)!==JSON.stringify(durableIds.slice(20)))throw Error('Durable history page linkage mismatch');
 }
+export function verifyTargetEditEvidence(capture, rows, monitors) {
+  const uuid=value=>typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value)&&value!=='00000000-0000-0000-0000-000000000000';
+  const closed=(value,keys)=>value!==null&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key));
+  const value=capture?.targetEdit;
+  if(!closed(value,['monitorId','oldTarget','newTarget','claimAfterEditTarget','readsAfterRestart']) || !uuid(value.monitorId) || value.monitorId===capture.id || value.oldTarget!==capture.target)throw Error('Invalid target edit evidence');
+  if(typeof value.newTarget!=='string'||value.newTarget.length===0||value.newTarget.length>88||value.newTarget===value.oldTarget)throw Error('Invalid target edit transition');
+  if(value.claimAfterEditTarget!==value.newTarget)throw Error('Post-edit claim did not probe the edited target');
+  const reads=closed(value.readsAfterRestart,['monitor'])?Object.values(value.readsAfterRestart):null;
+  if(!reads||reads.length!==1||reads[0]!==200)throw Error('Restarted monitor read must be 200');
+  if(!Array.isArray(rows)||rows.length===0||rows.some(row=>row.monitor_id!==value.monitorId))throw Error('Durable old-target evidence must remain linked to the edited Monitor');
+  const monitor=monitors.filter(row=>row.id===value.monitorId);
+  if(monitor.length!==1||monitor[0].target_url!==value.newTarget)throw Error('Durable edited target mismatch');
+}
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
@@ -115,7 +128,8 @@ if (
   verifySchedulingEvidence(JSON.parse(readFileSync(process.argv[2],"utf8")),JSON.parse(readFileSync(process.argv[3],"utf8")),JSON.parse(readFileSync(process.argv[4],"utf8")));
   verifyDeletionEvidence(JSON.parse(readFileSync(process.argv[2],"utf8")),JSON.parse(readFileSync(process.argv[5],"utf8")),JSON.parse(readFileSync(process.argv[6],"utf8")));
   verifyHistoryEvidence(JSON.parse(readFileSync(process.argv[2],"utf8")),JSON.parse(readFileSync(process.argv[7],"utf8")));
+  verifyTargetEditEvidence(JSON.parse(readFileSync(process.argv[2],"utf8")),JSON.parse(readFileSync(process.argv[8],"utf8")),JSON.parse(readFileSync(process.argv[9],"utf8")));
   console.log(
-    "Independent browser snapshots, inventory IDs, scheduling, deletion and history evidence match durable rows.",
+    "Independent browser snapshots, inventory IDs, scheduling, deletion, history and target-edit evidence match durable rows.",
   );
 }

@@ -22,8 +22,14 @@ elif [[ "$*" == *'uptime-lab-migrate up'* ]];then
 elif [[ "$*" == *'ps -q api'* ]];then printf 'fake-api'
 elif [[ "$*" == *'ps -q checker'* ]];then printf 'fake-checker'
 elif [[ "$*" == *'stop checker'* ]];then touch "$DOCKER_LOG.checker-stopped"
-elif [[ "$*" == *'exec -T api'* && "$*" == *'/internal/checks/claim'* ]];then printf '{"checkId":"ff29443e-c597-4e7b-9202-a4762e0e04c0","monitorId":"ee29443e-c597-4e7b-9202-a4762e0e04c0","targetUrl":"http://web/","timeoutMs":10000,"maxRedirects":3}'
+elif [[ "$*" == *'exec -T api'* && "$*" == *'/internal/checks/claim'* ]];then
+  phase="$(tail -1 "$BROWSER_LOG")"
+  if [[ "$phase" == edit ]];then printf '{"checkId":"fe29443e-c597-4e7b-9202-a4762e0e04c0","monitorId":"ee29443e-c597-4e7b-9202-a4762e0e04c0","targetUrl":"http://web/edited","timeoutMs":10000,"maxRedirects":3}'
+  else printf '{"checkId":"ff29443e-c597-4e7b-9202-a4762e0e04c0","monitorId":"ee29443e-c597-4e7b-9202-a4762e0e04c0","targetUrl":"http://web/","timeoutMs":10000,"maxRedirects":3}';fi
 elif [[ "$*" == *'exec -T web'* && "$*" == *'/internal/checks/'* ]];then printf '{"status":404,"attempts":1}'
+elif [[ "$*" == *'exec -T web'* && "$*" == *'/monitors/'* && "$*" != *'/history'* ]];then
+  phase="$(tail -1 "$BROWSER_LOG")"
+  if [[ "$phase" == edit ]];then printf '{"monitor":200,"targetUrl":"http://web/edited"}';else printf '{"monitor":404,"availability":404,"latestResult":404,"scheduling":404}';fi
 elif [[ "$*" == *'exec -T web'* && "$*" != *'/history'* ]];then printf '{"monitor":404,"availability":404,"latestResult":404,"scheduling":404}'
 elif [[ "$*" == *'restart api'* ]];then touch "$DOCKER_LOG.api-restarted"
 elif [[ "$*" == *'restart checker'* ]];then touch "$DOCKER_LOG.checker-restarted"
@@ -34,6 +40,8 @@ elif [[ "$*" == inspect* ]];then
     printf '2026-10-08T12:00:0%sZ' "$count"
   fi
 elif [[ "$*" == *'logs --no-color'* ]];then printf 'event=claim_no_work\nevent=claim_no_work\nevent=claim_no_work\n'
+elif [[ "$*" == *'target-edit-evidence-rows'* ]];then printf '[{"id":"fe29443e-c597-4e7b-9202-a4762e0e04c0","monitor_id":"ee29443e-c597-4e7b-9202-a4762e0e04c0","completed_at":"2026-10-02T12:00:02+00:00"}]'
+elif [[ "$*" == *'target-edit-evidence-monitor'* ]];then printf '[{"id":"ee29443e-c597-4e7b-9202-a4762e0e04c0","target_url":"http://web/edited"}]'
 elif [[ "$*" == *'deletion-evidence-rows'* ]];then printf '[]'
 elif [[ "$*" == *'RETURNING id::text'* ]];then printf '018f22d3-1d6a-7cc0-a37b-46fc3fafd501'
 elif [[ "$*" == *'history-evidence-rows'* ]];then
@@ -56,7 +64,7 @@ printf '%s\n' "$WEB_BROWSER_PHASE" >> "$BROWSER_LOG"
 if [[ "$WEB_BROWSER_PHASE" == register ]];then
  printf '{"id":"aa29443e-c597-4e7b-9202-a4762e0e04c0","target":"http://web/","raw":{"checkId":"bb29443e-c597-4e7b-9202-a4762e0e04c0","completedAt":"2026-10-02T12:00:00Z","durationMs":0},"availability":{"checkId":"cc29443e-c597-4e7b-9202-a4762e0e04c0","completedAt":"2026-10-02T12:00:01Z"}}' > "$WEB_BROWSER_ARTIFACT"
 fi
-node --input-type=module -e 'import fs from "node:fs";const p=process.env.WEB_BROWSER_ARTIFACT,c=JSON.parse(fs.readFileSync(p,"utf8"));c.inventory={ids:[c.id,...Array.from({length:20},(_,i)=>`018f22d3-1d6a-7cc0-a37b-${(0x1000+i).toString(16).padStart(12,"0")}`)],selectedId:c.id};if(process.env.WEB_BROWSER_PHASE==="pause")c.scheduling={monitorId:c.id,pausedState:"paused"};if(process.env.WEB_BROWSER_PHASE==="resume")c.scheduling.resumedState="active";if(process.env.WEB_BROWSER_PHASE==="delete-register")c.deletion={monitorId:"ee29443e-c597-4e7b-9202-a4762e0e04c0"};if(process.env.WEB_BROWSER_PHASE==="delete"){c.deletion.deletedState="deleted";c.deletion.inventoryExcludes=true;};if(process.env.WEB_BROWSER_PHASE==="history"){const ids=Array.from({length:25},(_,i)=>`7d9b2eb0-52bb-4dd7-8934-c5ce30d5c${(0x800+i).toString(16).padStart(3,"0")}`);c.history={monitorId:"018f22d3-1d6a-7cc0-a37b-46fc3fafd501",firstPageIds:ids.slice(0,20),secondPageIds:ids.slice(20),orderConfirmed:true,readsAfterRestart:{history:200},restarts:{api:{beforeStartedAt:"2026-11-01T12:00:01Z",afterStartedAt:"2026-11-01T12:00:02Z"}}};}fs.writeFileSync(p,JSON.stringify(c));'
+node --input-type=module -e 'import fs from "node:fs";const p=process.env.WEB_BROWSER_ARTIFACT,c=JSON.parse(fs.readFileSync(p,"utf8"));c.inventory={ids:[c.id,...Array.from({length:20},(_,i)=>`018f22d3-1d6a-7cc0-a37b-${(0x1000+i).toString(16).padStart(12,"0")}`)],selectedId:c.id};if(process.env.WEB_BROWSER_PHASE==="pause")c.scheduling={monitorId:c.id,pausedState:"paused"};if(process.env.WEB_BROWSER_PHASE==="resume")c.scheduling.resumedState="active";if(process.env.WEB_BROWSER_PHASE==="delete-register")c.deletion={monitorId:"ee29443e-c597-4e7b-9202-a4762e0e04c0"};if(process.env.WEB_BROWSER_PHASE==="delete"){c.deletion.deletedState="deleted";c.deletion.inventoryExcludes=true;};if(process.env.WEB_BROWSER_PHASE==="edit-register")c.targetEdit={monitorId:"ee29443e-c597-4e7b-9202-a4762e0e04c0",oldTarget:"http://web/"};if(process.env.WEB_BROWSER_PHASE==="edit")c.targetEdit.newTarget="http://web/edited";if(process.env.WEB_BROWSER_PHASE==="history"){const ids=Array.from({length:25},(_,i)=>`7d9b2eb0-52bb-4dd7-8934-c5ce30d5c${(0x800+i).toString(16).padStart(3,"0")}`);c.history={monitorId:"018f22d3-1d6a-7cc0-a37b-46fc3fafd501",firstPageIds:ids.slice(0,20),secondPageIds:ids.slice(20),orderConfirmed:true,readsAfterRestart:{history:200},restarts:{api:{beforeStartedAt:"2026-11-01T12:00:01Z",afterStartedAt:"2026-11-01T12:00:02Z"}}};}fs.writeFileSync(p,JSON.stringify(c));'
 SH
 chmod +x "$TMP/docker" "$TMP/npm"
 for scenario in success migration browser startup inventory restart paused-claim;do
