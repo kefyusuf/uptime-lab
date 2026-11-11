@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import {
   AvailabilityCard,
   LatestResultCard,
@@ -9,6 +9,7 @@ import { useMonitorReads } from '../features/refresh-monitor';
 import { MonitorSchedulingControl } from '../features/set-monitor-scheduling';
 import { DeleteMonitorControl } from '../features/delete-monitor';
 import { MonitorHistorySection } from '../features/monitor-history';
+import { EditMonitorTargetControl } from '../features/edit-monitor-target';
 export function MonitorDetailPage({
   id,
   client,
@@ -25,7 +26,11 @@ export function MonitorDetailPage({
   }, [id]);
   const monitor = reads.monitor.kind === 'success' ? reads.monitor.data : null;
   const [schedulingID, setSchedulingID] = useState<string | null>(null);
-  if (monitor && schedulingID !== id) setSchedulingID(id);
+  const [knownTarget, setKnownTarget] = useState<string | null>(null);
+  if (monitor) {
+    if (schedulingID !== id) setSchedulingID(id);
+    if (knownTarget !== monitor.targetUrl) setKnownTarget(monitor.targetUrl);
+  }
   const error = reads.monitor.kind === 'error' ? reads.monitor.error : null;
   return (
     <div className="detail-layout">
@@ -75,17 +80,18 @@ export function MonitorDetailPage({
           <p role="status">Reading monitor…</p>
         )}
       </section>
-      {schedulingID === id && reads.monitor.kind !== 'error' && (
-        <>
-          <MonitorSchedulingControl key={id} id={id} client={client} />
-          <MonitorHistorySection key={id} id={id} client={client} />
-          <DeleteMonitorControl
-            key={id}
+      {schedulingID === id && reads.monitor.kind !== 'error' && knownTarget && (
+        <Fragment key={id}>
+          <EditMonitorTargetControl
             id={id}
             client={client}
-            onDeleted={onDeleted}
+            targetUrl={knownTarget}
+            onEdited={reads.refresh}
           />
-        </>
+          <MonitorSchedulingControl id={id} client={client} />
+          <MonitorHistorySection id={id} client={client} />
+          <DeleteMonitorControl id={id} client={client} onDeleted={onDeleted} />
+        </Fragment>
       )}
       {monitor && (
         <div className="result-layout">

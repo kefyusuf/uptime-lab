@@ -9,6 +9,7 @@ export type {
   ClientError,
   ReadResult,
   CreateOutcome,
+  EditOutcome,
   MonitorClient,
   MonitorScheduling,
   SchedulingOutcome,

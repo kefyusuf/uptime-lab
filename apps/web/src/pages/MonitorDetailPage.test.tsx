@@ -51,6 +51,14 @@ function client(): MonitorClient {
         durationMs: 0,
       },
     }),
+    editTarget: vi.fn().mockResolvedValue({
+      kind: 'edited',
+      data: {
+        id,
+        targetUrl: 'https://example.com/edited',
+        createdAt: evaluatedAt,
+      },
+    }),
   };
 }
 it('starts scheduling only after a known monitor and keeps evidence refresh independent', async () => {
@@ -220,4 +228,93 @@ it('hides the delete control while the monitor is unknown', async () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Monitor not found.'),
   );
   expect(screen.queryByRole('button', { name: 'Delete monitor' })).toBeNull();
+});
+it('hides the edit control while the monitor is unknown', async () => {
+  const api = client();
+  api.getMonitor = vi.fn().mockResolvedValue({
+    kind: 'error',
+    error: { kind: 'http', status: 404, message: 'Monitor not found.' },
+  });
+  render(<MonitorDetailPage id={id} client={api} onDeleted={() => {}} />);
+  await waitFor(() =>
+    expect(screen.getByRole('alert')).toHaveTextContent('Monitor not found.'),
+  );
+  expect(screen.queryByRole('button', { name: 'Edit target' })).toBeNull();
+});
+it('updates the displayed target through the parent refresh path', async () => {
+  const api = client();
+  api.getMonitor = vi
+    .fn()
+    .mockResolvedValueOnce({
+      kind: 'success',
+      data: {
+        id,
+        targetUrl: 'http://example.com/<script>unsafe</script>',
+        createdAt: evaluatedAt,
+      },
+    })
+    .mockResolvedValueOnce({
+      kind: 'success',
+      data: {
+        id,
+        targetUrl: 'https://example.com/edited',
+        createdAt: evaluatedAt,
+      },
+    });
+  api.editTarget = vi.fn().mockResolvedValue({
+    kind: 'edited',
+    data: {
+      id,
+      targetUrl: 'https://example.com/edited',
+      createdAt: evaluatedAt,
+    },
+  });
+  render(<MonitorDetailPage id={id} client={api} onDeleted={() => {}} />);
+  await screen.findByTestId('monitor-target');
+  expect(screen.getByTestId('monitor-target')).toHaveTextContent(
+    'http://example.com/<script>unsafe</script>',
+  );
+  await userEvent.click(screen.getByRole('button', { name: 'Edit target' }));
+  await waitFor(() =>
+    expect(screen.getByLabelText('Target URL')).toHaveValue(
+      'http://example.com/<script>unsafe</script>',
+    ),
+  );
+  await userEvent.clear(screen.getByLabelText('Target URL'));
+  await userEvent.type(
+    screen.getByLabelText('Target URL'),
+    'https://example.com/edited',
+  );
+  await userEvent.click(screen.getByRole('button', { name: 'Save target' }));
+  await waitFor(() =>
+    expect(screen.getByTestId('monitor-target')).toHaveTextContent(
+      'https://example.com/edited',
+    ),
+  );
+  expect(api.getMonitor).toHaveBeenCalledTimes(2);
+  expect(api.editTarget).toHaveBeenCalledTimes(1);
+  expect(api.editTarget).toHaveBeenCalledWith(
+    id,
+    'https://example.com/edited',
+    expect.any(AbortSignal),
+  );
+});
+it('keeps edit independent of scheduling, deletion and history', async () => {
+  const api = client();
+  render(<MonitorDetailPage id={id} client={api} onDeleted={() => {}} />);
+  await screen.findByTestId('monitor-target');
+  await userEvent.click(screen.getByRole('button', { name: 'Edit target' }));
+  await waitFor(() =>
+    expect(screen.getByLabelText('Target URL')).toHaveValue(
+      'http://example.com/<script>unsafe</script>',
+    ),
+  );
+  await userEvent.type(screen.getByLabelText('Target URL'), 'x');
+  await userEvent.click(screen.getByRole('button', { name: 'Save target' }));
+  await waitFor(() =>
+    expect(screen.getByText('Target updated.')).toBeInTheDocument(),
+  );
+  expect(api.getScheduling).toHaveBeenCalledTimes(1);
+  expect(api.getHistory).toHaveBeenCalledTimes(1);
+  expect(api.deleteMonitor).not.toHaveBeenCalled();
 });

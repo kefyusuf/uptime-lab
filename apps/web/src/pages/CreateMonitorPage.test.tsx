@@ -19,6 +19,7 @@ const client: MonitorClient = {
   getMonitor: vi.fn(),
   getAvailability: vi.fn(),
   getLatestResult: vi.fn(),
+  editTarget: vi.fn(),
 };
 it('opens a known Monitor by ID without creating it', async () => {
   const navigate = vi.fn();

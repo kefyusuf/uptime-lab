@@ -228,6 +228,48 @@ export function createMonitorClient(fetchImpl: typeof fetch): MonitorClient {
       }
     },
     getMonitor: (id, signal) => read(resource(id), signal, decodeMonitor),
+    async editTarget(id, targetUrl, signal) {
+      const body: components['schemas']['MonitorTargetEditRequest'] = {
+        targetUrl,
+      };
+      try {
+        const response = await requestJson(fetchImpl, resource(id), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal,
+        });
+        if ([400, 404, 413, 415, 422].includes(response.status))
+          return {
+            kind: 'rejected',
+            error: {
+              kind: 'http',
+              status: response.status,
+              message:
+                'The target edit was rejected. Refresh the monitor before another change.',
+            },
+          };
+        if (response.status !== 200)
+          return {
+            kind: 'uncertain',
+            error: {
+              kind: 'http',
+              status: response.status,
+              message: 'The target edit outcome is unknown. Refresh to check.',
+            },
+          };
+        const data = decodeMonitor(response.value);
+        return { kind: 'edited', data };
+      } catch {
+        return {
+          kind: 'uncertain',
+          error: {
+            kind: 'transport',
+            message: 'The target edit outcome is unknown. Refresh to check.',
+          },
+        };
+      }
+    },
     async deleteMonitor(id, signal) {
       try {
         const response = await requestJson(fetchImpl, resource(id), {

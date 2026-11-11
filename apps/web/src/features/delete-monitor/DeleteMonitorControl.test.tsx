@@ -17,6 +17,7 @@ function client(): MonitorClient {
     }),
     getScheduling: vi.fn(),
     setScheduling: vi.fn(),
+    editTarget: vi.fn(),
     createMonitor: vi.fn(),
     listMonitors: vi.fn(),
     getAvailability: vi.fn(),

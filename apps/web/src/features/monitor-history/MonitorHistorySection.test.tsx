@@ -24,6 +24,7 @@ function client(): MonitorClient {
     getScheduling: vi.fn(),
     setScheduling: vi.fn(),
     deleteMonitor: vi.fn(),
+    editTarget: vi.fn(),
     createMonitor: vi.fn(),
     listMonitors: vi.fn(),
     getMonitor: vi.fn(),
