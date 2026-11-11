@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"mime"
 	"net/http"
 	"strings"
 
@@ -91,11 +92,12 @@ func (handler *Handler) serveTargetEdit(writer http.ResponseWriter, request *htt
 		return
 	}
 
-	mediaType, _, _ := strings.Cut(request.Header.Get("Content-Type"), ";")
-	mediaType = strings.TrimSpace(mediaType)
-	if request.ContentLength != 0 && mediaType != "application/json" {
-		writeProblem(writer, 415, "Content-Type must be application/json.")
-		return
+	if request.ContentLength != 0 {
+		mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+		if err != nil || !strings.EqualFold(mediaType, "application/json") {
+			writeProblem(writer, 415, "Content-Type must be application/json.")
+			return
+		}
 	}
 
 	request.Body = http.MaxBytesReader(writer, request.Body, targetEditBodyLimit)

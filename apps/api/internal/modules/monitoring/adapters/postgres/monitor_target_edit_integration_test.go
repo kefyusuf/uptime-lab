@@ -243,6 +243,44 @@ func TestTargetEditRacingDelete(t *testing.T) {
 			t.Fatalf("persisted target = %q", persisted)
 		}
 	})
+
+	t.Run("edit blocked by a delete observes not found after the delete commits", func(t *testing.T) {
+		pool := openIntegrationPool(t)
+		resetMonitors(t, pool)
+		insertExecutionMonitor(t, pool, monitorID, "https://example.com/edit-vs-delete-held", now.Add(-2*time.Hour))
+
+		held, err := pool.Begin(context.Background())
+		if err != nil {
+			t.Fatalf("begin deleting transaction: %v", err)
+		}
+		if _, err := held.Exec(
+			context.Background(),
+			"DELETE FROM monitoring.monitors WHERE id = $1::uuid",
+			monitorID.String(),
+		); err != nil {
+			t.Fatalf("delete monitor row under lock: %v", err)
+		}
+
+		edits := make(chan error, 1)
+		go func() {
+			_, editErr := repository.EditTarget(context.Background(), monitorID, mustTargetURL(t, "https://example.com/racing-edit"))
+			edits <- editErr
+		}()
+		waitForTransactionLockWait(t, pool)
+
+		if err := held.Commit(context.Background()); err != nil {
+			t.Fatalf("commit racing delete: %v", err)
+		}
+		select {
+		case editErr := <-edits:
+			if !errors.Is(editErr, ports.ErrMonitorNotFound) {
+				t.Fatalf("EditTarget() after committed delete error = %v, want ErrMonitorNotFound", editErr)
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatal("blocked EditTarget() did not finish after the delete committed")
+		}
+		assertMonitorRowCount(t, pool, monitorID, 0)
+	})
 }
 
 func TestTargetEditConcurrentLastCommittedWins(t *testing.T) {

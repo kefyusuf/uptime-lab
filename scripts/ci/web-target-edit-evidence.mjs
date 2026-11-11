@@ -2,16 +2,11 @@ import { readFileSync, writeFileSync } from 'node:fs';
 const [mode,file,...args]=process.argv.slice(2);
 const capture=JSON.parse(readFileSync(file,'utf8'));
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-if(mode!=='record-register'&&!uuid.test(capture?.targetEdit?.monitorId??''))throw Error('Target edit fixture Monitor ID must be captured first');
+if(mode!=='sql-rows'&&mode!=='sql-monitor'&&!uuid.test(capture?.targetEdit?.monitorId??''))throw Error('Target edit fixture Monitor ID must be captured first');
 if(mode==='sql-rows'){
   console.log(`SELECT coalesce(json_agg(row_to_json(r)),'[]'::json) FROM (SELECT id, monitor_id, completed_at FROM monitoring.check_runs WHERE monitor_id='${capture.targetEdit.monitorId}') r; -- target-edit-evidence-rows`);
 }else if(mode==='sql-monitor'){
   console.log(`SELECT coalesce(json_agg(row_to_json(m)),'[]'::json) FROM (SELECT id, target_url FROM monitoring.monitors WHERE id='${capture.targetEdit.monitorId}') m; -- target-edit-evidence-monitor`);
-}else if(mode==='record-register'){
-  const monitorId=String(args[0]??'').trim();
-  const oldTarget=String(args[1]??'').trim();
-  if(!uuid.test(monitorId)||!oldTarget)throw Error('Target edit register checkpoint needs a UUID Monitor ID and the old target');
-  capture.targetEdit={monitorId,oldTarget};
 }else if(mode==='record-claim'){
   const value=capture.targetEdit;
   if(typeof value.newTarget!=='string')throw Error('Edited target must be captured before the post-edit claim');

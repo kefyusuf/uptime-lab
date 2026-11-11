@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -53,6 +54,12 @@ func (repository *Repository) EditTarget(ctx context.Context, monitorID domain.M
 		createdAt    time.Time
 	)
 	if err := results.QueryRow().Scan(&rawID, &rawTargetURL, &createdAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// The probe saw the row, but a concurrent delete committed between
+			// the probe and this UPDATE under Read Committed: the loser of the
+			// race observes the design's pinned not-found outcome.
+			return domain.Monitor{}, ports.ErrMonitorNotFound
+		}
 		return domain.Monitor{}, fmt.Errorf("read edited monitor row: %w", err)
 	}
 	if err := results.Close(); err != nil {

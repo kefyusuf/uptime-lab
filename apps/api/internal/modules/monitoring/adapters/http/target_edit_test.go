@@ -41,6 +41,7 @@ func TestTargetEditValidationPrecedence(t *testing.T) {
 		status                            int
 	}{
 		{name: "media before body", method: http.MethodPatch, target: targetEditTestPath, media: "text/plain", body: validBody, status: 415},
+		{name: "invalid parameter mirrors creation", method: http.MethodPatch, target: targetEditTestPath, media: "application/json;foo", body: validBody, status: 415},
 		{name: "method before id", method: http.MethodPut, target: "/monitors/invalid", media: "application/json", body: validBody, status: 405},
 		{name: "id before body", method: http.MethodPatch, target: "/monitors/invalid", media: "application/json", body: validBody, status: 400},
 		{name: "empty body", method: http.MethodPatch, target: targetEditTestPath, media: "application/json", status: 400},
@@ -57,6 +58,17 @@ func TestTargetEditValidationPrecedence(t *testing.T) {
 				t.Fatalf("status=%d calls=%d headers=%v", recorder.Code, stub.calls, recorder.Header())
 			}
 		})
+	}
+}
+
+func TestTargetEditMediaMirrorsCreation(t *testing.T) {
+	stub := &editMonitorTargetStub{editResult: mustEditedMonitor(t)}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPatch, targetEditTestPath, strings.NewReader(`{"targetUrl":"https://example.com/edited"}`))
+	request.Header.Set("Content-Type", "Application/JSON")
+	targetEditTestHandler(stub).ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || stub.calls != 1 {
+		t.Fatalf("case-insensitive media = %d calls %d, want 200/1 like creation", recorder.Code, stub.calls)
 	}
 }
 

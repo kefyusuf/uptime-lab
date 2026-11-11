@@ -162,6 +162,9 @@ compose up -d --wait --wait-timeout 60 api
 EDIT_READS="$(compose exec -T web node --input-type=module -e 'const id=process.argv[1];const response=await fetch("http://api:8080/monitors/"+id);const body=await response.json();console.log(JSON.stringify({monitor:response.status,targetUrl:body.targetUrl}));' "$EDIT_ID")"
 printf '%s' "$EDIT_READS" > "$WORK/edit-reads.json"
 edit record-reads "$WORK/edit-reads.json"
+# Re-capture the old evidence rows on the restarted adapter so the verifier
+# links the capture to post-restart durable rows, not a pre-restart snapshot.
+sql "$EDIT_ROWS_SQL" > "$WORK/edit-rows.json"
 EDIT_MON_SQL="$(edit sql-monitor)"
 compose exec -T db sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"' sh "$EDIT_MON_SQL" > "$WORK/edit-monitors.json"
 node "$ROOT/scripts/ci/verify-web-evidence.mjs" "$WEB_BROWSER_ARTIFACT" "$WORK/rows.json" "$WORK/monitors.json" "$WORK/deletion-rows.json" "$WORK/deletion-monitors.json" "$WORK/history-rows.json" "$WORK/edit-rows.json" "$WORK/edit-monitors.json"
