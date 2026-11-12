@@ -42,3 +42,17 @@ func (monitor Monitor) TargetURL() TargetURL {
 func (monitor Monitor) CreatedAt() time.Time {
 	return monitor.createdAt
 }
+
+// WithTargetURL returns a new immutable Monitor value with the same identity
+// and creation instant and the validated replacement target. The original
+// value is never mutated.
+func (monitor Monitor) WithTargetURL(targetURL TargetURL) (Monitor, error) {
+	if targetURL.isZero() {
+		return Monitor{}, ErrInvalidTargetURL
+	}
+	return Monitor{
+		id:        monitor.id,
+		targetURL: targetURL,
+		createdAt: monitor.createdAt,
+	}, nil
+}

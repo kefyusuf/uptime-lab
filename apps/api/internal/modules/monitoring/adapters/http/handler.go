@@ -41,6 +41,10 @@ type getMonitorHistory interface {
 	Execute(context.Context, domain.MonitorID, application.HistoryInput) (application.HistoryCandidates, error)
 }
 
+type editMonitorTarget interface {
+	Execute(context.Context, domain.MonitorID, string) (domain.Monitor, error)
+}
+
 // Handler adapts the public Monitoring HTTP contract to the existing application use cases.
 type Handler struct {
 	register        registerMonitor
@@ -52,6 +56,7 @@ type Handler struct {
 	setScheduling   setMonitorScheduling
 	deletion        deleteMonitor
 	history         getMonitorHistory
+	targetEdit      editMonitorTarget
 }
 
 // NewHandler constructs the isolated public Monitoring HTTP adapter.
@@ -111,9 +116,34 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 	}
 
 	if rawID, ok := monitorIDPathSegment(request.URL.Path); ok {
-		if handler.deletion != nil {
-			handler.serveDeletion(writer, request, rawID)
-			return
+		if handler.deletion != nil || handler.targetEdit != nil {
+			writer.Header().Set("Cache-Control", "no-store")
+			if !canonicalMonitorResourceTarget(request, rawID) {
+				writeProblem(writer, 400, "Invalid monitor request.")
+				return
+			}
+			switch {
+			case request.Method == http.MethodPatch && handler.targetEdit != nil:
+				handler.serveTargetEdit(writer, request, rawID)
+				return
+			case request.Method == http.MethodDelete && handler.deletion != nil:
+				handler.serveDeletion(writer, request, rawID)
+				return
+			case request.Method == http.MethodGet:
+				handler.serveResource(writer, request, rawID)
+				return
+			default:
+				allow := "GET"
+				if handler.deletion != nil && handler.targetEdit != nil {
+					allow = "GET, PATCH, DELETE"
+				} else if handler.deletion != nil {
+					allow = "GET, DELETE"
+				} else if handler.targetEdit != nil {
+					allow = "GET, PATCH"
+				}
+				methodNotAllowed(writer, allow)
+				return
+			}
 		}
 		handler.serveResource(writer, request, rawID)
 		return
@@ -134,6 +164,25 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 	}
 
 	http.NotFound(writer, request)
+}
+
+// canonicalMonitorResourceTarget reports whether the raw request target is the
+// canonical form of the shared Monitor resource: no query (including an empty
+// trailing question mark), no fragment and no alternate spelling.
+func canonicalMonitorResourceTarget(request *http.Request, rawID string) bool {
+	rawTarget := request.RequestURI
+	if rawTarget == "" {
+		rawTarget = request.URL.RequestURI()
+	}
+	return rawTarget == monitorsPath+"/"+rawID
+}
+
+// NewHandlerWithTargetEdit adds the target edit capability to the shared
+// Monitor resource.
+func NewHandlerWithTargetEdit(register registerMonitor, get getMonitor, latest getLatestCheckResult, availability getMonitorAvailability, list listMonitors, schedulingGet getMonitorScheduling, schedulingSet setMonitorScheduling, deletion deleteMonitor, history getMonitorHistory, targetEdit editMonitorTarget) *Handler {
+	handler := NewHandlerWithHistory(register, get, latest, availability, list, schedulingGet, schedulingSet, deletion, history)
+	handler.targetEdit = targetEdit
+	return handler
 }
 
 // NewHandlerWithDeletion adds the irreversible local removal capability.

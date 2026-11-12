@@ -37,6 +37,23 @@ function canonicalPublicFixtures() {
       detail: 'The monitor was not found.',
     },
     'monitor-history-empty.json': { items: [], nextCursor: null },
+    'monitor-target-edited.json': {
+      id: 'aa29443e-c597-4e7b-9202-a4762e0e04c0',
+      targetUrl: 'https://example.com/edited-target',
+      createdAt: '2026-11-01T12:00:00.123456Z',
+    },
+    'monitor-target-edit-unknown.json': {
+      type: 'about:blank',
+      title: 'Not Found',
+      status: 404,
+      detail: 'The monitor was not found.',
+    },
+    'monitor-target-edit-invalid.json': {
+      type: 'about:blank',
+      title: 'Unprocessable Content',
+      status: 422,
+      detail: 'The request content violates the monitor contract.',
+    },
     'monitor-history-page.json': (() => {
       const checkId = '7d9b2eb0-52bb-4dd7-8934-c5ce30d5c675';
       const completedAt = '2026-11-01T12:00:00.123456Z';
@@ -279,6 +296,13 @@ function validDocument() {
   document.paths['/monitors/{monitorId}/scheduling'] = schedulingPath();
   document.paths['/monitors/{monitorId}'].delete = deletionOperation();
   document.paths['/monitors/{monitorId}/history'] = { get: historyOperation() };
+  document.paths['/monitors/{monitorId}'].patch = targetEditOperation();
+  document.components.schemas.MonitorTargetEditRequest = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['targetUrl'],
+    properties: { targetUrl: { type: 'string' } },
+  };
   document.components.schemas.MonitorHistoryEntry = {
     oneOf: [
       { $ref: '#/components/schemas/LatestHTTPResponseResult' },
@@ -369,12 +393,59 @@ function historyOperation() {
   };
 }
 
+function targetEditOperation() {
+  const responses = {
+    '200': {
+      description: 'Edited.',
+      content: {
+        'application/json': { schema: { $ref: '#/components/schemas/Monitor' } },
+      },
+    },
+    '400': problemResponse(),
+    '404': problemResponse(),
+    '415': problemResponse(),
+    '422': problemResponse(),
+    '500': problemResponse(),
+    '405': {
+      description: 'Method.',
+      headers: { Allow: { schema: { type: 'string', const: 'GET, PATCH, DELETE' } } },
+    },
+  };
+  for (const response of Object.values(responses)) {
+    response.headers = {
+      ...response.headers,
+      'Cache-Control': { schema: { type: 'string', const: 'no-store' } },
+    };
+  }
+  return {
+    operationId: 'editMonitorTarget',
+    'x-max-body-bytes': 16384,
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: { $ref: '#/components/schemas/MonitorTargetEditRequest' },
+        },
+      },
+    },
+    parameters: [
+      {
+        name: 'monitorId',
+        in: 'path',
+        required: true,
+        schema: { type: 'string', format: 'uuid' },
+      },
+    ],
+    responses,
+  };
+}
+
 function deletionOperation() {
   const responses = {
     '204': { description: 'Deleted.' },
     '400': problemResponse(),
     '404': problemResponse(),
-    '405': { description: 'Method.', headers: { Allow: { schema: { type: 'string', const: 'GET, DELETE' } } } },
+    '405': { description: 'Method.', headers: { Allow: { schema: { type: 'string', const: 'GET, PATCH, DELETE' } } } },
     '500': problemResponse(),
   };
   for (const response of Object.values(responses)) {
@@ -549,7 +620,7 @@ expectFixtureReject('scheduling fixture cannot contain extra data', 'monitor-sch
 
 expectReject('deleteOperationIsClosed', d => { d.paths['/monitors/{monitorId}'].delete.responses['204'].content = { 'application/json': { schema: { type: 'object' } } }; }, 'deletion 204 content must be absent');
 expectReject('deleteResponsesAreExact', d => { d.paths['/monitors/{monitorId}'].delete.responses['201'] = problemResponse(); }, 'deletion responses');
-expectReject('delete requires exact Allow', d => { d.paths['/monitors/{monitorId}'].delete.responses['405'].headers.Allow.schema.const = 'GET'; }, 'deletion Allow');
+expectReject('deletion Allow is exact', d => { d.paths['/monitors/{monitorId}'].delete.responses['405'].headers.Allow.schema.const = 'PATCH'; }, 'deletion Allow');
 expectReject('delete no-store is required', d => { delete d.paths['/monitors/{monitorId}'].delete.responses['204'].headers; }, 'deletion Cache-Control');
 expectReject('delete must not accept a request body', d => { d.paths['/monitors/{monitorId}'].delete.requestBody = { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/MonitorScheduling' } } } }; }, 'deletion must not accept a request body');
 expectReject('delete operationId is exact', d => { d.paths['/monitors/{monitorId}'].delete.operationId = 'removeMonitor'; }, 'deletion operationId must be deleteMonitor');
@@ -557,6 +628,16 @@ expectReject('delete has no extra method', d => { d.paths['/monitors/{monitorId}
 expectReject('deletePreservesExistingOperations', d => { delete d.paths['/monitors/{monitorId}'].delete; }, '/monitors/{monitorId} operations');
 expectFixtureReject('delete confirmed fixture must be empty', 'monitor-delete-confirmed.json', f => { f.removed = true; }, 'deletion confirmed fixture');
 expectFixtureReject('delete unknown fixture status fails', 'monitor-delete-unknown.json', f => { f.status = 500; }, 'deletion unknown fixture status');
+expectReject('editOperationIsClosed', d => { d.components.schemas.MonitorTargetEditRequest.additionalProperties = true; }, 'MonitorTargetEditRequest.additionalProperties');
+expectReject('edit request requires targetUrl', d => { d.components.schemas.MonitorTargetEditRequest.required = []; }, 'MonitorTargetEditRequest.required');
+expectReject('editResponsesAreExact', d => { d.paths['/monitors/{monitorId}'].patch.responses['201'] = problemResponse(); }, 'target edit responses');
+expectReject('edit Allow is exact', d => { d.paths['/monitors/{monitorId}'].patch.responses['405'].headers.Allow.schema.const = 'PATCH'; }, 'target edit Allow');
+expectReject('edit budget is exact', d => { d.paths['/monitors/{monitorId}'].patch['x-max-body-bytes'] = 65536; }, 'target edit body budget');
+expectReject('edit no-store is required', d => { delete d.paths['/monitors/{monitorId}'].patch.responses['500'].headers; }, 'target edit Cache-Control');
+expectReject('editPreservesExistingOperations', d => { delete d.paths['/monitors/{monitorId}'].patch; }, '/monitors/{monitorId} operations');
+expectReject('edit operationId is exact', d => { d.paths['/monitors/{monitorId}'].patch.operationId = 'editTarget'; }, 'target edit operationId must be editMonitorTarget');
+expectFixtureReject('target edit unknown fixture status fails', 'monitor-target-edit-unknown.json', f => { f.status = 500; }, 'target edit unknown fixture status');
+expectFixtureReject('target edited fixture shape fails', 'monitor-target-edited.json', f => { f.extra = 1; }, 'target edited fixture');
 
 expectReject('historyOperationIsClosed', d => { d.components.schemas.MonitorHistoryPage.additionalProperties = true; }, 'MonitorHistoryPage.additionalProperties');
 expectReject('historyResponsesAreExact', d => { d.paths['/monitors/{monitorId}/history'].get.responses['204'] = {}; }, 'history responses');
@@ -625,7 +706,7 @@ expectReject('POST latest-result fails', (d) => {
 }, '/monitors/{monitorId}/latest-result operations');
 expectReject('empty inventory GET operation fails', (d) => { d.paths['/monitors'].get = {}; }, 'inventory operationId must be listMonitors');
 expectReject('PUT lifecycle mutation fails', (d) => { d.paths['/monitors/{monitorId}'].put = {}; }, '/monitors/{monitorId} operations');
-expectReject('PATCH lifecycle mutation fails', (d) => { d.paths['/monitors/{monitorId}'].patch = {}; }, '/monitors/{monitorId} operations');
+expectReject('empty PATCH operation fails', (d) => { d.paths['/monitors/{monitorId}'].patch = {}; }, 'target edit operationId must be editMonitorTarget');
 expectReject('empty DELETE operation fails', (d) => { d.paths['/monitors/{monitorId}'].delete = {}; }, 'deletion operationId must be deleteMonitor');
 expectReject('missing POST fails', (d) => { delete d.paths['/monitors'].post; }, '/monitors operations');
 expectReject('missing GET by ID fails', (d) => { delete d.paths['/monitors/{monitorId}'].get; }, '/monitors/{monitorId} operations');

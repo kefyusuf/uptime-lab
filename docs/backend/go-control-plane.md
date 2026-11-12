@@ -244,9 +244,15 @@ Cross-runtime Docker acceptance is documented separately in [../testing/single-c
 
 ## Durable monitor deletion
 
-`DELETE /monitors/{monitorId}` is the eighth public operation. The adapter recognizes the shared raw Monitor resource once deletion is composed, keeps every matched response `no-store`, answers unsupported methods with `Allow: GET, DELETE`, rejects declared or streamed bodies with 400, and succeeds with an empty `204` after the commit. After deletion every read of the Monitor is 404 and the inventory excludes it; a repeated delete is 404.
+`DELETE /monitors/{monitorId}` is the eighth public operation. The adapter recognizes the shared raw Monitor resource once deletion is composed, keeps every matched response `no-store`, answers unsupported methods with `Allow: GET, PATCH, DELETE`, rejects declared or streamed bodies with 400, and succeeds with an empty `204` after the commit. After deletion every read of the Monitor is 404 and the inventory excludes it; a repeated delete is 404.
 
 `Repository.Delete` runs one explicit Read Committed transaction whose four statements pipeline through a single `pgx.Batch` round trip: sweep the Monitor's CheckRuns, `SELECT ... FOR UPDATE` the Monitor row with not-found detection, sweep again under the lock, and delete the parent row before committing. The identifier binds as a binary `pgtype.UUID` parameter. The re-sweep under the lock is load-bearing: a claim that commits a pending run between the sweep and the lock would otherwise violate the `NO ACTION` foreign key at the parent delete, and the gated interleaving suite reproduces exactly that failure when the re-sweep is removed. Composition wires the deletion repository and use case through `NewModuleWithDeletion` and `NewHandlerWithDeletion`.
+
+## Monitor target edit
+
+`PATCH /monitors/{monitorId}` is the tenth public operation. The adapter recognizes the shared raw Monitor resource once the edit is composed, keeps every matched response `no-store`, answers unsupported methods with the exact `Allow` combination of the composed capabilities, rejects queries/fragments/alternate raw spellings with 400, and mirrors creation's body handling: `application/json` only, a strict closed single-document decode (`targetUrl` exactly once, no unknown keys, no trailing content), a 16384-byte budget, 400 for malformed framing and 422 for contract violations with zero use-case calls. Success returns `200` with the full closed `Monitor` document; `404` for an unknown Monitor and `422` for a target the domain rejects.
+
+`Repository.EditTarget` runs one explicit Read Committed transaction whose existence probe and `UPDATE monitoring.monitors SET target_url = ... WHERE id = ... RETURNING` pipeline through a single `pgx.Batch` round trip with a binary `pgtype.UUID` binding. The transaction serializes on the Monitor row: an in-flight claim probes the old target and completes durably, the next claim probes the edited target, a racing delete resolves as either a completed edit followed by removal or a not-found edit, and concurrent edits are last-committed-wins. The domain-level edit keeps `id` and `createdAt` immutable. Composition wires the repository and use case through `NewModuleWithTargetEdit` and `NewHandlerWithTargetEdit`; scheduling state and recorded evidence are untouched by an edit.
 
 ## Retained history window
 
@@ -264,9 +270,9 @@ ListMonitors uses a dedicated bounded port and an88-character raw-base64url posi
 
 Still deferred:
 
-- public Monitor operations beyond create/inventory/read/latest-result/availability;
+- public Monitor operations beyond create/inventory/read/latest-result/availability/history/target-edit;
 - full CheckRun history and materialized availability history;
-- mutable Monitor lifecycle;
+- mutable Monitor lifecycle beyond the edited target URL;
 - multi-worker coordination/leases;
 - broker/outbox;
 - React;

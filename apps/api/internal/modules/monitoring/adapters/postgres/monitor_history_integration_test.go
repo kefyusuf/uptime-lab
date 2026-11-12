@@ -336,6 +336,16 @@ func TestDeletionRacingHistoryResolvesPageOr404(t *testing.T) {
 	}()
 	waitForTransactionLockWait(t, pool)
 
+	// The pinned property is that the history read completes against the
+	// pre-delete snapshot while the delete is parked on the run-row lock, so
+	// require the read's outcome before releasing the lock; otherwise runner
+	// scheduling could commit the delete before the read takes its snapshot.
+	select {
+	case <-readsDone:
+	case <-time.After(10 * time.Second):
+		t.Fatal("racing Page() did not finish while the delete was parked")
+	}
+
 	if err := held.Commit(context.Background()); err != nil {
 		t.Fatalf("release parked lock: %v", err)
 	}
@@ -348,7 +358,6 @@ func TestDeletionRacingHistoryResolvesPageOr404(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("racing Delete() did not finish after release")
 	}
-	<-readsDone
 
 	assertMonitorRowCount(t, pool, monitorID, 0)
 	assertMonitorCheckRunCount(t, pool, monitorID, 0)

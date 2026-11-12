@@ -69,3 +69,29 @@ func TestNewMonitorRejectsInvalidState(t *testing.T) {
 		})
 	}
 }
+
+func TestMonitorWithTargetURLRejectsZeroValueTarget(t *testing.T) {
+	id, target := validTestMonitorParts(t)
+	monitor, err := NewMonitor(id, target, time.Date(2026, 11, 11, 9, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("NewMonitor() error = %v", err)
+	}
+	if _, err := monitor.WithTargetURL(TargetURL{}); !errors.Is(err, ErrInvalidTargetURL) {
+		t.Fatalf("WithTargetURL(zero target) error = %v, want ErrInvalidTargetURL", err)
+	}
+
+	replacement, err := NewTargetURL("https://example.com/replaced")
+	if err != nil {
+		t.Fatalf("NewTargetURL() error = %v", err)
+	}
+	edited, err := monitor.WithTargetURL(replacement)
+	if err != nil {
+		t.Fatalf("WithTargetURL() error = %v", err)
+	}
+	if edited.ID() != monitor.ID() || !edited.CreatedAt().Equal(monitor.CreatedAt()) || edited.TargetURL().String() != "https://example.com/replaced" {
+		t.Fatalf("WithTargetURL() = %v/%v/%v, want same identity and instant with the new target", edited.ID(), edited.CreatedAt(), edited.TargetURL())
+	}
+	if monitor.TargetURL().String() != target.String() {
+		t.Fatalf("original monitor target = %q, want unchanged %q", monitor.TargetURL().String(), target.String())
+	}
+}

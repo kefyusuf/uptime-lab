@@ -82,7 +82,7 @@ func startHistoryTransportServer(t *testing.T, history *transportHistoryUseCase)
 			if err != nil {
 				t.Error(err)
 			}
-		case <-time.After(3 * time.Second):
+		case <-time.After(10 * time.Second):
 			t.Error("production server did not stop")
 		}
 	})

@@ -403,4 +403,73 @@ describe('Monitor client', () => {
     ).toMatchObject({ kind: 'uncertain' });
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
+  it('edits the monitor target with one PATCH request', async () => {
+    const edited = {
+      id: monitor.id,
+      targetUrl: 'https://example.com/edited',
+      createdAt: monitor.createdAt,
+    };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json(edited));
+    const outcome = await createMonitorClient(fetcher).editTarget(
+      monitor.id,
+      'https://example.com/edited',
+      signal(),
+    );
+    expect(outcome).toEqual({ kind: 'edited', data: edited });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledWith(
+      '/api/monitors/' + monitor.id,
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ targetUrl: 'https://example.com/edited' }),
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        credentials: 'omit',
+        redirect: 'error',
+      }),
+    );
+  });
+  it('maps edit rejections without retrying', async () => {
+    for (const status of [400, 404, 413, 415, 422]) {
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(Response.json({}, { status }));
+      expect(
+        await createMonitorClient(fetcher).editTarget(
+          monitor.id,
+          'https://example.com/edited',
+          signal(),
+        ),
+      ).toEqual({
+        kind: 'rejected',
+        error: {
+          kind: 'http',
+          status,
+          message:
+            'The target edit was rejected. Refresh the monitor before another change.',
+        },
+      });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    }
+  });
+  it('treats invalid edit responses and lost connections as uncertain without retry', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ unexpected: true }))
+      .mockResolvedValueOnce(Response.json({}, { status: 500 }))
+      .mockRejectedValueOnce(new Error('connection lost'));
+    const client = createMonitorClient(fetcher);
+    for (let index = 0; index < 3; index++) {
+      expect(
+        await client.editTarget(
+          monitor.id,
+          'https://example.com/edited',
+          signal(),
+        ),
+      ).toMatchObject({ kind: 'uncertain' });
+    }
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
 });

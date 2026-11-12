@@ -105,4 +105,13 @@ describe('public response decoding', () => {
       }),
     ).toThrow(ResponseDecodeError),
   );
+  it('keeps the monitor decoder closed for edit responses', () => {
+    expect(decodeMonitor({ ...monitor })).toEqual(monitor);
+    expect(() => decodeMonitor({ ...monitor, extra: 1 })).toThrow(
+      ResponseDecodeError,
+    );
+    expect(() => decodeMonitor({ ...monitor, id: 'not-a-uuid' })).toThrow(
+      ResponseDecodeError,
+    );
+  });
 });

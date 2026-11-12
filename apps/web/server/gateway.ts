@@ -47,6 +47,7 @@ export function createGateway(config: WebConfig): RequestListener {
     const mutation =
       route.method === 'POST' ||
       route.method === 'PUT' ||
+      route.method === 'PATCH' ||
       route.method === 'DELETE';
     const boundary = checkBrowserBoundary(req, config, mutation);
     if (boundary) {
@@ -54,7 +55,11 @@ export function createGateway(config: WebConfig): RequestListener {
       return;
     }
     const maxRequestBytes =
-      route.method === 'PUT' ? 1024 : config.maxRequestBytes;
+      route.method === 'PUT'
+        ? 1024
+        : route.method === 'PATCH'
+          ? 16384
+          : config.maxRequestBytes;
     if (
       route.method === 'PUT' &&
       Number(req.headers['content-length']) > maxRequestBytes
@@ -74,7 +79,7 @@ export function createGateway(config: WebConfig): RequestListener {
       return;
     }
     if (
-      route.method === 'POST' &&
+      (route.method === 'POST' || route.method === 'PATCH') &&
       !/^application\/json(?:\s*;\s*charset=[A-Za-z0-9-]+)?$/i.test(
         req.headers['content-type'] || '',
       )

@@ -34,6 +34,7 @@ const client: MonitorClient = {
     },
   }),
   getLatestResult: vi.fn().mockResolvedValue({ kind: 'success', data: null }),
+  editTarget: vi.fn().mockResolvedValue({ kind: 'edited', data: monitor }),
 };
 afterEach(() => window.history.replaceState(null, '', '/'));
 it('supports keyboard creation and detail navigation', async () => {

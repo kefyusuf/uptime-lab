@@ -30,6 +30,14 @@ function client(): MonitorClient {
     getAvailability: vi.fn(),
     getLatestResult: vi.fn(),
     deleteMonitor: vi.fn().mockResolvedValue({ kind: 'deleted' }),
+    editTarget: vi.fn().mockResolvedValue({
+      kind: 'edited',
+      data: {
+        id: 'aa29443e-c597-4e7b-9202-a4762e0e04c0',
+        targetUrl: 'http://example.com/',
+        createdAt: '2026-10-02T12:00:00Z',
+      },
+    }),
     createMonitor: vi.fn(),
     listMonitors: vi.fn(),
   };

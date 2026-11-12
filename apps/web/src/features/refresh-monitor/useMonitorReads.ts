@@ -6,7 +6,7 @@ import type {
   LoadState,
 } from '../../entities/monitor';
 import type { ReadResult } from '../../entities/monitor';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 interface Views {
   monitor: LoadState<Monitor>;
   availability: LoadState<Availability>;
@@ -107,14 +107,15 @@ export function useMonitorReads(
     snapshot.id === id && snapshot.generation === generation
       ? snapshot
       : loading();
+  const refresh = useCallback(() => {
+    serial.current++;
+    active.current?.abort();
+    setGeneration((value) => value + 1);
+  }, []);
   return {
     monitor: views.monitor,
     availability: views.availability,
     latest: views.latest,
-    refresh: () => {
-      serial.current++;
-      active.current?.abort();
-      setGeneration((value) => value + 1);
-    },
+    refresh,
   };
 }

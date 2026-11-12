@@ -132,5 +132,40 @@ printf '%s' "$HISTORY_READS" > "$WORK/history-reads.json"
 history record-reads "$WORK/history-reads.json"
 HISTORY_ROWS_SQL="$(history sql-rows)"
 compose exec -T db sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"' sh "$HISTORY_ROWS_SQL" > "$WORK/history-rows.json"
-node "$ROOT/scripts/ci/verify-web-evidence.mjs" "$WEB_BROWSER_ARTIFACT" "$WORK/rows.json" "$WORK/monitors.json" "$WORK/deletion-rows.json" "$WORK/deletion-monitors.json" "$WORK/history-rows.json"
+# Target edit journey: an active fixture Monitor claimed and probed by the
+# real Checker on the old target, edited through the real browser form, and
+# proven to hand the edited target to the next claim across an API restart.
+edit() { node "$ROOT/scripts/ci/web-target-edit-evidence.mjs" "$1" "$WEB_BROWSER_ARTIFACT" "${@:2}"; }
+browser edit-register
+EDIT_ID="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).targetEdit.monitorId' "$WEB_BROWSER_ARTIFACT")"
+EDIT_ROWS_SQL="$(edit sql-rows)"
+probed=false
+for ((attempt=1;attempt<=30;attempt++));do
+  sql "$EDIT_ROWS_SQL" > "$WORK/edit-rows.json"
+  if node --input-type=module -e 'import fs from "node:fs";const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.exit(Array.isArray(r)&&r.length>0?0:1);' "$WORK/edit-rows.json";then probed=true;break;fi;sleep 1
+done
+[[ "$probed" == true ]] || { printf 'Real Checker did not probe the registered target\n' >&2;exit 1; }
+browser edit
+compose stop checker
+# The claim due boundary is one cadence (60s) after the latest terminal row,
+# and a pending run stopped mid-flight terminalizes at its deadline before the
+# monitor re-enters the window, so poll up to two minutes for the post-edit
+# claim to hand out the edited target.
+claimed=false
+for ((attempt=1;attempt<=120;attempt++));do
+  if compose exec -T api wget -q -O - --post-data= http://127.0.0.1:8080/internal/checks/claim > "$WORK/edit-claim.json" 2>/dev/null && edit record-claim "$WORK/edit-claim.json" 2>/dev/null;then claimed=true;break;fi;sleep 1
+done
+[[ "$claimed" == true ]] || { printf 'Post-edit claim did not probe the edited target\n' >&2;exit 1; }
+API_CONTAINER="$(compose ps -q api)"
+compose restart api
+compose up -d --wait --wait-timeout 60 api
+EDIT_READS="$(compose exec -T web node --input-type=module -e 'const id=process.argv[1];const response=await fetch("http://api:8080/monitors/"+id);const body=await response.json();console.log(JSON.stringify({monitor:response.status,targetUrl:body.targetUrl}));' "$EDIT_ID")"
+printf '%s' "$EDIT_READS" > "$WORK/edit-reads.json"
+edit record-reads "$WORK/edit-reads.json"
+# Re-capture the old evidence rows on the restarted adapter so the verifier
+# links the capture to post-restart durable rows, not a pre-restart snapshot.
+sql "$EDIT_ROWS_SQL" > "$WORK/edit-rows.json"
+EDIT_MON_SQL="$(edit sql-monitor)"
+compose exec -T db sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"' sh "$EDIT_MON_SQL" > "$WORK/edit-monitors.json"
+node "$ROOT/scripts/ci/verify-web-evidence.mjs" "$WEB_BROWSER_ARTIFACT" "$WORK/rows.json" "$WORK/monitors.json" "$WORK/deletion-rows.json" "$WORK/deletion-monitors.json" "$WORK/history-rows.json" "$WORK/edit-rows.json" "$WORK/edit-monitors.json"
 printf 'Real browser/Go/Checker/PostgreSQL journey passed on loopback port %s\n' "$UPTIME_LAB_WEB_PORT"

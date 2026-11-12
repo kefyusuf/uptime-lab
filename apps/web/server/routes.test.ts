@@ -176,16 +176,65 @@ it('maps monitor deletion beside get', () => {
     path: '/monitors/id',
   });
 });
-it.each(['HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH'])(
-  'keeps monitor resource verbs closed to get and delete: %s',
+it.each(['HEAD', 'OPTIONS', 'POST', 'PUT', 'TRACE'])(
+  'keeps monitor resource verbs closed to get, patch and delete: %s',
   (method) => {
     expect(matchApiRoute('/api/monitors/id', method)).toEqual({
       kind: 'reject',
       status: 405,
-      allow: 'GET, DELETE',
+      allow: 'GET, PATCH, DELETE',
     });
   },
 );
+it('maps only monitor patch beside get and delete', () => {
+  expect(matchApiRoute('/api/monitors/id', 'PATCH')).toEqual({
+    kind: 'forward',
+    method: 'PATCH',
+    path: '/monitors/id',
+  });
+  expect(matchApiRoute('/api/monitors/id', 'GET')).toEqual({
+    kind: 'forward',
+    method: 'GET',
+    path: '/monitors/id',
+  });
+  expect(matchApiRoute('/api/monitors/id', 'DELETE')).toEqual({
+    kind: 'forward',
+    method: 'DELETE',
+    path: '/monitors/id',
+  });
+});
+it.each([
+  '/api/monitors/id?',
+  '/api/monitors/id?x=1',
+  '/api/monitors/id/',
+  '/api/monitors/%69d',
+])('rejects patch query and alias tricks %s', (path) => {
+  expect(matchApiRoute(path, 'PATCH')).toEqual({
+    kind: 'reject',
+    status: 400,
+  });
+});
+it('keeps patch closed outside the bare monitor resource', () => {
+  expect(matchApiRoute('/api/monitors/id/latest-result', 'PATCH')).toEqual({
+    kind: 'reject',
+    status: 405,
+    allow: 'GET',
+  });
+  expect(matchApiRoute('/api/monitors/id/scheduling', 'PATCH')).toEqual({
+    kind: 'reject',
+    status: 405,
+    allow: 'GET, PUT',
+  });
+  expect(matchApiRoute('/api/internal/checks/claim', 'PATCH')).toEqual({
+    kind: 'reject',
+    status: 404,
+  });
+  expect(matchApiRoute('/api/monitors', 'PATCH')).toEqual({
+    kind: 'reject',
+    status: 405,
+    allow: 'GET, POST',
+  });
+});
 it('keeps sub-resource deletion closed', () => {
   expect(matchApiRoute('/api/monitors/id/latest-result', 'DELETE')).toEqual({
     kind: 'reject',

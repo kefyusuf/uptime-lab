@@ -73,6 +73,10 @@ export type CreateOutcome =
   | { kind: 'created'; monitor: Monitor }
   | { kind: 'rejected'; message: string }
   | { kind: 'uncertain'; message: string };
+export type EditOutcome =
+  | { kind: 'edited'; data: Monitor }
+  | { kind: 'rejected'; error: ClientError }
+  | { kind: 'uncertain'; error: ClientError };
 export interface MonitorClient {
   getScheduling(
     id: string,
@@ -84,6 +88,11 @@ export interface MonitorClient {
     signal: AbortSignal,
   ): Promise<SchedulingOutcome>;
   deleteMonitor(id: string, signal: AbortSignal): Promise<DeleteOutcome>;
+  editTarget(
+    id: string,
+    targetUrl: string,
+    signal: AbortSignal,
+  ): Promise<EditOutcome>;
   getHistory(
     id: string,
     cursor: string | null,
