@@ -41,7 +41,6 @@ Design/spec/plan documents preserve the decision history for the phase in which 
 - [Local History Retention scope](superpowers/specs/2026-11-06-local-history-retention-scope-reassessment.md): historical R2 scope proposal approved and implemented through feature PR #78; count-based retained window (newest 50 terminal rows per Monitor) enforced inside the existing claim reconciliation.
 - [Local History Retention design](superpowers/specs/2026-11-06-local-history-retention-design.md): historical design for the landed window-function retention statement inside the claim transaction's reconciliation phase, pending-row immunity, in-flight-completion race resolution and the explicit R0-07 non-decision.
 - [Local History Retention implementation plan](superpowers/plans/2026-11-06-local-history-retention.md): historical three-task Native TDD plan executed through feature PR #78, squash-merged to `main@352ee83` with all-ten-job exact-main CI.
-- [Local Check-Run History implementation plan](superpowers/plans/2026-11-01-local-check-run-history.md): historical seven-task Native TDD plan executed through feature PR #73, squash-merged to `main@6c49b2a` with all-ten-job exact-main CI.
 
 - [Post-R2 roadmap (2026-11-13)](roadmap/2026-11-13-post-r2-roadmap.md): proposed effort-ordered tracks after R2 completion — housekeeping, minimal Path-A R0 decisions, portfolio readiness, then confirmation/recovery; R4/R5 remain deferred and the external-beta NO-GO judgment is unchanged. Proposal only; no implementation or release authorization.
 
@@ -58,9 +57,9 @@ Design/spec/plan documents preserve the decision history for the phase in which 
 - Single-Checker execution verification: [testing/single-checker-execution-slice.md](testing/single-checker-execution-slice.md)
 - Canonical local runtime: [devops/local-development.md](devops/local-development.md)
 
-The Go runtime serves public Monitor create/read, bounded inventory, latest terminal result, current availability, and local scheduling GET/PUT, alongside the internal Checker claim/result contract. Go owns due-work scheduling truth, availability policy, and durable `monitoring.check_runs`; Rust owns bounded probe execution and never accesses PostgreSQL. The canonical Docker smoke proves the real Go -> Rust -> `policy_rejected` -> Go -> PostgreSQL -> public latest-result and availability read path.
+The Go runtime serves public Monitor create/read, bounded inventory, latest terminal result, current availability, local scheduling GET/PUT, delete, bounded check-run history and target-URL edit, alongside the internal Checker claim/result contract. Go owns due-work scheduling truth, availability policy, and durable `monitoring.check_runs`; Rust owns bounded probe execution and never accesses PostgreSQL. The canonical Docker smoke proves the real Go -> Rust -> `policy_rejected` -> Go -> PostgreSQL -> public latest-result and availability read path.
 
-The latest-result read is terminal-only: pending work is invisible, `204` means a known Monitor has no terminal result yet, and `resultKind` remains an execution fact rather than an up/down verdict. React now displays local snapshots through its restricted gateway. Full CheckRun history, materialized availability history, mutable Monitor lifecycle, authentication/authorization, ingress/TLS and remote network exposure remain deferred.
+The latest-result read is terminal-only: pending work is invisible, `204` means a known Monitor has no terminal result yet, and `resultKind` remains an execution fact rather than an up/down verdict. React now displays local snapshots through its restricted gateway. Materialized availability history, authentication/authorization, ingress/TLS and remote network exposure remain deferred.
 
 ## Architecture
 

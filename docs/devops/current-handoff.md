@@ -1,8 +1,8 @@
 # Current Project Handoff
 
-**Updated:** 2026-11-10
-**Verified landed baseline:** `main@ea336e9`
-**Active feature implementation PR:** none; documentation PRs #68/#71/#72/#75/#76/#77/#80/#81 and feature PRs #69/#73/#78/#82 are all merged.
+**Updated:** 2026-11-13
+**Verified landed baseline:** `main@97151c7`
+**Active feature implementation PR:** none; documentation PRs #68/#71/#72/#75/#76/#77/#80/#81/#84/#85/#86/#88/#89, feature PRs #69/#73/#78/#82/#87 and dependency bumps #61/#62/#66/#79 are all merged. R2 is complete (ten public operations); the post-R2 roadmap proposal is recorded in #89.
 **Continuation checkout:** resolve the current local worktree and clean Git state before any future change; the historical worktree path below is not a current instruction.
 **Current scope:** reconcile post-merge documentation, record deletion, history, retention and EXPLAIN evidence landings and assess open R0 release decisions only. No new runtime feature, release, production migration or deployment is authorized.
 
