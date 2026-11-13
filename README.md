@@ -8,10 +8,10 @@ Current availability is exposed by `GET /monitors/{monitorId}/availability` as a
 
 uptime-lab is not a production-ready public monitoring service.
 
-The **Single-Checker Execution Vertical Slice is implemented**. The repository now contains:
+The **Single-Checker Execution Vertical Slice and the R2 local monitor-management increments are implemented**. The repository now contains:
 
 - the real Go Control Plane runtime;
-- immutable Monitor registration/read behavior;
+- Monitor registration/read plus local pause/resume, delete, bounded check-run history and target-URL edit;
 - Go-owned due-work coordination and CheckRun persistence;
 - the internal Go/Rust claim/result contract;
 - the real Rust Checker with bounded HTTP/HTTPS execution;
@@ -21,13 +21,13 @@ The **Single-Checker Execution Vertical Slice is implemented**. The repository n
 - a real four-service Docker Compose topology;
 - cross-runtime Docker evidence from claim through terminal CheckRun persistence and public latest-result readback.
 
-The public Monitoring contract at `contracts/openapi/public.yaml` contains five operations: `POST /monitors`, `GET /monitors`, `GET /monitors/{monitorId}`, `GET /monitors/{monitorId}/latest-result`, and `GET /monitors/{monitorId}/availability`. The local browser discovers durable registrations and displays independent detail snapshots through a restricted same-origin gateway. Pending work is invisible; raw `204` differs from availability `unknown/no_result`. Full history, mutable Monitor lifecycle, authentication/authorization and remote ingress/TLS remain deferred. See [local browser startup](docs/devops/local-development.md).
+The public Monitoring contract at `contracts/openapi/public.yaml` contains ten operations: `POST /monitors`, `GET /monitors`, `GET /monitors/{monitorId}`, `GET /monitors/{monitorId}/latest-result`, `GET /monitors/{monitorId}/availability`, `GET /monitors/{monitorId}/scheduling`, `PUT /monitors/{monitorId}/scheduling`, `DELETE /monitors/{monitorId}`, `GET /monitors/{monitorId}/history`, and `PATCH /monitors/{monitorId}`. The local browser discovers durable registrations and displays independent detail snapshots through a restricted same-origin gateway, with pause/resume, confirmed delete, bounded check-run history and target-URL edit controls. Pending work is invisible; raw `204` differs from availability `unknown/no_result`. The newest-50 terminal-row retention window is enforced inside claim reconciliation. Authentication/authorization and remote ingress/TLS remain deferred. See [local browser startup](docs/devops/local-development.md).
 
 Inventory uses persisted creation-time/UUID keyset positions, default20/max50 rows and a245760-byte JSON budget. The start page replaces one20-row page at a time, with Next, Refresh and manual Retry. Targets remain complete text. A first eligible target that cannot fit returns fixed500 and blocks older traversal without truncation or skipping. Listing provides no ownership or authorization boundary and remains local-only.
 
 ## Architecture
 
-- **React + TypeScript** owns local registration, bounded inventory, reopen and manual refresh in `apps/web`; its Node gateway forwards only five public Go operations.
+- **React + TypeScript** owns local registration, bounded inventory, reopen and manual refresh in `apps/web`; its Node gateway forwards only the ten public Go operations.
 - **Go** owns product/domain coordination, public and internal API semantics, scheduling truth, PostgreSQL persistence, migrations, readiness, and CheckRun completion semantics.
 - **Rust** owns bounded network execution, destination validation, HTTP/HTTPS probing, transport normalization, and result delivery. Rust never accesses PostgreSQL directly.
 - **PostgreSQL** holds durable product state owned exclusively through Go. The Monitoring namespace contains `monitoring.monitors` and `monitoring.check_runs`.
