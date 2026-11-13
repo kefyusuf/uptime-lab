@@ -9,7 +9,7 @@
 
 R0a (current availability read), R1 (local Web vertical slice) and R2 (monitor management and evidence) are complete for their approved local scopes. Ten public operations are landed: create, inventory, read, latest-result, availability, scheduling GET/PUT, delete, history and target edit, plus the newest-50 retained history window and populated-data EXPLAIN evidence. Every landing is local-development acceptance, not deployed-system certification.
 
-Path A (single-operator, local-only evaluation) remains the selected validation direction (recorded 2026-10-27). The nine R0 decisions remain OPEN. **Release judgment unchanged: NO-GO for a remotely accessible monitoring beta.** This proposal does not alter that judgment.
+Path A (single-operator, local-only evaluation) remains the selected validation direction (recorded 2026-10-27). The nine R0 decisions are recorded DECIDED for the Path-A local-evaluation scope (2026-11-13) in the [R0 brief](2026-10-18-r0-product-release-decision-brief.md); Path-B items stay deferred. **Release judgment unchanged: NO-GO for a remotely accessible monitoring beta.** This proposal does not alter that judgment.
 
 Canonical-document drift observed after #88:
 
@@ -79,6 +79,6 @@ This proposal authorizes no runtime feature, contract change, migration, release
 ## 5. Open decisions for the user
 
 1. License choice (or explicit "no license" decision) — blocks Track P.
-2. Approval of the R0 minimal Path-A values in Track D (values above are candidates, not decisions).
+2. R0 minimal Path-A values in Track D — settled (2026-11-13): the user approved the values, recorded DECIDED for the Path-A local-evaluation scope in the [R0 brief](2026-10-18-r0-product-release-decision-brief.md).
 3. Confirmation of local artifact cleanup in Track H (`.tmp` files, `apps/api;C`, `editdbg1` stack).
 4. Whether R3-1 includes durable incident state or stops at the confirmed assessment — settled in its scope proposal, informed by the R0-04 value.
