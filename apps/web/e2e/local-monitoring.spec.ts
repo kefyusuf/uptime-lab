@@ -3,6 +3,31 @@ import { readFileSync, writeFileSync } from 'node:fs';
 const artifact = process.env.WEB_BROWSER_ARTIFACT;
 if (!artifact) throw new Error('Task-owned browser artifact is required.');
 const target = 'http://web/';
+const confirmationStages: Record<
+  string,
+  { key: string; status: string; reason: string }
+> = {
+  'confirmation-transient': {
+    key: 'transientAssessment',
+    status: 'Unknown',
+    reason: 'awaiting_confirmation',
+  },
+  'confirmation-confirmed': {
+    key: 'confirmedAssessment',
+    status: 'Unavailable',
+    reason: 'unexpected_http_status',
+  },
+  'confirmation-recovering': {
+    key: 'recoveringAssessment',
+    status: 'Unavailable',
+    reason: 'recovering',
+  },
+  'confirmation-recovered': {
+    key: 'recoveredAssessment',
+    status: 'Available',
+    reason: 'successful_response',
+  },
+};
 test('built local monitor journey', async ({ page, request }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -370,6 +395,44 @@ test('built local monitor journey', async ({ page, request }) => {
         }),
       );
     }
+  } else if (
+    process.env.WEB_BROWSER_PHASE &&
+    process.env.WEB_BROWSER_PHASE in confirmationStages
+  ) {
+    const stage = confirmationStages[process.env.WEB_BROWSER_PHASE!];
+    const saved = JSON.parse(readFileSync(artifact, 'utf8')) as {
+      confirmationRecovery?: Record<string, unknown>;
+    };
+    const confirmationMonitorId = (
+      saved.confirmationRecovery as { monitorId: string }
+    ).monitorId;
+    await page.goto('/monitors/' + confirmationMonitorId);
+    await expect(page.getByTestId('monitor-id')).toHaveText(
+      confirmationMonitorId,
+    );
+    await page.getByRole('button', { name: 'Refresh monitor' }).click();
+    await expect(page.getByTestId('availability-status')).toHaveText(
+      stage.status,
+      { timeout: 10000 },
+    );
+    await expect(page.getByTestId('availability-reason')).toHaveAttribute(
+      'data-reason',
+      stage.reason,
+      { timeout: 10000 },
+    );
+    saved.confirmationRecovery![stage.key] = {
+      status: (await page
+        .getByTestId('availability-status')
+        .textContent())!.toLowerCase(),
+      reason: await page
+        .getByTestId('availability-reason')
+        .getAttribute('data-reason'),
+      checkId: await page.getByTestId('availability-check-id').textContent(),
+      completedAt: await page
+        .getByTestId('availability-completed-at')
+        .getAttribute('datetime'),
+    };
+    writeFileSync(artifact, JSON.stringify(saved));
   } else throw new Error('Unknown browser phase.');
   expect(errors).toEqual([]);
 });

@@ -2,9 +2,9 @@
 
 **Architecture state:** Committed
 
-**Implementation state:** Public Monitor create/read/list, latest result, current availability, pause/resume scheduling, confirmed delete, bounded check-run history, target-URL edit, the internal Go/Rust loop and local browser journey are implemented. Remote exposure, unbounded full CheckRun history and materialized availability history remain deferred.
+**Implementation state:** Public Monitor create/read/list, latest result, current availability with assessment-only confirmation/recovery, pause/resume scheduling, confirmed delete, bounded check-run history, target-URL edit, the internal Go/Rust loop and local browser journey are implemented. Remote exposure, unbounded full CheckRun history and materialized availability history remain deferred.
 
-Current availability is exposed by `GET /monitors/{monitorId}/availability` as a read-only assessment of the latest terminal CheckRun. It returns `status`, `reason`, UTC `evaluatedAt`, and terminal `evidence` (`checkId`, `completedAt`). A known Monitor without a terminal result returns `200 unknown/no_result` with evidence omitted; the raw latest-result route retains its empty `204`. Every matched availability response, including errors and `405`, uses `Cache-Control: no-store`; `HEAD` returns `405` with `Allow: GET`. No new persistence, reconciliation, history, or public deployment is introduced.
+Current availability is exposed by `GET /monitors/{monitorId}/availability` as a read-only assessment of the bounded recent terminal sequence (newest-first, at most five rows). It returns `status`, `reason`, UTC `evaluatedAt`, and terminal `evidence` (`checkId`, `completedAt`). A known Monitor without a terminal result returns `200 unknown/no_result` with evidence omitted; the raw latest-result route retains its empty `204`. Every matched availability response, including errors and `405`, uses `Cache-Control: no-store`; `HEAD` returns `405` with `Allow: GET`. No new persistence, reconciliation, history, or public deployment is introduced.
 
 ## Purpose
 
@@ -113,17 +113,22 @@ sequenceDiagram
     participant DB as PostgreSQL
     Caller->>Go: GET /monitors/{monitorId}/availability
     Go->>App: GetMonitorAvailability
-    App->>DB: Read latest terminal CheckRun (no locks or writes)
-    DB-->>App: terminal evidence or known Monitor/no result
-    App->>App: Validate evidence, sample clock once, apply freshness then outcome
+    App->>DB: Read up to 5 recent terminal CheckRuns, newest-first (no locks or writes)
+    DB-->>App: recent terminal sequence or known Monitor/no result
+    App->>App: Validate walked prefix, sample clock once, apply freshness then sequence policy (N=3/M=2)
     App-->>Go: immutable assessment with its own evidence
     Go-->>Caller: 200 assessment, Cache-Control no-store
 ```
 
-Future evidence and age greater than 120 seconds take precedence over outcome;
-exactly 120 seconds is fresh. Unknown reasons distinguish missing, future,
-stale, policy-rejected, and execution-failed evidence. The complete mapping is
-documented in [Go availability policy](../backend/go-control-plane.md#availability-policy).
+Future evidence and age greater than 120 seconds take precedence over the
+sequence; exactly 120 seconds is fresh. Unknown reasons distinguish missing,
+future, stale, policy-rejected, execution-failed, and below-threshold
+(`awaiting_confirmation`) evidence. A confirmed outage (N=3 leading failures)
+reads `unavailable`; once it succeeds again below the recovery threshold (M=2) it
+reads `unavailable/recovering`, and at M=2 leading successes it reads `available`.
+The walk resets at the first inconclusive row and the lookback is retention-bounded
+to five rows. The complete mapping is documented in
+[Go availability policy](../backend/go-control-plane.md#availability-policy).
 Pending runs remain invisible and are never reconciled by this GET. Two separate
 raw-result and availability requests can legitimately read different CheckIDs.
 

@@ -167,5 +167,34 @@ edit record-reads "$WORK/edit-reads.json"
 sql "$EDIT_ROWS_SQL" > "$WORK/edit-rows.json"
 EDIT_MON_SQL="$(edit sql-monitor)"
 compose exec -T db sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"' sh "$EDIT_MON_SQL" > "$WORK/edit-monitors.json"
-node "$ROOT/scripts/ci/verify-web-evidence.mjs" "$WEB_BROWSER_ARTIFACT" "$WORK/rows.json" "$WORK/monitors.json" "$WORK/deletion-rows.json" "$WORK/deletion-monitors.json" "$WORK/history-rows.json" "$WORK/edit-rows.json" "$WORK/edit-monitors.json"
+# Confirmation/recovery journey: an isolated paused public-target fixture Monitor
+# is driven through a backfilled terminal streak read by the real browser
+# AvailabilityCard — one transient failure awaits confirmation (not an outage),
+# three sustained failures confirm unavailable, then two sustained successes
+# recover it — and the restarted API is proven to serve the same recovered
+# assessment with durable SQL linkage of every streak row.
+CONFIRMATION_ID="$(sql "INSERT INTO monitoring.monitors (id,target_url,created_at,paused) VALUES (gen_random_uuid(),'https://example.com',now() - interval '2 hours',true) RETURNING id::text;" | head -1 | tr -d '\n')"
+confirmation() { node "$ROOT/scripts/ci/web-confirmation-recovery-evidence.mjs" "$1" "$WEB_BROWSER_ARTIFACT" "${@:2}"; }
+confirmation record-monitor "$CONFIRMATION_ID"
+sql "INSERT INTO monitoring.check_runs (id,monitor_id,issued_at,deadline_at,completed_at,result_kind,http_status,duration_ms) VALUES (gen_random_uuid(),'$CONFIRMATION_ID',now()-interval '6 seconds',now()+interval '4 seconds',now()-interval '5 seconds','http_response',500,10);" >/dev/null
+browser confirmation-transient
+sql "INSERT INTO monitoring.check_runs (id,monitor_id,issued_at,deadline_at,completed_at,result_kind,http_status,duration_ms) VALUES (gen_random_uuid(),'$CONFIRMATION_ID',now()-interval '2 seconds',now()+interval '8 seconds',now()-interval '1 second','http_response',500,10),(gen_random_uuid(),'$CONFIRMATION_ID',now()-interval '3 seconds',now()+interval '7 seconds',now()-interval '2 seconds','http_response',500,10);" >/dev/null
+browser confirmation-confirmed
+sql "INSERT INTO monitoring.check_runs (id,monitor_id,issued_at,deadline_at,completed_at,result_kind,http_status,duration_ms) VALUES (gen_random_uuid(),'$CONFIRMATION_ID',now()-interval '2 seconds',now()+interval '8 seconds',now()-interval '1 second','http_response',204,10);" >/dev/null
+browser confirmation-recovering
+sql "INSERT INTO monitoring.check_runs (id,monitor_id,issued_at,deadline_at,completed_at,result_kind,http_status,duration_ms) VALUES (gen_random_uuid(),'$CONFIRMATION_ID',now()-interval '2 seconds',now()+interval '8 seconds',now()-interval '1 second','http_response',204,10);" >/dev/null
+browser confirmation-recovered
+API_CONTAINER="$(compose ps -q api)"
+confirmation restart api before "$("$DOCKER_BIN" inspect --format '{{.State.StartedAt}}' "$API_CONTAINER")"
+compose restart api
+compose up -d --wait --wait-timeout 60 api
+confirmation restart api after "$("$DOCKER_BIN" inspect --format '{{.State.StartedAt}}' "$(compose ps -q api)")"
+CONFIRMATION_READS="$(compose exec -T web node --input-type=module -e 'const id=process.argv[1];const r=await fetch("http://api:8080/monitors/"+id+"/availability");const b=await r.json();console.log(JSON.stringify({availability:r.status,status:b.status,reason:b.reason,checkId:b.evidence?.checkId}));' "$CONFIRMATION_ID")"
+printf '%s' "$CONFIRMATION_READS" > "$WORK/confirmation-reads.json"
+confirmation record-reads "$WORK/confirmation-reads.json"
+CONFIRMATION_ROWS_SQL="$(confirmation sql-rows)"
+compose exec -T db sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"' sh "$CONFIRMATION_ROWS_SQL" > "$WORK/confirmation-rows.json"
+CONFIRMATION_MON_SQL="$(confirmation sql-monitor)"
+compose exec -T db sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"' sh "$CONFIRMATION_MON_SQL" > "$WORK/confirmation-monitors.json"
+node "$ROOT/scripts/ci/verify-web-evidence.mjs" "$WEB_BROWSER_ARTIFACT" "$WORK/rows.json" "$WORK/monitors.json" "$WORK/deletion-rows.json" "$WORK/deletion-monitors.json" "$WORK/history-rows.json" "$WORK/edit-rows.json" "$WORK/edit-monitors.json" "$WORK/confirmation-rows.json" "$WORK/confirmation-monitors.json"
 printf 'Real browser/Go/Checker/PostgreSQL journey passed on loopback port %s\n' "$UPTIME_LAB_WEB_PORT"
