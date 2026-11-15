@@ -14,7 +14,7 @@ This document is the C4 Level 1 view and intentionally hides package, crate, tab
 
 ### User / Operator
 
-The user/operator registers intent, reopens a Monitor by ID, and reads independent raw execution facts and current availability assessments. Go owns those assessments; the browser displays snapshots and refreshes only on request. Full CheckRun and availability history remain deferred.
+The user/operator registers intent, reopens a Monitor by ID, and reads independent raw execution facts and current availability assessments. Go owns those assessments; the browser displays snapshots and refreshes only on request. Bounded check-run history is available; full CheckRun and availability history remain deferred.
 
 ### External HTTP/HTTPS Target
 
@@ -25,12 +25,13 @@ A monitored target is outside the `uptime-lab` trust boundary. Address resolutio
 `uptime-lab` currently implements:
 
 - Monitor registration/read and latest terminal execution-result read through Go;
+- current availability assessment, bounded check-run history and local pause/resume, delete and target-edit lifecycle through Go;
 - due-work coordination and CheckRun persistence through Go;
 - bounded HTTP/HTTPS execution through Rust;
 - normalized result delivery from Rust to Go;
 - explicit PostgreSQL migrations and schema-aware readiness.
 
-Remote public deployment, authentication/authorization, full CheckRun history and availability history remain outside the current implemented surface. Local browser traffic passes through Web's restricted same-origin gateway; it cannot reach internal Checker routes or PostgreSQL.
+Remote public deployment, authentication/authorization, unbounded full CheckRun history and materialized availability history remain outside the current implemented surface. Local browser traffic passes through Web's restricted same-origin gateway; it cannot reach internal Checker routes or PostgreSQL.
 
 ## Trust Boundary
 

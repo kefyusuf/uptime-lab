@@ -2,7 +2,7 @@
 
 **Architecture state:** Committed
 
-**Implementation state:** Public Monitor create/read, latest result, current availability, the internal Go/Rust loop and local browser journey are implemented. Remote exposure, full CheckRun history and materialized availability history remain deferred.
+**Implementation state:** Public Monitor create/read/list, latest result, current availability, pause/resume scheduling, confirmed delete, bounded check-run history, target-URL edit, the internal Go/Rust loop and local browser journey are implemented. Remote exposure, unbounded full CheckRun history and materialized availability history remain deferred.
 
 Current availability is exposed by `GET /monitors/{monitorId}/availability` as a read-only assessment of the latest terminal CheckRun. It returns `status`, `reason`, UTC `evaluatedAt`, and terminal `evidence` (`checkId`, `completedAt`). A known Monitor without a terminal result returns `200 unknown/no_result` with evidence omitted; the raw latest-result route retains its empty `204`. Every matched availability response, including errors and `405`, uses `Cache-Control: no-store`; `HEAD` returns `405` with `Allow: GET`. No new persistence, reconciliation, history, or public deployment is introduced.
 

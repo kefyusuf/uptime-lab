@@ -119,6 +119,9 @@ GET  /monitors/{monitorId}/latest-result
 GET  /monitors/{monitorId}/availability
 GET  /monitors/{monitorId}/scheduling
 PUT  /monitors/{monitorId}/scheduling
+DELETE /monitors/{monitorId}
+GET  /monitors/{monitorId}/history
+PATCH /monitors/{monitorId}
 ~~~
 
 Internal Checker transport:
@@ -304,10 +307,10 @@ Use a distinct `COMPOSE_PROJECT_NAME`.
 
 ## Current Limitations
 
-- Web serves the React client and proxies only five public Go operations. It starts independently with build-asset health.
-- Public Monitoring surface is limited to Monitor create/read, latest terminal result, and current availability assessment.
-- Full CheckRun history and materialized availability history remain unavailable.
-- No mutable Monitor lifecycle exists.
+- Web serves the React client and proxies only the ten public Go operations. It starts independently with build-asset health.
+- Public Monitoring surface covers Monitor create/read/list, latest terminal result, current availability assessment, pause/resume scheduling, confirmed delete, bounded check-run history and target-URL edit.
+- Bounded check-run history (newest-50 terminal retention) is available; unbounded full CheckRun history and materialized availability history remain unavailable.
+- Monitor lifecycle mutations are local-only and unauthenticated.
 - Only one logical Checker process is supported.
 - Production probe execution rejects private/non-public destinations.
 - No application host port is exposed.

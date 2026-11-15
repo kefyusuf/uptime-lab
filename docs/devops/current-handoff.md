@@ -1,10 +1,10 @@
 # Current Project Handoff
 
-**Updated:** 2026-11-13
-**Verified landed baseline:** `main@97151c7`
-**Active feature implementation PR:** none; documentation PRs #68/#71/#72/#75/#76/#77/#80/#81/#84/#85/#86/#88/#89, feature PRs #69/#73/#78/#82/#87 and dependency bumps #61/#62/#66/#79 are all merged. R2 is complete (ten public operations); the post-R2 roadmap proposal is recorded in #89.
+**Updated:** 2026-11-15
+**Verified landed baseline:** `main@865058b`
+**Active feature implementation PR:** none; documentation PRs #68/#71/#72/#75/#76/#77/#80/#81/#84/#85/#86/#88/#89/#90/#91/#92/#93, feature PRs #69/#73/#78/#82/#87 and dependency bumps #61/#62/#66/#79 are all merged. R2 is complete (ten public operations); the post-R2 roadmap proposal is recorded in #89; Path-A R0 decisions in #91; the MIT license in #92; the README demo and system-context diagram in #93.
 **Continuation checkout:** resolve the current local worktree and clean Git state before any future change; the historical worktree path below is not a current instruction.
-**Current scope:** reconcile post-merge documentation, record deletion, history, retention and EXPLAIN evidence landings and record the Path-A R0 release decisions (DECIDED for the local-evaluation scope, 2026-11-13). No new runtime feature, release, production migration or deployment is authorized.
+**Current scope:** post-P canonical-document reconciliation (operation counts, mutable lifecycle, bounded check-run history) after the portfolio license (#92) and README demo (#93) landings; Path-A R0 release decisions remain DECIDED for the local-evaluation scope (2026-11-13). No new runtime feature, release, production migration or deployment is authorized.
 
 ## Local monitor deletion landing (merged 2026-11-01)
 
