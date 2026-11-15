@@ -14,7 +14,7 @@ This is the C4 Level 2 view for the current runtime.
 
 ### Web Client — React + TypeScript
 
-The React browser in `apps/web` owns registration, bounded inventory, local detail navigation, reopening by ID, independent assessment/result cards and manual refresh. Its non-root Node server serves compiled assets and proxies only the five public operations to fixed `http://api:8080`. It owns no product policy or persistence.
+The React browser in `apps/web` owns registration, bounded inventory, local detail navigation, reopening by ID, independent assessment/result cards, manual refresh and local pause/resume, delete, history and target-edit controls. Its non-root Node server serves compiled assets and proxies only the ten public operations to fixed `http://api:8080`. It owns no product policy or persistence.
 
 The browser never accesses PostgreSQL directly.
 
@@ -101,9 +101,9 @@ flowchart LR
     DB[(PostgreSQL)]
     Target["External HTTP/HTTPS target"]
 
-    Caller -->|POST/GET Monitor + GET latest-result/availability| Go
+    Caller -->|ten public Monitor operations| Go
     Browser -->|loopback same origin| Web
-    Web -->|five public operations only| Go
+    Web -->|ten public operations only| Go
     Checker -->|claim/result internal contract| Go
     Go -->|owned persistence| DB
     Checker -->|validated bounded probe| Target
@@ -137,16 +137,22 @@ The Go runtime serves:
 GET  /livez
 GET  /readyz
 POST /monitors
+GET  /monitors
 GET  /monitors/{monitorId}
 GET  /monitors/{monitorId}/latest-result
 GET  /monitors/{monitorId}/availability
+GET  /monitors/{monitorId}/scheduling
+PUT  /monitors/{monitorId}/scheduling
+DELETE /monitors/{monitorId}
+GET  /monitors/{monitorId}/history
+PATCH /monitors/{monitorId}
 POST /internal/checks/claim
 PUT  /internal/checks/{checkId}/result
 ~~~
 
 `/livez` is database-independent. `/readyz` performs bounded PostgreSQL connectivity plus read-only exact migration compatibility checks.
 
-The public latest-result endpoint exposes one latest terminal execution fact only. Full CheckRun history and materialized availability history remain deferred.
+The public latest-result endpoint exposes one latest terminal execution fact only. Bounded check-run history (newest-50 terminal retention) is exposed separately; unbounded full CheckRun history and materialized availability history remain deferred.
 
 ## Ownership Rules
 

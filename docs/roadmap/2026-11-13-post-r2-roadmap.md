@@ -13,9 +13,10 @@ Path A (single-operator, local-only evaluation) remains the selected validation 
 
 Canonical-document drift observed after #88:
 
-- Root `README.md` still describes five public operations and defers history/lifecycle capabilities that have since landed.
-- `docs/README.md` carries a duplicate Local Check-Run History plan entry and a stale "full history / mutable lifecycle deferred" sentence in the implemented-runtime section.
-- `docs/devops/current-handoff.md` header still records the 2026-11-10 baseline and omits #84–#88 from the merged-PR list.
+- Root `README.md` five-operation and history/lifecycle-deferred wording — reconciled to the ten-operation landed state (#90) and extended with a real-stack demo plus system-context diagram (#93).
+- `docs/README.md` duplicate Local Check-Run History plan entry and stale "full history / mutable lifecycle deferred" sentence — reconciled (#90).
+- `docs/devops/current-handoff.md` header baseline and merged-PR list — refreshed (#90, #91, and the post-P reconciliation follow-up).
+- Residual operation-count, mutable-lifecycle and history-deferred wording in the local-development, architecture and public-contract testing guides — reconciled in the post-P reconciliation follow-up.
 
 ## 2. Proposed tracks (effort-ordered)
 
@@ -36,6 +37,7 @@ Recommended order: **H → D → P → R3-1**. H and P are docs-only and may be 
 
 ### H — Housekeeping and doc reconciliation
 
+- Status: landed (#90); local artifact cleanup handled separately.
 - Reconcile root `README.md` and `docs/README.md` to the ten-operation landed state; remove the duplicate history-plan index entry; refresh the handoff header (date, baseline, merged-PR list).
 - Remove local scratch artifacts after user confirmation: untracked `explain-capture.tmp` / `explain-v2.tmp`, the empty `apps/api;C` directory (a known Git Bash/Docker path-conversion artifact), and the leftover `editdbg1` Compose stack still running from the target-edit debugging session.
 - Exit: a docs-only PR with repository/documentation checks green; no runtime, contract, or migration change. Artifact removal is local cleanup, not a repository change, except where a `.gitignore` entry is warranted.
@@ -55,8 +57,8 @@ Exit: the R0 brief marks these items DECIDED for the Path A scope only. This rec
 
 ### P — Portfolio readiness
 
-- **License decision (user):** the repository currently has no license, which blocks reuse and weakens the portfolio presentation. Choose a license (e.g. MIT or Apache-2.0) or explicitly record "no license" as a decision; add `LICENSE` and update the README section.
-- **README demo:** capture a short screenshot sequence or GIF of the real composed local journey (register → detail → history → edit → delete) using the existing 4173 loopback topology; surface the existing architecture diagrams from `docs/architecture/` at README level.
+- **License decision (user):** settled — MIT selected; `LICENSE` added and the README license section updated (#92).
+- **README demo:** landed (#93) — a four-screenshot sequence of the real composed local journey (register → detail/history → edit → delete) from the 4173 loopback topology, plus the C4 Level 1 system-context diagram surfaced at README level.
 - Exit: a docs/assets PR; no runtime change; demo media produced from the real composed stack, not mocked UI.
 
 ### R3-1 — Confirmation/recovery (first monitoring-decisions slice)
@@ -78,7 +80,7 @@ This proposal authorizes no runtime feature, contract change, migration, release
 
 ## 5. Open decisions for the user
 
-1. License choice (or explicit "no license" decision) — blocks Track P.
+1. License choice — settled (2026-11-15): MIT selected; `LICENSE` and the README license section landed (#92), and the Track P demo landed (#93).
 2. R0 minimal Path-A values in Track D — settled (2026-11-13): the user approved the values, recorded DECIDED for the Path-A local-evaluation scope in the [R0 brief](2026-10-18-r0-product-release-decision-brief.md).
 3. Confirmation of local artifact cleanup in Track H (`.tmp` files, `apps/api;C`, `editdbg1` stack).
 4. Whether R3-1 includes durable incident state or stops at the confirmed assessment — settled in its scope proposal, informed by the R0-04 value.

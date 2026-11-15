@@ -69,7 +69,7 @@ GET /livez
 GET /readyz
 ~~~
 
-The latest-result route exposes only the latest terminal CheckRun execution fact. Pending rows are invisible; a known Monitor with no terminal result maps to `204`. Full CheckRun history and materialized availability history remain deferred.
+The latest-result route exposes only the latest terminal CheckRun execution fact. Pending rows are invisible; a known Monitor with no terminal result maps to `204`. Bounded check-run history (newest-50 terminal retention) is exposed by `GET /monitors/{monitorId}/history`; unbounded full CheckRun history and materialized availability history remain deferred.
 
 ## Durable local scheduling
 

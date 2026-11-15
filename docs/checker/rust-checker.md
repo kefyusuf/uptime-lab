@@ -161,8 +161,8 @@ This milestone intentionally remains narrow:
 - no broker/outbox;
 - no private-network monitoring;
 - no proxy-enabled production probe;
-- no mutable Monitor lifecycle;
-- no public CheckRun history or derived availability/status surface;
+- no mutable Monitor lifecycle in the Checker (pause/resume, delete and target edit are Go-owned);
+- no CheckRun history or availability surface in the Checker (bounded history and current availability are Go-owned);
 - no React runtime;
 - no public ingress/authentication/CORS/rate-limit policy.
 
