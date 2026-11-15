@@ -73,4 +73,4 @@ Read [SECURITY.md](SECURITY.md) before reporting a vulnerability or exposing an 
 
 ## License
 
-No open-source license has been selected yet. Until a license is explicitly added, normal copyright rules apply.
+Released under the [MIT License](LICENSE). Copyright (c) 2026 Yusuf KEF.
