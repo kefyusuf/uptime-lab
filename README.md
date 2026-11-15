@@ -25,6 +25,28 @@ The public Monitoring contract at `contracts/openapi/public.yaml` contains ten o
 
 Inventory uses persisted creation-time/UUID keyset positions, default20/max50 rows and a245760-byte JSON budget. The start page replaces one20-row page at a time, with Next, Refresh and manual Retry. Targets remain complete text. A first eligible target that cannot fit returns fixed500 and blocks older traversal without truncation or skipping. Listing provides no ownership or authorization boundary and remains local-only.
 
+## Demo
+
+The screenshots below come from the real four-service Compose stack (no mocked UI), probing a public HTTPS target end to end: Go coordinates due work, Rust executes the bounded probe, and the browser reads Go-owned snapshots through the restricted same-origin gateway.
+
+1. **Register a target.** The start page creates a Monitor and lists durable registrations.
+
+   ![Create monitor](docs/assets/demo/01-create-monitor.png)
+
+2. **Read independent snapshots.** The detail page separates the current availability assessment from the raw latest execution fact and shows bounded check-run history.
+
+   ![Monitor detail with available assessment](docs/assets/demo/02-detail-available.png)
+
+3. **Edit the target.** Editing replaces the probe target on the same Monitor identity; registration time and recorded evidence stay untouched.
+
+   ![Edit target form](docs/assets/demo/03-edit-target.png)
+
+4. **Delete with confirmation.** Deletion removes the Monitor and all of its check evidence permanently.
+
+   ![Delete confirmation](docs/assets/demo/04-delete-confirm.png)
+
+Private and non-public destinations are deny-by-default in the production Checker and surface as `policy_rejected`, so the demo uses a public target. To reproduce locally, follow [local development](docs/devops/local-development.md) and open `http://127.0.0.1:4173`.
+
 ## Architecture
 
 - **React + TypeScript** owns local registration, bounded inventory, reopen and manual refresh in `apps/web`; its Node gateway forwards only the ten public Go operations.
@@ -32,6 +54,18 @@ Inventory uses persisted creation-time/UUID keyset positions, default20/max50 ro
 - **Rust** owns bounded network execution, destination validation, HTTP/HTTPS probing, transport normalization, and result delivery. Rust never accesses PostgreSQL directly.
 - **PostgreSQL** holds durable product state owned exclusively through Go. The Monitoring namespace contains `monitoring.monitors` and `monitoring.check_runs`.
 - **Docker Compose** runs PostgreSQL, Go, Rust and compiled Web without canonical host ports. The explicit `compose.web-local.yaml` override exposes only Web on `127.0.0.1:4173` (configurable).
+
+C4 Level 1 system context (full view in [system context](docs/architecture/system-context.md)):
+
+```mermaid
+flowchart LR
+    User[User / Operator]
+    System[uptime-lab]
+    Target[External HTTP/HTTPS Target]
+
+    User -->|Register/read Monitor intent and latest terminal result| System
+    System -->|Bounded validated monitoring request| Target
+```
 
 Start with the [architecture index](docs/architecture/README.md), the [Go Control Plane guide](docs/backend/go-control-plane.md), and the [Rust Checker guide](docs/checker/rust-checker.md).
 
