@@ -26,6 +26,10 @@ func (r availabilityHTTPRepository) LatestTerminalByMonitorID(context.Context, d
 	return r.record, r.err
 }
 
+func (r availabilityHTTPRepository) RecentTerminalByMonitorID(context.Context, domain.MonitorID, int) ([]ports.LatestCheckResultRecord, error) {
+	return nil, nil
+}
+
 type availabilityHTTPFailure struct{ err error }
 
 func (f availabilityHTTPFailure) Execute(context.Context, domain.MonitorID) (application.MonitorAvailability, error) {

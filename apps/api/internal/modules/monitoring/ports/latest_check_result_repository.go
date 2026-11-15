@@ -20,7 +20,8 @@ type LatestCheckResultRecord struct {
 	CompletedAt time.Time
 }
 
-// LatestCheckResultRepository defines only the persistence capability required by the public latest-result read.
+// LatestCheckResultRepository defines the persistence capabilities required by the public latest-result and availability reads.
 type LatestCheckResultRepository interface {
 	LatestTerminalByMonitorID(context.Context, domain.MonitorID) (LatestCheckResultRecord, error)
+	RecentTerminalByMonitorID(ctx context.Context, monitorID domain.MonitorID, limit int) ([]LatestCheckResultRecord, error)
 }

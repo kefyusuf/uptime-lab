@@ -109,6 +109,10 @@ func (r orderedAvailabilityRepository) LatestTerminalByMonitorID(context.Context
 	return r.read()
 }
 
+func (r orderedAvailabilityRepository) RecentTerminalByMonitorID(context.Context, domain.MonitorID, int) ([]ports.LatestCheckResultRecord, error) {
+	return nil, nil
+}
+
 func TestGetMonitorAvailabilitySamplesClockAfterRead(t *testing.T) {
 	for _, noResult := range []bool{false, true} {
 		reads, clocks := 0, 0

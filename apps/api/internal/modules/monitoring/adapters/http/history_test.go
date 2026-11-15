@@ -22,6 +22,10 @@ func (stub *latestRecordStub) LatestTerminalByMonitorID(context.Context, domain.
 	return stub.record, nil
 }
 
+func (stub *latestRecordStub) RecentTerminalByMonitorID(context.Context, domain.MonitorID, int) ([]ports.LatestCheckResultRecord, error) {
+	return nil, nil
+}
+
 func historyTestInstant() time.Time {
 	at, err := time.Parse("2006-01-02T15:04:05.000000Z", "2026-11-01T12:00:00.123456Z")
 	if err != nil {

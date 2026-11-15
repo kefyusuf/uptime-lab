@@ -73,6 +73,10 @@ func (stub *latestCheckResultRepositoryStub) LatestTerminalByMonitorID(
 	return stub.record, stub.err
 }
 
+func (stub *latestCheckResultRepositoryStub) RecentTerminalByMonitorID(context.Context, domain.MonitorID, int) ([]ports.LatestCheckResultRecord, error) {
+	return nil, nil
+}
+
 func TestHandlerPostMonitorSuccess(t *testing.T) {
 	const rawTarget = "HTTP://Example.COM/health check?region=eu"
 	createdAt := time.Date(2026, time.September, 23, 12, 34, 56, 123456000, time.UTC)

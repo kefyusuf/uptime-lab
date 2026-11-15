@@ -27,6 +27,14 @@ func (repository *fakeLatestCheckResultRepository) LatestTerminalByMonitorID(
 	return repository.record, repository.err
 }
 
+func (repository *fakeLatestCheckResultRepository) RecentTerminalByMonitorID(
+	context.Context,
+	domain.MonitorID,
+	int,
+) ([]ports.LatestCheckResultRecord, error) {
+	return nil, nil
+}
+
 func TestGetLatestCheckResultReturnsHTTPResponseFact(t *testing.T) {
 	monitorID := mustMonitorID(t, "018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2")
 	checkID := mustCheckID(t, "018f22d3-1d6a-7cc0-a37b-46fc3fafdcb3")

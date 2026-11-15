@@ -64,6 +64,10 @@ func (stub *latestRecordRepositoryStub) LatestTerminalByMonitorID(context.Contex
 	return stub.record, nil
 }
 
+func (stub *latestRecordRepositoryStub) RecentTerminalByMonitorID(context.Context, domain.MonitorID, int) ([]ports.LatestCheckResultRecord, error) {
+	return nil, nil
+}
+
 func startHistoryTransportServer(t *testing.T, history *transportHistoryUseCase) string {
 	t.Helper()
 	public := monitoringhttp.NewHandlerWithHistory(nil, nil, nil, nil, nil, nil, nil, nil, history)
