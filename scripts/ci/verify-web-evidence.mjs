@@ -103,6 +103,38 @@ export function verifyHistoryEvidence(capture, rows) {
   const durableIds=ordered.map(row=>row.id);
   if(JSON.stringify(value.firstPageIds)!==JSON.stringify(durableIds.slice(0,20))||JSON.stringify(value.secondPageIds)!==JSON.stringify(durableIds.slice(20)))throw Error('Durable history page linkage mismatch');
 }
+export function verifyConfirmationRecoveryEvidence(capture, rows, monitors) {
+  const uuid=value=>typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value)&&value!=='00000000-0000-0000-0000-000000000000';
+  const closed=(value,keys)=>value!==null&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key));
+  const value=capture?.confirmationRecovery;
+  if(!closed(value,['monitorId','transientAssessment','confirmedAssessment','recoveringAssessment','recoveredAssessment','readsAfterRestart','restarts']) || !uuid(value.monitorId) || value.monitorId===capture.id)throw Error('Invalid confirmation/recovery evidence');
+  const expected={transientAssessment:['unknown','awaiting_confirmation'],confirmedAssessment:['unavailable','unexpected_http_status'],recoveringAssessment:['unavailable','recovering'],recoveredAssessment:['available','successful_response']};
+  for(const key of Object.keys(expected)){
+    const assessment=value[key];
+    if(!closed(assessment,['status','reason','checkId','completedAt'])||assessment.status!==expected[key][0]||assessment.reason!==expected[key][1]||!uuid(assessment.checkId))throw Error('Invalid confirmation/recovery assessment');
+    instant(assessment.completedAt);
+  }
+  const checkIds=[value.transientAssessment.checkId,value.confirmedAssessment.checkId,value.recoveringAssessment.checkId,value.recoveredAssessment.checkId];
+  if(new Set(checkIds).size!==4)throw Error('Confirmation/recovery assessments must reference distinct streak rows');
+  const reads=closed(value.readsAfterRestart,['availability','status','reason','checkId'])?value.readsAfterRestart:null;
+  if(!reads||reads.availability!==200||reads.status!=='available'||reads.reason!=='successful_response'||reads.checkId!==value.recoveredAssessment.checkId)throw Error('Restarted API did not serve the recovered assessment');
+  if(!closed(value.restarts,['api']))throw Error('Missing confirmation/recovery restart checkpoints');
+  const restart=value.restarts.api;
+  if(!closed(restart,['beforeStartedAt','afterStartedAt']))throw Error('Invalid confirmation/recovery restart checkpoint');
+  for(const time of Object.values(restart))if(typeof time!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,9})?Z$/.test(time)||new Date(time).toISOString().slice(0,19)!==time.slice(0,19))throw Error('Invalid restart UTC time');
+  if(instant(restart.afterStartedAt)<=instant(restart.beforeStartedAt))throw Error('Restart timestamp did not advance');
+  if(!Array.isArray(rows)||rows.length!==5||rows.some(row=>row.monitor_id!==value.monitorId))throw Error('Durable confirmation/recovery streak must be five linked rows');
+  const ordered=[...rows].sort((a,b)=>{const delta=instant(b.completed_at)-instant(a.completed_at);return delta===0n?(a.id<b.id?1:a.id>b.id?-1:0):delta>0n?1:-1;});
+  const link=(assessment,row)=>{if(row.id!==assessment.checkId||instant(row.completed_at)!==instant(assessment.completedAt))throw Error('Durable confirmation/recovery assessment linkage mismatch');};
+  link(value.recoveredAssessment,ordered[0]);
+  link(value.recoveringAssessment,ordered[1]);
+  link(value.confirmedAssessment,ordered[2]);
+  link(value.transientAssessment,ordered[4]);
+  for(const row of ordered.slice(0,2))if(row.result_kind!=='http_response'||row.http_status!==204)throw Error('Recovery streak must lead with two durable successes');
+  for(const row of ordered.slice(2))if(row.result_kind!=='http_response'||row.http_status!==500)throw Error('Confirmation streak must rest on three durable failures');
+  const monitor=monitors.filter(row=>row.id===value.monitorId);
+  if(monitor.length!==1||monitor[0].target_url!=='https://example.com'||monitor[0].paused!==true)throw Error('Durable confirmation/recovery Monitor mismatch');
+}
 export function verifyTargetEditEvidence(capture, rows, monitors) {
   const uuid=value=>typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value)&&value!=='00000000-0000-0000-0000-000000000000';
   const closed=(value,keys)=>value!==null&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key));
@@ -129,7 +161,8 @@ if (
   verifyDeletionEvidence(JSON.parse(readFileSync(process.argv[2],"utf8")),JSON.parse(readFileSync(process.argv[5],"utf8")),JSON.parse(readFileSync(process.argv[6],"utf8")));
   verifyHistoryEvidence(JSON.parse(readFileSync(process.argv[2],"utf8")),JSON.parse(readFileSync(process.argv[7],"utf8")));
   verifyTargetEditEvidence(JSON.parse(readFileSync(process.argv[2],"utf8")),JSON.parse(readFileSync(process.argv[8],"utf8")),JSON.parse(readFileSync(process.argv[9],"utf8")));
+  verifyConfirmationRecoveryEvidence(JSON.parse(readFileSync(process.argv[2],"utf8")),JSON.parse(readFileSync(process.argv[10],"utf8")),JSON.parse(readFileSync(process.argv[11],"utf8")));
   console.log(
-    "Independent browser snapshots, inventory IDs, scheduling, deletion, history and target-edit evidence match durable rows.",
+    "Independent browser snapshots, inventory IDs, scheduling, deletion, history, target-edit and confirmation/recovery evidence match durable rows.",
   );
 }

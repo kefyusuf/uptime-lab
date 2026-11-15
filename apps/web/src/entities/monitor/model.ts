@@ -47,7 +47,7 @@ export type Availability =
     }
   | {
       status: 'unavailable';
-      reason: 'unexpected_http_status' | 'probe_failure';
+      reason: 'unexpected_http_status' | 'probe_failure' | 'recovering';
       evaluatedAt: string;
       evidence: Evidence;
     }
@@ -57,7 +57,8 @@ export type Availability =
         | 'policy_rejected'
         | 'execution_failure'
         | 'stale_result'
-        | 'future_result';
+        | 'future_result'
+        | 'awaiting_confirmation';
       evaluatedAt: string;
       evidence: Evidence;
     }

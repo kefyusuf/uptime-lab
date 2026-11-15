@@ -136,7 +136,8 @@ export function decodeAvailability(value: unknown): Availability {
   if (
     object.status === 'unavailable' &&
     (object.reason === 'unexpected_http_status' ||
-      object.reason === 'probe_failure')
+      object.reason === 'probe_failure' ||
+      object.reason === 'recovering')
   )
     return {
       status: 'unavailable',
@@ -150,6 +151,7 @@ export function decodeAvailability(value: unknown): Availability {
       case 'execution_failure':
       case 'stale_result':
       case 'future_result':
+      case 'awaiting_confirmation':
         return {
           status: 'unknown',
           reason: object.reason,

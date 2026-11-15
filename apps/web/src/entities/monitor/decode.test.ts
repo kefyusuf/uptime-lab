@@ -114,4 +114,29 @@ describe('public response decoding', () => {
       ResponseDecodeError,
     );
   });
+  it('decodeAcceptsRecovering', () => {
+    const value = fixture('availability-unavailable-recovering.json');
+    expect(decodeAvailability(value)).toEqual(value);
+  });
+  it('decodeAcceptsAwaitingConfirmation', () => {
+    const value = fixture('availability-unknown-awaiting-confirmation.json');
+    expect(decodeAvailability(value)).toEqual(value);
+  });
+  it('decodeRejectsMismatchedNewReasons', () => {
+    const recovering = fixture(
+      'availability-unavailable-recovering.json',
+    ) as Record<string, unknown>;
+    const awaiting = fixture(
+      'availability-unknown-awaiting-confirmation.json',
+    ) as Record<string, unknown>;
+    for (const mutation of [
+      { ...recovering, status: 'available' },
+      { ...recovering, status: 'unknown' },
+      { ...recovering, evidence: undefined },
+      { ...awaiting, status: 'unavailable' },
+      { ...awaiting, status: 'available' },
+      { ...awaiting, evidence: undefined },
+    ])
+      expect(() => decodeAvailability(mutation)).toThrow(ResponseDecodeError);
+  });
 });

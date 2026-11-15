@@ -46,3 +46,45 @@ it('does not show a healthy badge on read failure', () => {
   ).not.toBeInTheDocument();
   expect(screen.getByRole('alert')).toHaveTextContent('could not be read');
 });
+it('cardRendersRecovering', () => {
+  const value = decodeAvailability(
+    JSON.parse(
+      readFileSync(
+        resolve(directory, 'availability-unavailable-recovering.json'),
+        'utf8',
+      ),
+    ),
+  );
+  render(<AvailabilityCard state={{ kind: 'success', data: value }} />);
+  expect(screen.getByText('Unavailable', { exact: true })).toBeInTheDocument();
+  expect(screen.getByTestId('availability-reason')).toHaveAttribute(
+    'data-reason',
+    'recovering',
+  );
+  expect(
+    screen.getByText(
+      'The target is succeeding again but has not yet reached the recovery threshold.',
+    ),
+  ).toBeInTheDocument();
+});
+it('cardRendersAwaitingConfirmation', () => {
+  const value = decodeAvailability(
+    JSON.parse(
+      readFileSync(
+        resolve(directory, 'availability-unknown-awaiting-confirmation.json'),
+        'utf8',
+      ),
+    ),
+  );
+  render(<AvailabilityCard state={{ kind: 'success', data: value }} />);
+  expect(screen.getByText('Unknown', { exact: true })).toBeInTheDocument();
+  expect(screen.getByTestId('availability-reason')).toHaveAttribute(
+    'data-reason',
+    'awaiting_confirmation',
+  );
+  expect(
+    screen.getByText(
+      'Failures have not yet reached the confirmation threshold.',
+    ),
+  ).toBeInTheDocument();
+});

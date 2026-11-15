@@ -644,15 +644,23 @@ func TestProductionMonitoringCompositionAgainstPostgreSQL(t *testing.T) {
 		name, status, reason string
 		completed            time.Time
 		httpStatus           int
+		rows                 int
 	}{
-		{"stale", "unknown", "stale_result", now.Add(-121 * time.Second), 200},
-		{"future", "unknown", "future_result", now.Add(time.Hour), 200},
-		{"http failure", "unavailable", "unexpected_http_status", now.Add(-5 * time.Second), 500},
+		{"stale", "unknown", "stale_result", now.Add(-121 * time.Second), 200, 1},
+		{"future", "unknown", "future_result", now.Add(time.Hour), 200, 1},
+		{"http failure", "unavailable", "unexpected_http_status", now.Add(-5 * time.Second), 500, 3},
 	} {
 		monitor := decodeMonitorPayload(t, doRequest(t, client, http.MethodPost, baseURL+"/monitors", "application/json", `{"targetUrl":"https://availability.example/"}`))
 		checkID := uuid.NewV7().String()
-		if _, err := pool.Exec(ctx, `INSERT INTO monitoring.check_runs (id,monitor_id,issued_at,deadline_at,completed_at,result_kind,http_status,duration_ms) VALUES ($1::uuid,$2::uuid,$3,$4,$5,'http_response',$6,1)`, checkID, monitor.ID, tc.completed.Add(-time.Second), tc.completed.Add(time.Second), tc.completed, tc.httpStatus); err != nil {
-			t.Fatal(err)
+		for row := 0; row < tc.rows; row++ {
+			rowID := checkID
+			if row > 0 {
+				rowID = uuid.NewV7().String()
+			}
+			completed := tc.completed.Add(-time.Duration(row) * time.Second)
+			if _, err := pool.Exec(ctx, `INSERT INTO monitoring.check_runs (id,monitor_id,issued_at,deadline_at,completed_at,result_kind,http_status,duration_ms) VALUES ($1::uuid,$2::uuid,$3,$4,$5,'http_response',$6,1)`, rowID, monitor.ID, completed.Add(-time.Second), completed.Add(time.Second), completed, tc.httpStatus); err != nil {
+				t.Fatal(err)
+			}
 		}
 		assertProductionAvailability(t, client, baseURL, monitor.ID, tc.status, tc.reason, checkID, tc.completed)
 		if tc.name != "http failure" {
@@ -707,6 +715,109 @@ func TestProductionMonitoringCompositionAgainstPostgreSQL(t *testing.T) {
 	sqlClosed = true
 	if err := pool.Ping(ctx); err != nil {
 		t.Fatalf("pool.Ping() after sqlDB.Close() error = %v; shared pool must remain open", err)
+	}
+}
+
+func TestCompositionServesConfirmedAvailability(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	pool, err := database.NewPool(ctx)
+	if err != nil {
+		t.Fatalf("database.NewPool() error = %v", err)
+	}
+	defer pool.Close()
+	if err := pool.Ping(ctx); err != nil {
+		t.Fatalf("pool.Ping() error = %v", err)
+	}
+
+	product, readiness, sqlDB, err := composeMonitoring(pool)
+	if err != nil {
+		t.Fatalf("composeMonitoring() error = %v", err)
+	}
+	defer sqlDB.Close()
+
+	provider, err := migrations.NewProvider(sqlDB)
+	if err != nil {
+		t.Fatalf("migrations.NewProvider() error = %v", err)
+	}
+	if _, err := provider.Up(ctx); err != nil {
+		t.Fatalf("provider.Up() error = %v", err)
+	}
+
+	server := httpserver.New("127.0.0.1:0", readiness, product)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen() error = %v", err)
+	}
+	serveCtx, stopServer := context.WithCancel(context.Background())
+	serveResult := make(chan error, 1)
+	go func() { serveResult <- server.Serve(serveCtx, listener) }()
+	defer func() {
+		stopServer()
+		select {
+		case err := <-serveResult:
+			if err != nil {
+				t.Errorf("server.Serve() shutdown error = %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Error("server.Serve() did not stop")
+		}
+	}()
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	baseURL := "http://" + listener.Addr().String()
+	assertStatus(t, client, http.MethodGet, baseURL+"/readyz", "", http.StatusOK)
+
+	type terminalSpec struct {
+		kind string
+		code int
+	}
+	insertSequence := func(monitorID string, latest time.Time, specs ...terminalSpec) string {
+		latestID := ""
+		for index, spec := range specs {
+			checkID := uuid.NewV7().String()
+			if index == 0 {
+				latestID = checkID
+			}
+			completed := latest.Add(-time.Duration(index) * time.Second)
+			var httpStatus *int
+			var durationMS *int64
+			switch spec.kind {
+			case "http_response":
+				code := spec.code
+				httpStatus = &code
+				duration := int64(1)
+				durationMS = &duration
+			case "worker_timeout":
+			default:
+				duration := int64(1)
+				durationMS = &duration
+			}
+			if _, err := pool.Exec(ctx, `INSERT INTO monitoring.check_runs (id,monitor_id,issued_at,deadline_at,completed_at,result_kind,http_status,duration_ms) VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6,$7,$8)`, checkID, monitorID, completed.Add(-time.Second), completed.Add(time.Second), completed, spec.kind, httpStatus, durationMS); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return latestID
+	}
+
+	now := productionClock()
+	for _, tc := range []struct {
+		name, status, reason string
+		specs                []terminalSpec
+	}{
+		{"awaiting confirmation", "unknown", "awaiting_confirmation", []terminalSpec{{"dns_error", 0}}},
+		{"confirmed probe failure", "unavailable", "probe_failure", []terminalSpec{{"dns_error", 0}, {"dns_error", 0}, {"dns_error", 0}}},
+		{"confirmed http failure", "unavailable", "unexpected_http_status", []terminalSpec{{"http_response", 500}, {"http_response", 500}, {"http_response", 500}}},
+		{"recovering", "unavailable", "recovering", []terminalSpec{{"http_response", 204}, {"dns_error", 0}, {"dns_error", 0}, {"dns_error", 0}}},
+		{"recovered", "available", "successful_response", []terminalSpec{{"http_response", 204}, {"http_response", 204}, {"dns_error", 0}, {"dns_error", 0}, {"dns_error", 0}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			monitor := decodeMonitorPayload(t, doRequest(t, client, http.MethodPost, baseURL+"/monitors", "application/json", `{"targetUrl":"https://confirmation.example/"}`))
+			latest := now.Add(-time.Second)
+			checkID := insertSequence(monitor.ID, latest, tc.specs...)
+			assertProductionAvailability(t, client, baseURL, monitor.ID, tc.status, tc.reason, checkID, latest)
+		})
 	}
 }
 

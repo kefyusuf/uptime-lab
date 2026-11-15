@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { verifyEvidence, verifyInventoryEvidence, verifySchedulingEvidence, verifyDeletionEvidence, verifyHistoryEvidence, verifyTargetEditEvidence } from "./verify-web-evidence.mjs";
+import { verifyEvidence, verifyInventoryEvidence, verifySchedulingEvidence, verifyDeletionEvidence, verifyHistoryEvidence, verifyTargetEditEvidence, verifyConfirmationRecoveryEvidence } from "./verify-web-evidence.mjs";
 const id = "aa29443e-c597-4e7b-9202-a4762e0e04c0",
   a = "bb29443e-c597-4e7b-9202-a4762e0e04c0",
   b = "cc29443e-c597-4e7b-9202-a4762e0e04c0";
@@ -134,4 +134,72 @@ test('target edit rejects missing durable linkage',()=>{
  assert.throws(()=>verifyTargetEditEvidence(editCapture,[],editMonitors));
  assert.throws(()=>verifyTargetEditEvidence(editCapture,editRows,[{id:editMonitor,target_url:'http://web/'}]));
  assert.throws(()=>verifyTargetEditEvidence(editCapture,editRows,[]));
+});
+const crMonitor='018f22d3-1d6a-7cc0-a37b-46fc3fafd701';
+const crId={
+ transient:'7d9b2eb0-52bb-4dd7-8934-c5ce30d5e001',
+ confirmed:'7d9b2eb0-52bb-4dd7-8934-c5ce30d5e002',
+ middle:'7d9b2eb0-52bb-4dd7-8934-c5ce30d5e003',
+ recovering:'7d9b2eb0-52bb-4dd7-8934-c5ce30d5e004',
+ recovered:'7d9b2eb0-52bb-4dd7-8934-c5ce30d5e005',
+};
+const crTime={
+ transient:'2026-11-01T12:00:00.000000+00:00',
+ middle:'2026-11-01T12:00:09.000000+00:00',
+ confirmed:'2026-11-01T12:00:10.000000+00:00',
+ recovering:'2026-11-01T12:00:20.000000+00:00',
+ recovered:'2026-11-01T12:00:30.000000+00:00',
+};
+const crRows=['recovered','recovering','confirmed','middle','transient'].map(stage=>({
+ id:crId[stage],monitor_id:crMonitor,completed_at:crTime[stage],result_kind:'http_response',
+ http_status:stage==='recovered'||stage==='recovering'?204:500,duration_ms:10,
+}));
+const crMonitors=[{id:crMonitor,target_url:'https://example.com',paused:true}];
+const crCapture={...inventoryCapture,confirmationRecovery:{
+ monitorId:crMonitor,
+ transientAssessment:{status:'unknown',reason:'awaiting_confirmation',checkId:crId.transient,completedAt:'2026-11-01T12:00:00Z'},
+ confirmedAssessment:{status:'unavailable',reason:'unexpected_http_status',checkId:crId.confirmed,completedAt:'2026-11-01T12:00:10Z'},
+ recoveringAssessment:{status:'unavailable',reason:'recovering',checkId:crId.recovering,completedAt:'2026-11-01T12:00:20Z'},
+ recoveredAssessment:{status:'available',reason:'successful_response',checkId:crId.recovered,completedAt:'2026-11-01T12:00:30Z'},
+ readsAfterRestart:{availability:200,status:'available',reason:'successful_response',checkId:crId.recovered},
+ restarts:{api:{beforeStartedAt:'2026-11-01T12:00:00.123456789Z',afterStartedAt:'2026-11-01T12:00:00.123456790Z'}},
+}};
+test('confirmation/recovery links the durable streak and the restarted recovered assessment',()=>assert.doesNotThrow(()=>verifyConfirmationRecoveryEvidence(crCapture,crRows,crMonitors)));
+for(const mutation of [
+ c=>{delete c.confirmationRecovery},c=>{c.confirmationRecovery.extra=true},
+ c=>{c.confirmationRecovery.monitorId=id},c=>{c.confirmationRecovery.monitorId='invalid'},
+ c=>{c.confirmationRecovery.transientAssessment.status='unavailable'},
+ c=>{c.confirmationRecovery.transientAssessment.reason='no_result'},
+ c=>{c.confirmationRecovery.confirmedAssessment.reason='probe_failure'},
+ c=>{c.confirmationRecovery.recoveringAssessment.reason='unexpected_http_status'},
+ c=>{c.confirmationRecovery.recoveringAssessment.status='available'},
+ c=>{c.confirmationRecovery.recoveredAssessment.status='unavailable'},
+ c=>{c.confirmationRecovery.recoveredAssessment.reason='recovering'},
+ c=>{c.confirmationRecovery.transientAssessment.checkId='invalid'},
+ c=>{c.confirmationRecovery.confirmedAssessment.checkId=c.confirmationRecovery.transientAssessment.checkId},
+ c=>{c.confirmationRecovery.transientAssessment.completedAt='2026-11-01T12:00:05Z'},
+ c=>{c.confirmationRecovery.readsAfterRestart.availability=404},
+ c=>{c.confirmationRecovery.readsAfterRestart.status='unavailable'},
+ c=>{c.confirmationRecovery.readsAfterRestart.reason='recovering'},
+ c=>{c.confirmationRecovery.readsAfterRestart.checkId=crId.recovering},
+ c=>{c.confirmationRecovery.readsAfterRestart.extra=1},
+ c=>{delete c.confirmationRecovery.restarts},
+ c=>{c.confirmationRecovery.restarts.api.afterStartedAt=c.confirmationRecovery.restarts.api.beforeStartedAt},
+ c=>{c.confirmationRecovery.restarts.api.afterStartedAt='2026-11-01T12:00:00Z'},
+])test('confirmation/recovery rejects mutated acceptance evidence '+mutation.toString(),()=>{const mutated=structuredClone(crCapture);mutation(mutated);assert.throws(()=>verifyConfirmationRecoveryEvidence(mutated,crRows,crMonitors))});
+test('confirmation/recovery rejects broken durable streak linkage',()=>{
+ assert.throws(()=>verifyConfirmationRecoveryEvidence(crCapture,crRows.slice(1),crMonitors));
+ assert.throws(()=>verifyConfirmationRecoveryEvidence(crCapture,[],crMonitors));
+ assert.throws(()=>verifyConfirmationRecoveryEvidence(crCapture,crRows.map(row=>({...row,monitor_id:a})),crMonitors));
+ const wrongSuccess=structuredClone(crRows);wrongSuccess[0].http_status=500;
+ assert.throws(()=>verifyConfirmationRecoveryEvidence(crCapture,wrongSuccess,crMonitors));
+ const wrongFailure=structuredClone(crRows);wrongFailure[4].http_status=204;
+ assert.throws(()=>verifyConfirmationRecoveryEvidence(crCapture,wrongFailure,crMonitors));
+ const wrongKind=structuredClone(crRows);wrongKind[2].result_kind='dns_error';wrongKind[2].http_status=null;
+ assert.throws(()=>verifyConfirmationRecoveryEvidence(crCapture,wrongKind,crMonitors));
+});
+test('confirmation/recovery rejects a missing or altered durable Monitor',()=>{
+ assert.throws(()=>verifyConfirmationRecoveryEvidence(crCapture,crRows,[]));
+ assert.throws(()=>verifyConfirmationRecoveryEvidence(crCapture,crRows,[{id:crMonitor,target_url:'http://web/',paused:true}]));
+ assert.throws(()=>verifyConfirmationRecoveryEvidence(crCapture,crRows,[{id:crMonitor,target_url:'https://example.com',paused:false}]));
 });

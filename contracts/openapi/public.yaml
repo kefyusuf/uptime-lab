@@ -422,7 +422,7 @@ paths:
                 "const": "no-store"
               "description": "Always bypass cached availability assessments."
       "summary": "Get current monitor availability"
-      "description": "Read-only assessment from the latest terminal result. Future or older-than-120-second evidence is unknown; exactly 120 seconds is fresh. HTTP 200–299 is available; other valid HTTP statuses and probe failures are unavailable. Policy and execution failures are unknown. No terminal result returns unknown/no_result without evidence. All matched responses use no-store."
+      "description": "Read-only assessment derived from a bounded newest-first sequence of retained terminal results. Three consecutive failures confirm unavailable; two consecutive successes recover to available; a first success without a preceding confirmed outage is available immediately. Fewer than three consecutive failures are unknown/awaiting_confirmation; successes below the recovery threshold after a confirmed outage are unavailable/recovering. Future or older-than-120-second latest evidence is unknown; exactly 120 seconds is fresh. HTTP 200-299 is a success; other valid HTTP statuses and probe failures are failures. Policy and execution failures are unknown and reset the streak. No terminal result returns unknown/no_result without evidence. All matched responses use no-store."
   /monitors/{monitorId}/scheduling:
     get:
       operationId: getMonitorScheduling
@@ -872,6 +872,7 @@ components:
           "enum":
             - "unexpected_http_status"
             - "probe_failure"
+            - "recovering"
         "evaluatedAt":
           "type": "string"
           "format": "date-time"
@@ -896,6 +897,7 @@ components:
             - "stale_result"
             - "policy_rejected"
             - "execution_failure"
+            - "awaiting_confirmation"
         "evaluatedAt":
           "type": "string"
           "format": "date-time"

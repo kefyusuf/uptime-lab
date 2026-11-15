@@ -2,29 +2,47 @@
 
 ## Availability policy
 
-Go Monitoring samples its clock once after one successful, validated terminal
-read. Unsupported durable shapes fail as sanitized persistence errors; an
-invalid evaluation clock fails as a sanitized evaluation error.
+Go Monitoring samples its clock once after one successful, validated bounded
+recent-terminal read: newest-first, at most `AvailabilitySequenceLimit = 5` rows,
+reusing the latest-result three-key ordering (`completed_at`, `issued_at`, `id`
+descending) so index 0 matches the latest terminal CheckRun. Unsupported durable
+shapes fail as sanitized persistence errors; an invalid evaluation clock fails as
+a sanitized evaluation error.
 
-| Fresh execution evidence | Status | Reason |
+Each terminal observation is classified from its execution fact alone:
+
+| Fresh execution evidence | Outcome | Single-row reason |
 |---|---|---|
-| HTTP 200–299 | available | successful_response |
-| HTTP 100–199 or 300–599 | unavailable | unexpected_http_status |
-| dns_error, timeout, connect_error, tls_error, protocol_error | unavailable | probe_failure |
-| policy_rejected | unknown | policy_rejected |
-| internal_error, worker_timeout | unknown | execution_failure |
-| No terminal result | unknown | no_result |
+| HTTP 200–299 | success | successful_response |
+| HTTP 100–199 or 300–599 | failure | unexpected_http_status |
+| dns_error, timeout, connect_error, tls_error, protocol_error | failure | probe_failure |
+| policy_rejected | inconclusive | policy_rejected |
+| internal_error, worker_timeout | inconclusive | execution_failure |
 
-Future completion takes precedence as `unknown/future_result`. Otherwise age
-greater than 120 seconds takes precedence as `unknown/stale_result`. Exactly
-120 seconds is fresh; comparison is not rounded. Every terminal assessment keeps
-its evidence, even unknown. There is no fallback to an older successful check,
-no body-content or complete-download claim, and no write or reconciliation.
-Separate raw-result and availability requests can observe different CheckIDs;
-each assessment identifies its own evidence. Public timestamps are normalized
-to UTC and validated for JSON representation before the HTTP response is written.
+The assessment is derived from this newest-first sequence, never from durable
+incident state. Future completion of the latest row takes precedence as
+`unknown/future_result`; otherwise age greater than 120 seconds takes precedence
+as `unknown/stale_result`. Exactly 120 seconds is fresh; comparison is not
+rounded. An inconclusive latest row short-circuits to its own unknown reason.
+Otherwise the walk stops at the first inconclusive row (a reset boundary): rows
+beyond it are neither counted nor validated.
 
-Current availability is exposed by `GET /monitors/{monitorId}/availability` as a read-only assessment of the latest terminal CheckRun. It returns `status`, `reason`, UTC `evaluatedAt`, and terminal `evidence` (`checkId`, `completedAt`). A known Monitor without a terminal result returns `200 unknown/no_result` with evidence omitted; the raw latest-result route retains its empty `204`. Every matched availability response, including errors and `405`, uses `Cache-Control: no-store`; `HEAD` returns `405` with `Allow: GET`. No new persistence, reconciliation, history, or public deployment is introduced.
+- No terminal result: `unknown/no_result`, evidence omitted.
+- Leading failures below the confirmation threshold (N=3): `unknown/awaiting_confirmation` — a transient failure is not yet an outage.
+- Leading failures at or above N=3: `unavailable` with the latest failure reason (`unexpected_http_status` or `probe_failure`).
+- Leading successes after a confirmed failure run, below the recovery threshold (M=2): `unavailable/recovering`.
+- Leading successes at or above M=2, or with no preceding confirmed failure run: `available/successful_response`.
+
+Every non-empty assessment keeps its evidence (index 0), even unknown. The
+lookback is retention-bounded: only the five newest terminal rows are read, so a
+streak that has aged out of the retained window can neither confirm an outage nor
+gate a recovery. There is no body-content or complete-download claim, and no
+write or reconciliation. Separate raw-result and availability requests can
+observe different CheckIDs; each assessment identifies its own evidence. Public
+timestamps are normalized to UTC and validated for JSON representation before the
+HTTP response is written.
+
+Current availability is exposed by `GET /monitors/{monitorId}/availability` as a read-only assessment of the recent terminal sequence. It returns `status`, `reason`, UTC `evaluatedAt`, and terminal `evidence` (`checkId`, `completedAt`). A known Monitor without a terminal result returns `200 unknown/no_result` with evidence omitted; the raw latest-result route retains its empty `204`. Every matched availability response, including errors and `405`, uses `Cache-Control: no-store`; `HEAD` returns `405` with `Allow: GET`. No new persistence, reconciliation, history, or public deployment is introduced.
 
 ## Status
 
