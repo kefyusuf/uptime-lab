@@ -4,10 +4,14 @@ const reasons: Record<Availability['reason'], string> = {
   successful_response: 'The target returned a successful response.',
   unexpected_http_status: 'The target returned an unexpected HTTP status.',
   probe_failure: 'The probe failed.',
+  recovering:
+    'The target is succeeding again but has not yet reached the recovery threshold.',
   policy_rejected: 'Execution was blocked by destination policy.',
   execution_failure: 'Execution could not provide an assessment.',
   stale_result: 'The server reports that the result is too old.',
   future_result: 'The server reports a future completion time.',
+  awaiting_confirmation:
+    'Failures have not yet reached the confirmation threshold.',
   no_result: 'No completed result yet',
 };
 export function AvailabilityCard({
