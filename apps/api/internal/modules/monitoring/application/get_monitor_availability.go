@@ -43,27 +43,28 @@ func (useCase GetMonitorAvailability) Execute(ctx context.Context, monitorID dom
 	if _, err := domain.NewMonitorID(monitorID.UUID()); err != nil {
 		return MonitorAvailability{}, err
 	}
-	record, err := useCase.repository.LatestTerminalByMonitorID(ctx, monitorID)
-	var observation *domain.AvailabilityObservation
-	var evidence MonitorAvailabilityEvidence
+	records, err := useCase.repository.RecentTerminalByMonitorID(ctx, monitorID, domain.AvailabilitySequenceLimit)
 	if err != nil {
-		switch {
-		case errors.Is(err, ports.ErrMonitorNotFound):
+		if errors.Is(err, ports.ErrMonitorNotFound) {
 			return MonitorAvailability{}, ErrMonitorNotFound
-		case errors.Is(err, ports.ErrNoTerminalCheckResult):
-		default:
-			return MonitorAvailability{}, ErrPersistence
 		}
-	} else {
+		return MonitorAvailability{}, ErrPersistence
+	}
+	observations := make([]domain.AvailabilityObservation, 0, len(records))
+	var evidence MonitorAvailabilityEvidence
+	for index, record := range records {
 		result, validationErr := latestCheckResultFromRecord(record)
 		if validationErr != nil || !availabilityTimestampSafe(result.CompletedAt()) {
 			return MonitorAvailability{}, ErrPersistence
 		}
-		observation = &domain.AvailabilityObservation{Kind: result.ResultKind(), CompletedAt: result.CompletedAt()}
+		observation := domain.AvailabilityObservation{Kind: result.ResultKind(), CompletedAt: result.CompletedAt()}
 		if status, ok := result.HTTPStatus(); ok {
 			observation.HTTPStatus = &status
 		}
-		evidence = MonitorAvailabilityEvidence{CheckID: result.CheckID(), CompletedAt: result.CompletedAt()}
+		observations = append(observations, observation)
+		if index == 0 {
+			evidence = MonitorAvailabilityEvidence{CheckID: result.CheckID(), CompletedAt: result.CompletedAt()}
+		}
 	}
 	if useCase.clock == nil {
 		return MonitorAvailability{}, ErrAvailabilityEvaluation
@@ -72,11 +73,11 @@ func (useCase GetMonitorAvailability) Execute(ctx context.Context, monitorID dom
 	if !availabilityTimestampSafe(evaluatedAt) {
 		return MonitorAvailability{}, ErrAvailabilityEvaluation
 	}
-	assessment, err := domain.EvaluateAvailability(observation, evaluatedAt)
+	assessment, err := domain.EvaluateAvailability(observations, evaluatedAt)
 	if err != nil {
 		return MonitorAvailability{}, ErrAvailabilityEvaluation
 	}
-	return MonitorAvailability{assessment: assessment, evaluatedAt: evaluatedAt, evidence: evidence, hasEvidence: observation != nil}, nil
+	return MonitorAvailability{assessment: assessment, evaluatedAt: evaluatedAt, evidence: evidence, hasEvidence: len(observations) > 0}, nil
 }
 
 func availabilityTimestampSafe(value time.Time) bool {

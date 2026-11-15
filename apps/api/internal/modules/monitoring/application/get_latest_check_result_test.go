@@ -12,10 +12,13 @@ import (
 )
 
 type fakeLatestCheckResultRepository struct {
-	calls  int
-	gotID  domain.MonitorID
-	record ports.LatestCheckResultRecord
-	err    error
+	calls     int
+	gotID     domain.MonitorID
+	gotLimit  int
+	record    ports.LatestCheckResultRecord
+	err       error
+	recent    []ports.LatestCheckResultRecord
+	recentErr error
 }
 
 func (repository *fakeLatestCheckResultRepository) LatestTerminalByMonitorID(
@@ -28,11 +31,14 @@ func (repository *fakeLatestCheckResultRepository) LatestTerminalByMonitorID(
 }
 
 func (repository *fakeLatestCheckResultRepository) RecentTerminalByMonitorID(
-	context.Context,
-	domain.MonitorID,
-	int,
+	_ context.Context,
+	monitorID domain.MonitorID,
+	limit int,
 ) ([]ports.LatestCheckResultRecord, error) {
-	return nil, nil
+	repository.calls++
+	repository.gotID = monitorID
+	repository.gotLimit = limit
+	return repository.recent, repository.recentErr
 }
 
 func TestGetLatestCheckResultReturnsHTTPResponseFact(t *testing.T) {

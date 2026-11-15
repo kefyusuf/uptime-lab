@@ -20,7 +20,18 @@ const (
 	AvailabilityStaleResult          AvailabilityReason = "stale_result"
 	AvailabilityPolicyRejected       AvailabilityReason = "policy_rejected"
 	AvailabilityExecutionFailure     AvailabilityReason = "execution_failure"
+	AvailabilityAwaitingConfirmation AvailabilityReason = "awaiting_confirmation"
+	AvailabilityRecovering           AvailabilityReason = "recovering"
 )
+
+const (
+	confirmationFailureThreshold = 3
+	recoverySuccessThreshold     = 2
+)
+
+// AvailabilitySequenceLimit bounds the newest-first terminal read the availability
+// policy needs: enough rows to confirm an outage and gate a recovery.
+const AvailabilitySequenceLimit = confirmationFailureThreshold + recoverySuccessThreshold
 
 // Availability is an immutable assessment made at a caller-supplied instant.
 type Availability struct {
@@ -38,46 +49,108 @@ type AvailabilityObservation struct {
 	CompletedAt time.Time
 }
 
-// EvaluateAvailability applies freshness before outcome classification without I/O.
-func EvaluateAvailability(observation *AvailabilityObservation, evaluatedAt time.Time) (Availability, error) {
+type availabilityOutcome int
+
+const (
+	outcomeSuccess availabilityOutcome = iota
+	outcomeFailure
+	outcomeInconclusive
+)
+
+// EvaluateAvailability classifies a newest-first sequence of terminal observations
+// without I/O. An empty sequence means no terminal result.
+func EvaluateAvailability(observations []AvailabilityObservation, evaluatedAt time.Time) (Availability, error) {
 	if !validAvailabilityTime(evaluatedAt) {
 		return Availability{}, ErrInvalidAvailability
 	}
-	if observation == nil {
+	if len(observations) == 0 {
 		return Availability{AvailabilityUnknown, AvailabilityNoResult}, nil
 	}
+	latest, latestOutcome, err := classifyAvailabilityObservation(observations[0])
+	if err != nil {
+		return Availability{}, err
+	}
+	if observations[0].CompletedAt.After(evaluatedAt) {
+		return Availability{AvailabilityUnknown, AvailabilityFutureResult}, nil
+	}
+	if evaluatedAt.Sub(observations[0].CompletedAt) > 120*time.Second {
+		return Availability{AvailabilityUnknown, AvailabilityStaleResult}, nil
+	}
+	if latestOutcome == outcomeInconclusive {
+		return latest, nil
+	}
+
+	outcomes := make([]availabilityOutcome, 0, len(observations))
+	for index := range observations {
+		_, outcome, err := classifyAvailabilityObservation(observations[index])
+		if err != nil {
+			return Availability{}, err
+		}
+		if outcome == outcomeInconclusive {
+			break
+		}
+		outcomes = append(outcomes, outcome)
+	}
+
+	leadingFailures := 0
+	for leadingFailures < len(outcomes) && outcomes[leadingFailures] == outcomeFailure {
+		leadingFailures++
+	}
+	if leadingFailures >= confirmationFailureThreshold {
+		return latest, nil
+	}
+	if leadingFailures > 0 {
+		return Availability{AvailabilityUnknown, AvailabilityAwaitingConfirmation}, nil
+	}
+
+	leadingSuccesses := 0
+	for leadingSuccesses < len(outcomes) && outcomes[leadingSuccesses] == outcomeSuccess {
+		leadingSuccesses++
+	}
+	priorFailures := 0
+	for index := leadingSuccesses; index < len(outcomes) && outcomes[index] == outcomeFailure; index++ {
+		priorFailures++
+	}
+	if priorFailures >= confirmationFailureThreshold && leadingSuccesses < recoverySuccessThreshold {
+		return Availability{AvailabilityUnavailable, AvailabilityRecovering}, nil
+	}
+	return Availability{AvailabilityAvailable, AvailabilitySuccessfulResponse}, nil
+}
+
+func classifyAvailabilityObservation(observation AvailabilityObservation) (Availability, availabilityOutcome, error) {
 	if !validAvailabilityTime(observation.CompletedAt) {
-		return Availability{}, ErrInvalidAvailability
+		return Availability{}, 0, ErrInvalidAvailability
 	}
 	var assessment Availability
+	var outcome availabilityOutcome
 	switch observation.Kind {
 	case CheckResultHTTPResponse:
 		if observation.HTTPStatus == nil || *observation.HTTPStatus < 100 || *observation.HTTPStatus > 599 {
-			return Availability{}, ErrInvalidAvailability
+			return Availability{}, 0, ErrInvalidAvailability
 		}
-		assessment = Availability{AvailabilityUnavailable, AvailabilityUnexpectedHTTPStatus}
 		if *observation.HTTPStatus >= 200 && *observation.HTTPStatus <= 299 {
 			assessment = Availability{AvailabilityAvailable, AvailabilitySuccessfulResponse}
+			outcome = outcomeSuccess
+		} else {
+			assessment = Availability{AvailabilityUnavailable, AvailabilityUnexpectedHTTPStatus}
+			outcome = outcomeFailure
 		}
 	case CheckResultDNSFailure, CheckResultTimeout, CheckResultConnectError, CheckResultTLSError, CheckResultProtocolError:
 		assessment = Availability{AvailabilityUnavailable, AvailabilityProbeFailure}
+		outcome = outcomeFailure
 	case CheckResultPolicyRejected:
 		assessment = Availability{AvailabilityUnknown, AvailabilityPolicyRejected}
+		outcome = outcomeInconclusive
 	case CheckResultInternalError, CheckResultWorkerTimeout:
 		assessment = Availability{AvailabilityUnknown, AvailabilityExecutionFailure}
+		outcome = outcomeInconclusive
 	default:
-		return Availability{}, ErrInvalidAvailability
+		return Availability{}, 0, ErrInvalidAvailability
 	}
 	if observation.Kind != CheckResultHTTPResponse && observation.HTTPStatus != nil {
-		return Availability{}, ErrInvalidAvailability
+		return Availability{}, 0, ErrInvalidAvailability
 	}
-	if observation.CompletedAt.After(evaluatedAt) {
-		return Availability{AvailabilityUnknown, AvailabilityFutureResult}, nil
-	}
-	if evaluatedAt.Sub(observation.CompletedAt) > 120*time.Second {
-		return Availability{AvailabilityUnknown, AvailabilityStaleResult}, nil
-	}
-	return assessment, nil
+	return assessment, outcome, nil
 }
 
 func validAvailabilityTime(value time.Time) bool {
