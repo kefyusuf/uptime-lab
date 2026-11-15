@@ -85,7 +85,7 @@ export interface paths {
         };
         /**
          * Get current monitor availability
-         * @description Read-only assessment from the latest terminal result. Future or older-than-120-second evidence is unknown; exactly 120 seconds is fresh. HTTP 200–299 is available; other valid HTTP statuses and probe failures are unavailable. Policy and execution failures are unknown. No terminal result returns unknown/no_result without evidence. All matched responses use no-store.
+         * @description Read-only assessment derived from a bounded newest-first sequence of retained terminal results. Three consecutive failures confirm unavailable; two consecutive successes recover to available; a first success without a preceding confirmed outage is available immediately. Fewer than three consecutive failures are unknown/awaiting_confirmation; successes below the recovery threshold after a confirmed outage are unavailable/recovering. Future or older-than-120-second latest evidence is unknown; exactly 120 seconds is fresh. HTTP 200-299 is a success; other valid HTTP statuses and probe failures are failures. Policy and execution failures are unknown and reset the streak. No terminal result returns unknown/no_result without evidence. All matched responses use no-store.
          */
         get: operations["getMonitorAvailability"];
         put?: never;
@@ -262,7 +262,7 @@ export interface components {
             /** @constant */
             status: "unavailable";
             /** @enum {string} */
-            reason: "unexpected_http_status" | "probe_failure";
+            reason: "unexpected_http_status" | "probe_failure" | "recovering";
             /** Format: date-time */
             evaluatedAt: string;
             evidence: components["schemas"]["MonitorAvailabilityEvidence"];
@@ -271,7 +271,7 @@ export interface components {
             /** @constant */
             status: "unknown";
             /** @enum {string} */
-            reason: "future_result" | "stale_result" | "policy_rejected" | "execution_failure";
+            reason: "future_result" | "stale_result" | "policy_rejected" | "execution_failure" | "awaiting_confirmation";
             /** Format: date-time */
             evaluatedAt: string;
             evidence: components["schemas"]["MonitorAvailabilityEvidence"];

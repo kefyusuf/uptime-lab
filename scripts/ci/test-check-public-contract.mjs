@@ -518,8 +518,8 @@ function availabilityPath() {
 function availabilitySchemas() {
   const variants = [
     ['AvailableMonitorAvailability', 'available', ['successful_response']],
-    ['UnavailableMonitorAvailability', 'unavailable', ['unexpected_http_status', 'probe_failure']],
-    ['UnknownMonitorAvailability', 'unknown', ['future_result', 'stale_result', 'policy_rejected', 'execution_failure']],
+    ['UnavailableMonitorAvailability', 'unavailable', ['unexpected_http_status', 'probe_failure', 'recovering']],
+    ['UnknownMonitorAvailability', 'unknown', ['future_result', 'stale_result', 'policy_rejected', 'execution_failure', 'awaiting_confirmation']],
     ['NoResultMonitorAvailability', 'unknown', ['no_result']],
   ];
   const schemas = { MonitorAvailability: { oneOf: variants.map(([name]) => ({ $ref: `#/components/schemas/${name}` })) }, MonitorAvailabilityEvidence: { type: 'object', additionalProperties: false, required: ['checkId', 'completedAt'], properties: { checkId: { type: 'string', format: 'uuid' }, completedAt: { type: 'string', format: 'date-time' } } } };
@@ -534,9 +534,11 @@ function availabilitySchemas() {
 function availabilityFixtures() {
   return Object.fromEntries([
     ['available', 'available', 'successful_response'], ['unavailable-http', 'unavailable', 'unexpected_http_status'],
-    ['unavailable-probe', 'unavailable', 'probe_failure'], ['unknown-no-result', 'unknown', 'no_result'],
+    ['unavailable-probe', 'unavailable', 'probe_failure'], ['unavailable-recovering', 'unavailable', 'recovering'],
+    ['unknown-no-result', 'unknown', 'no_result'],
     ['unknown-stale', 'unknown', 'stale_result'], ['unknown-future', 'unknown', 'future_result'],
     ['unknown-policy', 'unknown', 'policy_rejected'], ['unknown-execution', 'unknown', 'execution_failure'],
+    ['unknown-awaiting-confirmation', 'unknown', 'awaiting_confirmation'],
   ].map(([name, status, reason]) => [`availability-${name}.json`, { status, reason, evaluatedAt: '2026-10-02T12:00:00Z', ...(reason === 'no_result' ? {} : { evidence: { checkId: '7d9b2eb0-52bb-4dd7-8934-c5ce30d5c675', completedAt: reason === 'future_result' ? '2026-10-02T12:00:01Z' : reason === 'stale_result' ? '2026-10-02T11:57:59Z' : '2026-10-02T11:59:59Z' } }) }]));
 }
 
@@ -694,6 +696,14 @@ expectFixtureReject('availability extra evidence field fails', 'availability-ava
 expectFixtureReject('availability invalid timestamp fails', 'availability-available.json', p => { p.evaluatedAt = 'yesterday'; }, 'UTC timestamp');
 expectFixtureReject('availability impossible calendar date fails', 'availability-available.json', p => { p.evaluatedAt = '2026-02-30T12:00:00Z'; }, 'UTC timestamp');
 expectFixtureReject('availability invalid check ID fails', 'availability-available.json', p => { p.evidence.checkId = 'bad'; }, 'UUID');
+expectReject('availability recovering belongs only to unavailable', d => { d.components.schemas.AvailableMonitorAvailability.properties.reason.const = 'recovering'; }, 'AvailableMonitorAvailability.reason');
+expectReject('availability awaiting belongs only to unknown', d => { d.components.schemas.UnavailableMonitorAvailability.properties.reason.enum.push('awaiting_confirmation'); }, 'UnavailableMonitorAvailability.reason');
+expectReject('availability recovering is required', d => { d.components.schemas.UnavailableMonitorAvailability.properties.reason.enum = ['unexpected_http_status', 'probe_failure']; }, 'UnavailableMonitorAvailability.reason');
+expectReject('availability awaiting is required', d => { d.components.schemas.UnknownMonitorAvailability.properties.reason.enum = ['future_result', 'stale_result', 'policy_rejected', 'execution_failure']; }, 'UnknownMonitorAvailability.reason');
+expectFixtureReject('availability recovering fixture pairing fails', 'availability-unavailable-recovering.json', p => { p.reason = 'probe_failure'; }, 'status/reason');
+expectFixtureReject('availability recovering fixture needs evidence', 'availability-unavailable-recovering.json', p => { delete p.evidence; }, 'keys');
+expectFixtureReject('availability awaiting fixture needs evidence', 'availability-unknown-awaiting-confirmation.json', p => { delete p.evidence; }, 'keys');
+expectFixtureReject('availability awaiting fixture is closed', 'availability-unknown-awaiting-confirmation.json', p => { p.extra = 1; }, 'keys');
 
 expectReject('OpenAPI version mismatch fails', (d) => { d.openapi = '3.2.1'; }, 'openapi must be exactly 3.1.2');
 expectReject('contract version mismatch fails', (d) => { d.info.version = '0.2.0'; }, 'info.version must be exactly 0.1.0');

@@ -744,9 +744,11 @@ function validateInventory(document, repositoryRoot) {
 
 const availabilityFixtureCases = [
   ['available', 'available', 'successful_response'], ['unavailable-http', 'unavailable', 'unexpected_http_status'],
-  ['unavailable-probe', 'unavailable', 'probe_failure'], ['unknown-no-result', 'unknown', 'no_result'],
+  ['unavailable-probe', 'unavailable', 'probe_failure'], ['unavailable-recovering', 'unavailable', 'recovering'],
+  ['unknown-no-result', 'unknown', 'no_result'],
   ['unknown-stale', 'unknown', 'stale_result'], ['unknown-future', 'unknown', 'future_result'],
   ['unknown-policy', 'unknown', 'policy_rejected'], ['unknown-execution', 'unknown', 'execution_failure'],
+  ['unknown-awaiting-confirmation', 'unknown', 'awaiting_confirmation'],
 ];
 
 function assertUTCTimestamp(value, label) {
@@ -777,8 +779,8 @@ function validateAvailability(document, repositoryRoot) {
   const schemas = document.components.schemas;
   const variants = [
     ['AvailableMonitorAvailability', 'available', ['successful_response']],
-    ['UnavailableMonitorAvailability', 'unavailable', ['unexpected_http_status', 'probe_failure']],
-    ['UnknownMonitorAvailability', 'unknown', ['future_result', 'stale_result', 'policy_rejected', 'execution_failure']],
+    ['UnavailableMonitorAvailability', 'unavailable', ['unexpected_http_status', 'probe_failure', 'recovering']],
+    ['UnknownMonitorAvailability', 'unknown', ['future_result', 'stale_result', 'policy_rejected', 'execution_failure', 'awaiting_confirmation']],
     ['NoResultMonitorAvailability', 'unknown', ['no_result']],
   ];
   assertOneOfRefs(schemas.MonitorAvailability, variants.map(([name]) => `#/components/schemas/${name}`), 'MonitorAvailability');
