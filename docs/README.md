@@ -43,6 +43,7 @@ Design/spec/plan documents preserve the decision history for the phase in which 
 - [Local History Retention implementation plan](superpowers/plans/2026-11-06-local-history-retention.md): historical three-task Native TDD plan executed through feature PR #78, squash-merged to `main@352ee83` with all-ten-job exact-main CI.
 
 - [Post-R2 roadmap (2026-11-13)](roadmap/2026-11-13-post-r2-roadmap.md): proposed effort-ordered tracks after R2 completion — housekeeping, minimal Path-A R0 decisions, portfolio readiness, then confirmation/recovery; R4/R5 remain deferred and the external-beta NO-GO judgment is unchanged. Proposal only; no implementation or release authorization.
+- [R3-1 Confirmation/Recovery scope (2026-11-15)](superpowers/specs/2026-11-15-r3-1-confirmation-recovery-scope-reassessment.md): proposed first monitoring-decisions slice — assessment-only confirmation/recovery thresholds derived from retained terminal evidence; no durable incident state, notification or new persistence. Proposal only; design and implementation require separate approval.
 
 ## Implemented Runtime
 
