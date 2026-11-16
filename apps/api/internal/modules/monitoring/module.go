@@ -80,10 +80,11 @@ type ExecutionModule struct {
 func NewExecutionModule(
 	repository ports.CheckExecutionRepository,
 	checkIDGenerator application.CheckIDGenerator,
+	incidentIDGenerator application.IncidentIDGenerator,
 	clock application.Clock,
 ) ExecutionModule {
 	return ExecutionModule{
 		ClaimDueCheck:     application.NewClaimDueCheck(repository, checkIDGenerator, clock),
-		SubmitCheckResult: application.NewSubmitCheckResult(repository, clock),
+		SubmitCheckResult: application.NewSubmitCheckResult(repository, incidentIDGenerator, clock),
 	}
 }

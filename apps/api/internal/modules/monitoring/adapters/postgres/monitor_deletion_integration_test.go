@@ -435,6 +435,36 @@ func TestReconciliationOverlapRemainsAtomic(t *testing.T) {
 	assertMonitorCheckRunCount(t, pool, monitorID, 0)
 }
 
+func TestDeleteSweepsIncidentsAndState(t *testing.T) {
+	pool := openIntegrationPool(t)
+	resetMonitors(t, pool)
+	repository := NewRepository(pool)
+
+	now := time.Date(2026, time.September, 28, 10, 30, 0, 0, time.UTC)
+	monitorID := mustMonitorID(t, "018f22d3-1d6a-7cc0-a37b-46fc3fafd291")
+	insertExecutionMonitor(t, pool, monitorID, "https://example.com/incident-delete", now.Add(-time.Hour))
+
+	openIncidentViaFailures(t, pool, repository, monitorID, now, 0)
+	completePendingOutcome(t, pool, repository, monitorID, incidentFixtureCheckID(t, 3), incidentFixtureCandidateID(t, 3), now.Add(3*time.Minute), incidentSuccessResult(t))
+	completePendingOutcome(t, pool, repository, monitorID, incidentFixtureCheckID(t, 4), incidentFixtureCandidateID(t, 4), now.Add(4*time.Minute), incidentSuccessResult(t))
+	openCandidate, _, _ := openIncidentViaFailures(t, pool, repository, monitorID, now.Add(5*time.Minute), 10)
+	assertIncidentState(t, pool, monitorID, 3, 0, &openCandidate)
+	if got := countIncidents(t, pool, monitorID); got != 2 {
+		t.Fatalf("incidents before delete = %d, want 2 (one resolved, one open)", got)
+	}
+
+	if err := repository.Delete(context.Background(), monitorID); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+
+	assertMonitorRowCount(t, pool, monitorID, 0)
+	assertMonitorCheckRunCount(t, pool, monitorID, 0)
+	assertNoIncidentState(t, pool, monitorID)
+	if got := countIncidents(t, pool, monitorID); got != 0 {
+		t.Fatalf("incidents after delete = %d, want 0", got)
+	}
+}
+
 func assertMonitorRowCount(t *testing.T, pool *pgxpool.Pool, monitorID domain.MonitorID, want int) {
 	t.Helper()
 	var count int
