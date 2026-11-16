@@ -45,6 +45,10 @@ type editMonitorTarget interface {
 	Execute(context.Context, domain.MonitorID, string) (domain.Monitor, error)
 }
 
+type getMonitorIncidents interface {
+	Execute(context.Context, domain.MonitorID, application.IncidentInput) (application.IncidentCandidates, error)
+}
+
 // Handler adapts the public Monitoring HTTP contract to the existing application use cases.
 type Handler struct {
 	register        registerMonitor
@@ -57,6 +61,7 @@ type Handler struct {
 	deletion        deleteMonitor
 	history         getMonitorHistory
 	targetEdit      editMonitorTarget
+	incidents       getMonitorIncidents
 }
 
 // NewHandler constructs the isolated public Monitoring HTTP adapter.
@@ -114,6 +119,10 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		handler.serveHistory(writer, request, rawID)
 		return
 	}
+	if rawID, ok := incidentsMonitorIDPathSegment(request.URL.Path); ok && handler.incidents != nil {
+		handler.serveIncidents(writer, request, rawID)
+		return
+	}
 
 	if rawID, ok := monitorIDPathSegment(request.URL.Path); ok {
 		if handler.deletion != nil || handler.targetEdit != nil {
@@ -162,6 +171,13 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 			return
 		}
 	}
+	// Recognize incident aliases only to reject their original raw target.
+	if handler.incidents != nil {
+		if rawID, ok := incidentsMonitorIDPathSegment(path.Clean(strings.ReplaceAll(request.URL.Path, "\\", "/"))); ok {
+			handler.serveIncidents(writer, request, rawID)
+			return
+		}
+	}
 
 	http.NotFound(writer, request)
 }
@@ -182,6 +198,13 @@ func canonicalMonitorResourceTarget(request *http.Request, rawID string) bool {
 func NewHandlerWithTargetEdit(register registerMonitor, get getMonitor, latest getLatestCheckResult, availability getMonitorAvailability, list listMonitors, schedulingGet getMonitorScheduling, schedulingSet setMonitorScheduling, deletion deleteMonitor, history getMonitorHistory, targetEdit editMonitorTarget) *Handler {
 	handler := NewHandlerWithHistory(register, get, latest, availability, list, schedulingGet, schedulingSet, deletion, history)
 	handler.targetEdit = targetEdit
+	return handler
+}
+
+// NewHandlerWithIncidents adds the bounded durable-incident read capability.
+func NewHandlerWithIncidents(register registerMonitor, get getMonitor, latest getLatestCheckResult, availability getMonitorAvailability, list listMonitors, schedulingGet getMonitorScheduling, schedulingSet setMonitorScheduling, deletion deleteMonitor, history getMonitorHistory, targetEdit editMonitorTarget, incidents getMonitorIncidents) *Handler {
+	handler := NewHandlerWithTargetEdit(register, get, latest, availability, list, schedulingGet, schedulingSet, deletion, history, targetEdit)
+	handler.incidents = incidents
 	return handler
 }
 

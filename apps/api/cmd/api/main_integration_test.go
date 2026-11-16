@@ -979,3 +979,187 @@ func decodeMonitorPayload(t *testing.T, response *http.Response) monitorPayload 
 	}
 	return payload
 }
+
+func TestCompositionServesIncidents(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	pool, err := database.NewPool(ctx)
+	if err != nil {
+		t.Fatalf("database.NewPool() error = %v", err)
+	}
+	defer pool.Close()
+	if err := pool.Ping(ctx); err != nil {
+		t.Fatalf("pool.Ping() error = %v", err)
+	}
+
+	product, readiness, sqlDB, err := composeMonitoring(pool)
+	if err != nil {
+		t.Fatalf("composeMonitoring() error = %v", err)
+	}
+	defer sqlDB.Close()
+
+	provider, err := migrations.NewProvider(sqlDB)
+	if err != nil {
+		t.Fatalf("migrations.NewProvider() error = %v", err)
+	}
+	if _, err := provider.Up(ctx); err != nil {
+		t.Fatalf("provider.Up() error = %v", err)
+	}
+	if _, err := pool.Exec(ctx, `TRUNCATE monitoring.monitors CASCADE`); err != nil {
+		t.Fatalf("reset monitors: %v", err)
+	}
+
+	server := httpserver.New("127.0.0.1:0", readiness, product)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen() error = %v", err)
+	}
+	serveCtx, stopServer := context.WithCancel(context.Background())
+	serveResult := make(chan error, 1)
+	go func() { serveResult <- server.Serve(serveCtx, listener) }()
+	defer func() {
+		stopServer()
+		select {
+		case err := <-serveResult:
+			if err != nil {
+				t.Errorf("server.Serve() shutdown error = %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Error("server.Serve() did not stop")
+		}
+	}()
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	baseURL := "http://" + listener.Addr().String()
+	assertStatus(t, client, http.MethodGet, baseURL+"/readyz", "", http.StatusOK)
+
+	monitor := decodeMonitorPayload(t, doRequest(t, client, http.MethodPost, baseURL+"/monitors", "application/json", `{"targetUrl":"https://incidents.example/"}`))
+
+	// Drive one claim/submit cycle, then backdate the completed run so the
+	// monitor stays due for the next cycle without waiting out the cadence.
+	drive := func(resultBody string) string {
+		t.Helper()
+		claim := doRequest(t, client, http.MethodPost, baseURL+"/internal/checks/claim", "", "")
+		if claim.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(claim.Body)
+			claim.Body.Close()
+			t.Fatalf("claim status = %d body = %s", claim.StatusCode, body)
+		}
+		work := decodeCheckWorkPayload(t, claim)
+		if work.MonitorID != monitor.ID {
+			t.Fatalf("claim monitor = %s, want %s", work.MonitorID, monitor.ID)
+		}
+		assertStatusWithContentType(t, client, http.MethodPut, baseURL+"/internal/checks/"+work.CheckID+"/result", "application/json", resultBody, http.StatusNoContent)
+		if _, err := pool.Exec(ctx, `UPDATE monitoring.check_runs SET issued_at = issued_at - INTERVAL '120 seconds', deadline_at = deadline_at - INTERVAL '120 seconds', completed_at = completed_at - INTERVAL '120 seconds' WHERE id = $1::uuid`, work.CheckID); err != nil {
+			t.Fatalf("backdate check run: %v", err)
+		}
+		return work.CheckID
+	}
+
+	readIncidents := func() struct {
+		Items []struct {
+			IncidentID        string  `json:"incidentId"`
+			OpenedAt          string  `json:"openedAt"`
+			ResolvedAt        *string `json:"resolvedAt"`
+			OpeningReason     string  `json:"openingReason"`
+			OpenedByCheckID   *string `json:"openedByCheckId"`
+			ResolvedByCheckID *string `json:"resolvedByCheckId"`
+		} `json:"items"`
+		NextCursor *string `json:"nextCursor"`
+	} {
+		t.Helper()
+		response := doRequest(t, client, http.MethodGet, baseURL+"/monitors/"+monitor.ID+"/incidents?limit=20", "", "")
+		body, _ := io.ReadAll(response.Body)
+		response.Body.Close()
+		if response.StatusCode != http.StatusOK || response.Header.Get("Cache-Control") != "no-store" || response.Header.Get("Content-Type") != "application/json" {
+			t.Fatalf("incidents read = %d %v %s", response.StatusCode, response.Header, body)
+		}
+		var page struct {
+			Items []struct {
+				IncidentID        string  `json:"incidentId"`
+				OpenedAt          string  `json:"openedAt"`
+				ResolvedAt        *string `json:"resolvedAt"`
+				OpeningReason     string  `json:"openingReason"`
+				OpenedByCheckID   *string `json:"openedByCheckId"`
+				ResolvedByCheckID *string `json:"resolvedByCheckId"`
+			} `json:"items"`
+			NextCursor *string `json:"nextCursor"`
+		}
+		if err := json.Unmarshal(body, &page); err != nil {
+			t.Fatalf("decode incidents page: %v; body=%s", err, body)
+		}
+		return page
+	}
+
+	var thirdFailure string
+	for index := 0; index < 3; index++ {
+		thirdFailure = drive(`{"kind":"http_response","durationMs":10,"httpStatus":500}`)
+	}
+	openPage := readIncidents()
+	if len(openPage.Items) != 1 || openPage.NextCursor != nil {
+		t.Fatalf("open page items = %d nextCursor = %v", len(openPage.Items), openPage.NextCursor)
+	}
+	opened := openPage.Items[0]
+	if opened.ResolvedAt != nil || opened.OpeningReason != "unexpected_http_status" || opened.OpenedByCheckID == nil || *opened.OpenedByCheckID != thirdFailure || opened.ResolvedByCheckID != nil {
+		t.Fatalf("open incident = %+v", opened)
+	}
+	var failureStreak, successStreak int
+	var rawOpenIncident *string
+	if err := pool.QueryRow(ctx, `SELECT failure_streak, success_streak, open_incident_id::text FROM monitoring.incident_state WHERE monitor_id = $1::uuid`, monitor.ID).Scan(&failureStreak, &successStreak, &rawOpenIncident); err != nil {
+		t.Fatalf("read incident state: %v", err)
+	}
+	if failureStreak != 3 || successStreak != 0 || rawOpenIncident == nil || *rawOpenIncident != opened.IncidentID {
+		t.Fatalf("open state = (failure %d, success %d, open %v)", failureStreak, successStreak, rawOpenIncident)
+	}
+
+	var secondSuccess string
+	for index := 0; index < 2; index++ {
+		secondSuccess = drive(`{"kind":"http_response","durationMs":10,"httpStatus":200}`)
+	}
+	resolvedPage := readIncidents()
+	if len(resolvedPage.Items) != 1 || resolvedPage.NextCursor != nil {
+		t.Fatalf("resolved page items = %d nextCursor = %v", len(resolvedPage.Items), resolvedPage.NextCursor)
+	}
+	resolved := resolvedPage.Items[0]
+	if resolved.IncidentID != opened.IncidentID || resolved.ResolvedAt == nil || resolved.OpeningReason != "unexpected_http_status" || resolved.OpenedByCheckID == nil || *resolved.OpenedByCheckID != thirdFailure || resolved.ResolvedByCheckID == nil || *resolved.ResolvedByCheckID != secondSuccess {
+		t.Fatalf("resolved incident = %+v", resolved)
+	}
+	if err := pool.QueryRow(ctx, `SELECT failure_streak, success_streak, open_incident_id::text FROM monitoring.incident_state WHERE monitor_id = $1::uuid`, monitor.ID).Scan(&failureStreak, &successStreak, &rawOpenIncident); err != nil {
+		t.Fatalf("read resolved incident state: %v", err)
+	}
+	if failureStreak != 0 || successStreak != 0 || rawOpenIncident != nil {
+		t.Fatalf("resolved state = (failure %d, success %d, open %v)", failureStreak, successStreak, rawOpenIncident)
+	}
+
+	missing := doRequest(t, client, http.MethodGet, baseURL+"/monitors/"+uuid.NewV7().String()+"/incidents", "", "")
+	missing.Body.Close()
+	if missing.StatusCode != http.StatusNotFound || missing.Header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("unknown monitor incidents = %d %v", missing.StatusCode, missing.Header)
+	}
+	invalidCursor := doRequest(t, client, http.MethodGet, baseURL+"/monitors/"+monitor.ID+"/incidents?cursor="+strings.Repeat("A", 88), "", "")
+	invalidCursor.Body.Close()
+	if invalidCursor.StatusCode != http.StatusBadRequest || invalidCursor.Header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("invalid cursor incidents = %d %v", invalidCursor.StatusCode, invalidCursor.Header)
+	}
+	methodResponse := doRequest(t, client, http.MethodPost, baseURL+"/monitors/"+monitor.ID+"/incidents", "", "")
+	methodResponse.Body.Close()
+	if methodResponse.StatusCode != http.StatusMethodNotAllowed || methodResponse.Header.Get("Allow") != http.MethodGet || methodResponse.Header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("incidents method = %d %v", methodResponse.StatusCode, methodResponse.Header)
+	}
+
+	// The availability read remains the separate evidence-derived assessment.
+	availability := doRequest(t, client, http.MethodGet, baseURL+"/monitors/"+monitor.ID+"/availability", "", "")
+	availabilityBody, _ := io.ReadAll(availability.Body)
+	availability.Body.Close()
+	if availability.StatusCode != http.StatusOK || availability.Header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("availability read = %d %v", availability.StatusCode, availability.Header)
+	}
+	var assessment struct {
+		Status string `json:"status"`
+		Reason string `json:"reason"`
+	}
+	if err := json.Unmarshal(availabilityBody, &assessment); err != nil || assessment.Status == "" {
+		t.Fatalf("availability assessment = %s err = %v", availabilityBody, err)
+	}
+}
