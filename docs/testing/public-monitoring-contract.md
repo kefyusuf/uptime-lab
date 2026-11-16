@@ -27,9 +27,10 @@ PUT  /monitors/{monitorId}/scheduling
 DELETE /monitors/{monitorId}
 GET  /monitors/{monitorId}/history
 PATCH /monitors/{monitorId}
+GET  /monitors/{monitorId}/incidents
 ~~~
 
-The Go runtime serves these ten public operations through the Monitoring HTTP adapter in addition to `GET /livez` and schema-aware `GET /readyz`. The latest-result operation is terminal-only: `204` means a known Monitor has no terminal result, pending CheckRuns are not exposed, and the result vocabulary is an execution fact rather than an availability verdict. Canonical Compose publishes no application host ports, so this does not imply public network deployment. The internal Checker contract remains separate at `contracts/openapi/internal.yaml`.
+The Go runtime serves these eleven public operations through the Monitoring HTTP adapter in addition to `GET /livez` and schema-aware `GET /readyz`. The latest-result operation is terminal-only: `204` means a known Monitor has no terminal result, pending CheckRuns are not exposed, and the result vocabulary is an execution fact rather than an availability verdict. Canonical Compose publishes no application host ports, so this does not imply public network deployment. The internal Checker contract remains separate at `contracts/openapi/internal.yaml`.
 
 Inventory regression checks pin GET+POST collection, the closed required items/nullable nextCursor envelope, limit default20/min1/max50, cursor88 characters,128 raw query bytes,245760 body bytes, no-store and405 Allow GET, POST. Page/empty/final fixtures preserve complete Monitor fields; empty pages cannot continue and fixture continuation equals the last included persisted key. Mutation tests retain existing operation checks. Run pinned Redocly lint/bundle before the bundled checker and regenerate/check TypeScript consumer types.
 
@@ -39,7 +40,7 @@ Verification is deliberately layered:
 
 1. Redocly CLI validates OpenAPI syntax/spec conformance and bundles references.
 2. `scripts/ci/check-public-contract.mjs` owns repository-specific semantic invariants over the bundled JSON.
-3. `scripts/ci/test-check-public-contract.mjs` exercises the canonical contract, thirteen public fixtures (three latest-result and ten availability variants), and the negative invariant matrix.
+3. `scripts/ci/test-check-public-contract.mjs` exercises the canonical contract, the public fixtures (including three latest-result and ten availability variants, and five incident variants — open, resolved, null-evidence, empty-page and invalid), and the negative invariant matrix; 183 semantic tests pass.
 4. `scripts/ci/detect-public-contract-changes.sh` decides whether the path-aware CI job must run.
 5. `CI / gate` accepts the conditional job only when it is either successful or legitimately skipped.
 
@@ -107,7 +108,10 @@ The repository-owned checker mechanically protects the landed contract decisions
 - exact `200/204/400/404/500` latest-result response semantics, including an empty `204`;
 - exact `200/400/404/500` availability semantics and `Cache-Control: no-store` on every response;
 - closed availability variants with valid status/reason pairs, required terminal evidence, and absent evidence for `no_result`;
-- thirteen exact fixtures, including all ten availability reasons, nested evidence UUIDs and UTC timestamps;
+- exact latest-result/availability fixtures, including all ten availability reasons, nested evidence UUIDs and UTC timestamps;
+- exact `200/400/404/500` incident semantics, `Cache-Control: no-store` on every response, and `405` with `Allow: GET`;
+- closed `MonitorIncidentPage`/`MonitorIncident` shapes with the two-reason `openingReason` enum (`unexpected_http_status`/`probe_failure`), optional `resolvedAt`/`openedByCheckId`/`resolvedByCheckId` omitted when null, default 20/max 50 limit, and the version-3 88-character base64url cursor;
+- five exact incident fixtures (open, resolved, null-evidence, empty-page, invalid);
 - absence of `httpStatus` on classified failures and both `httpStatus`/`durationMs` on `worker_timeout`;
 - explicit absence of an RFC 3986 `uri` format on `targetUrl`, plus locked UUID, date-time, and URI-reference formats;
 - absence of servers and security schemes;
@@ -135,7 +139,7 @@ Those concerns require separate runtime/product gates.
 
 The public contract is **defined and served**, but the evidence layers remain intentionally separate.
 
-A green `public-contract` job means the source artifact is valid and matches repository-owned semantic invariants. Runtime conformance is proven by Monitoring HTTP adapter tests, real PostgreSQL production-composition integration, schema-aware readiness evidence, and canonical Docker POST/GET/latest-result/availability smoke. Domain tests pin HTTP boundaries, every normalized result kind, future-before-stale precedence, the unrounded 120-second boundary, and the newest-first sequence policy (N=3 confirmation, M=2 recovery, the inconclusive reset boundary, walked-prefix-only validation, and freshness applied only to the latest row). Application tests pin one bounded recent read followed by one clock sample, immutable evidence, and safe UTC timestamp representation.
+A green `public-contract` job means the source artifact is valid and matches repository-owned semantic invariants. Runtime conformance is proven by Monitoring HTTP adapter tests, real PostgreSQL production-composition integration, schema-aware readiness evidence, and canonical Docker POST/GET/latest-result/availability smoke. Domain tests pin HTTP boundaries, every normalized result kind, future-before-stale precedence, the unrounded 120-second boundary, and the newest-first sequence policy (N=3 confirmation, M=2 recovery, the inconclusive reset boundary, walked-prefix-only validation, and freshness applied only to the latest row). Application tests pin one bounded recent read followed by one clock sample, immutable evidence, and safe UTC timestamp representation. The durable incident fold is pinned separately by domain tests (N=3 open, M=2 resolve, inconclusive reset, never re-open, first-success no-op) and real-PostgreSQL write-path integration; the bounded incident read is pinned by application/adapter tests (version-3 cursor canonicality, closed shape, null-evidence omission, keyset ordering) and the composed browser journey. Availability remains assessment-only and is never derived from incident state.
 
 This separation keeps `contracts/openapi/public.yaml` authoritative without making the OpenAPI parser responsible for Go routing or persistence behavior.
 

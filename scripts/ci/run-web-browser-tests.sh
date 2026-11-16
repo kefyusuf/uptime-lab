@@ -196,5 +196,54 @@ CONFIRMATION_ROWS_SQL="$(confirmation sql-rows)"
 compose exec -T db sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"' sh "$CONFIRMATION_ROWS_SQL" > "$WORK/confirmation-rows.json"
 CONFIRMATION_MON_SQL="$(confirmation sql-monitor)"
 compose exec -T db sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"' sh "$CONFIRMATION_MON_SQL" > "$WORK/confirmation-monitors.json"
-node "$ROOT/scripts/ci/verify-web-evidence.mjs" "$WEB_BROWSER_ARTIFACT" "$WORK/rows.json" "$WORK/monitors.json" "$WORK/deletion-rows.json" "$WORK/deletion-monitors.json" "$WORK/history-rows.json" "$WORK/edit-rows.json" "$WORK/edit-monitors.json" "$WORK/confirmation-rows.json" "$WORK/confirmation-monitors.json"
+# Durable incident journey: an isolated active public-target fixture Monitor is
+# driven through the real write-path fold — three sustained failures open a
+# durable incident, two sustained successes resolve it — and the incident
+# history is proven to survive an API restart and evidence retention truncation
+# (nullable evidence links cleared, window persisted), while the availability
+# read remains the separate evidence-derived assessment. The real Rust worker
+# never probes it; claim/submit orchestration exercises the unchanged fold.
+incident() { node "$ROOT/scripts/ci/web-incident-evidence.mjs" "$1" "$WEB_BROWSER_ARTIFACT" "${@:2}"; }
+browser incident-register
+INCIDENT_ID="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).durableIncident.monitorId' "$WEB_BROWSER_ARTIFACT")"
+compose stop checker
+sql "UPDATE monitoring.monitors SET paused=true WHERE id <> '$INCIDENT_ID';" >/dev/null
+# Each completed run is backdated 70s: past the 60s claim cadence boundary so the
+# next claim is immediately due, yet under the 120s availability freshness gate.
+incident_drive() {
+  local status="$1" claim_json check_id
+  claim_json="$(compose exec -T api wget -q -O - --post-data= http://127.0.0.1:8080/internal/checks/claim)"
+  printf '%s' "$claim_json" > "$WORK/incident-claim.json"
+  incident record-claim "$WORK/incident-claim.json"
+  check_id="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).checkId' "$WORK/incident-claim.json")"
+  compose exec -T web node --input-type=module -e 'const check=process.argv[1],status=+process.argv[2];const response=await fetch("http://api:8080/internal/checks/"+check+"/result",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({kind:"http_response",durationMs:10,httpStatus:status})});if(response.status!==204)throw new Error("Incident submit failed "+response.status);' "$check_id" "$status"
+  sql "UPDATE monitoring.check_runs SET issued_at=issued_at-interval '70 seconds',deadline_at=deadline_at-interval '70 seconds',completed_at=completed_at-interval '70 seconds' WHERE id='$check_id';" >/dev/null
+}
+incident_drive 500
+incident_drive 500
+incident_drive 500
+browser incident-open
+incident_drive 204
+incident_drive 204
+browser incident-resolved
+INCIDENT_ROWS_SQL="$(incident sql-rows)"
+compose exec -T db sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"' sh "$INCIDENT_ROWS_SQL" > "$WORK/incident-rows.json"
+API_CONTAINER="$(compose ps -q api)"
+incident restart api before "$("$DOCKER_BIN" inspect --format '{{.State.StartedAt}}' "$API_CONTAINER")"
+compose restart api
+compose up -d --wait --wait-timeout 60 api
+incident restart api after "$("$DOCKER_BIN" inspect --format '{{.State.StartedAt}}' "$(compose ps -q api)")"
+INCIDENT_READS="$(compose exec -T web node --input-type=module -e 'const id=process.argv[1];const incidents=await fetch("http://api:8080/monitors/"+id+"/incidents");const availability=await fetch("http://api:8080/monitors/"+id+"/availability");console.log(JSON.stringify({incidents:incidents.status,availability:availability.status}));' "$INCIDENT_ID")"
+printf '%s' "$INCIDENT_READS" > "$WORK/incident-reads.json"
+incident record-reads "$WORK/incident-reads.json"
+browser incident-restart
+OPENED_BY="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).durableIncident.openedIncident.openedByCheckId' "$WEB_BROWSER_ARTIFACT")"
+RESOLVED_BY="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).durableIncident.resolvedIncident.resolvedByCheckId' "$WEB_BROWSER_ARTIFACT")"
+sql "DELETE FROM monitoring.check_runs WHERE id IN ('$OPENED_BY','$RESOLVED_BY');" >/dev/null
+INCIDENT_INCIDENTS_SQL="$(incident sql-incidents)"
+compose exec -T db sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"' sh "$INCIDENT_INCIDENTS_SQL" > "$WORK/incident-incidents.json"
+INCIDENT_STATE_SQL="$(incident sql-state)"
+compose exec -T db sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"' sh "$INCIDENT_STATE_SQL" > "$WORK/incident-state.json"
+browser incident-truncated
+node "$ROOT/scripts/ci/verify-web-evidence.mjs" "$WEB_BROWSER_ARTIFACT" "$WORK/rows.json" "$WORK/monitors.json" "$WORK/deletion-rows.json" "$WORK/deletion-monitors.json" "$WORK/history-rows.json" "$WORK/edit-rows.json" "$WORK/edit-monitors.json" "$WORK/confirmation-rows.json" "$WORK/confirmation-monitors.json" "$WORK/incident-rows.json" "$WORK/incident-incidents.json" "$WORK/incident-state.json"
 printf 'Real browser/Go/Checker/PostgreSQL journey passed on loopback port %s\n' "$UPTIME_LAB_WEB_PORT"

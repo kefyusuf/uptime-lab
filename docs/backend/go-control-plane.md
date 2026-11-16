@@ -71,6 +71,10 @@ GET  /monitors/{monitorId}/latest-result
 GET  /monitors/{monitorId}/availability
 GET  /monitors/{monitorId}/scheduling
 PUT  /monitors/{monitorId}/scheduling
+DELETE /monitors/{monitorId}
+GET  /monitors/{monitorId}/history
+PATCH /monitors/{monitorId}
+GET  /monitors/{monitorId}/incidents
 ~~~
 
 The internal Checker surface is:
@@ -150,6 +154,8 @@ A result arriving at/after deadline causes Go-owned `worker_timeout` terminaliza
 
 Rust cannot submit `worker_timeout`.
 
+Every terminal completion also advances the durable per-Monitor incident fold inside the same completion transaction, still holding the CheckRun row lock. The fold is a write-path concern; the availability read never consults it. See [Durable incident semantics](#durable-incident-semantics).
+
 ## Persistence Ports
 
 Monitoring owns narrow Monitor, latest-result read, and execution persistence interfaces.
@@ -165,6 +171,8 @@ The Monitoring schema contains:
 ~~~text
 monitoring.monitors
 monitoring.check_runs
+monitoring.incidents
+monitoring.incident_state
 ~~~
 
 `monitoring.check_runs` contains:
@@ -181,6 +189,31 @@ duration_ms
 ~~~
 
 Database constraints protect valid pending/terminal shapes, bounds, timestamp order, and one pending run per Monitor.
+
+`monitoring.incidents` (migration 00005) contains one row per durable incident window:
+
+~~~text
+id
+monitor_id
+opened_at
+resolved_at
+opening_reason
+opened_by_check_id
+resolved_by_check_id
+~~~
+
+`opening_reason` is constrained to the closed vocabulary `unexpected_http_status`/`probe_failure`; `resolved_at` is null while open and constrained `>= opened_at` once set. Both evidence links are nullable foreign keys to `monitoring.check_runs` with `ON DELETE SET NULL`, so retention truncation clears the link without deleting the window. A partial unique index (`incidents_one_open_per_monitor_idx`, `WHERE resolved_at IS NULL`) enforces at most one open incident per Monitor; a keyset index (`incidents_monitor_opened_idx`, `(monitor_id, opened_at DESC, id DESC)`) serves the bounded history read.
+
+`monitoring.incident_state` (migration 00005) is the per-Monitor fold position, keyed by `monitor_id`:
+
+~~~text
+monitor_id
+failure_streak
+success_streak
+open_incident_id
+~~~
+
+Both streaks are non-negative integers defaulting to zero; `open_incident_id` is a nullable foreign key to `monitoring.incidents`. State accrues lazily from the first completion (a missing row reads as the zero value).
 
 ## Migrations and Readiness
 
@@ -284,16 +317,33 @@ The claim transaction's reconciliation phase enforces a retained history window:
 
 ListMonitors uses a dedicated bounded port and an88-character raw-base64url position containing version1, a fixed microsecond UTC timestamp and a lowercase nonzero UUID. Separate parameterized first/continuation queries use `(created_at DESC,id DESC)` and the nonunique `monitoring.monitors_inventory_order_idx`, added by00003. Raw targets are projected only at most245760 bytes; larger values return explicit metadata markers. The use case validates at most51 candidates, order and strict anchor bounds. HTTP accounts for escaped JSON,128 framing bytes and all commas, returning complete-prefix continuation or the approved first-item500. A cursor requires no anchor-row lookup and provides no ownership, authentication or snapshot guarantee. CheckRun state is unchanged.
 
+## Durable incident semantics
+
+R3-2 adds a durable per-Monitor incident fold on the write path and a bounded incident-history read. It is separate from the assessment-only availability read: availability is derived from the retained terminal sequence and never from incident state, while incidents accrue durably on every completion regardless of retention. The two can legitimately diverge — an open window persists after its confirming failures age out of the retained lookback, and a resolved window persists after its evidence rows are truncated.
+
+The fold (`domain.ApplyIncidentOutcome`) is total and deterministic, reusing the fixed R3-1 thresholds `confirmationFailureThreshold = 3` and `recoverySuccessThreshold = 2` (R0-03 local conventions, not per-Monitor policy):
+
+- N=3 consecutive classified failures open one candidate incident, capturing the confirming failure's reason (`unexpected_http_status` or `probe_failure`) and CheckRun evidence; an already-open incident is never re-opened.
+- M=2 consecutive successes resolve the open incident, capturing the recovering CheckRun evidence, then zero both streaks and clear the open pointer.
+- An inconclusive result (`policy_rejected`, `internal_error`, `worker_timeout`) resets both streaks and leaves any open incident untouched.
+- A first success with no open incident is action none; there is no confirmation gate on the up transition.
+
+`Repository.foldIncidentOutcome` runs inside the completion transaction while the CheckRun row lock is held. It reads the current fold position (a missing `incident_state` row is the zero value), applies the domain fold, writes the `incidents` row before upserting `incident_state` so the `open_incident_id` foreign key always references an existing window, and upserts the streaks/pointer. The steady-state upsert of an existing row whose `monitor_id` is unchanged takes no monitors lock. The claim transaction's reconciliation phase separately zeroes both streaks for exactly the Monitors whose expired pending runs were just terminalized to `worker_timeout` (an inconclusive reconciliation never resolves an open window); it pipelines through one batch and leaves the open pointer untouched.
+
+`GET /monitors/{monitorId}/incidents` is the eleventh public operation: a bounded, keyset-paginated page (default 20, maximum 50) of one Monitor's durable incident windows, ordered by `opened_at DESC, id DESC` over `incidents_monitor_opened_idx`. The version-`3|` cursor encodes the persisted microsecond UTC opening instant plus Incident UUID as 88-character base64url and rejects alternate representations and cross-resource use. The query grammar (optional `limit`/`cursor` each once, 128 ASCII raw bytes, no escapes/plus/semicolon/whitespace/empty values/duplicate or unknown keys), 245760-byte response budget, complete-prefix continuation and approved first-item 500 mirror the inventory/history conventions. Every matched response uses `Cache-Control: no-store`; only GET is supported (`HEAD`/others return 405 with `Allow: GET`); declared or streamed bodies and empty queries are 400. An unknown Monitor is 404; invalid query/cursor is 400; persistence/encode failures are sanitized 500. No incidents is a successful empty `200` page. Each item carries `incidentId`, UTC `openedAt`, `openingReason`, optional `resolvedAt`, and optional `openedByCheckId`/`resolvedByCheckId` evidence links omitted when null (cleared by `ON DELETE SET NULL` truncation). Durable incidents are retained independently of the newest-50 terminal check-run window, so a cursor anchored on a removed evidence row continues with strictly older incidents or an empty page. Composition wires the read repository and use case through the Monitoring module and handler; the gateway forwards only the contracted GET.
+
+This capability adds no notification/delivery (R4), uptime percentage, maintenance window, per-Monitor configurable threshold, aggregation, historical backfill, ownership or remote access.
+
 ## Deferred
 
 Still deferred:
 
-- public Monitor operations beyond create/inventory/read/latest-result/availability/history/target-edit;
+- public Monitor operations beyond the eleven implemented (create, inventory, read, latest-result, availability, scheduling GET/PUT, delete, history, target-edit, incidents);
+- incident notification/delivery (R4);
 - full CheckRun history and materialized availability history;
 - mutable Monitor lifecycle beyond the edited target URL;
 - multi-worker coordination/leases;
 - broker/outbox;
-- React;
 - authentication/authorization;
 - CORS/rate limiting;
 - public ingress/TLS/deployment topology.
