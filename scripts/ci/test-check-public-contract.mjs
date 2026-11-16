@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 
 const checkerPath = fileURLToPath(new URL('./check-public-contract.mjs', import.meta.url));
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'uptime-lab-contract-'));
@@ -102,10 +103,11 @@ function canonicalPublicFixtures() {
       resultKind: 'worker_timeout',
       completedAt: '2026-09-29T12:00:20Z',
     },
+    ...incidentFixtures(),
   };
 }
 
-function validDocument() {
+function validDocument({ withIncidents = true } = {}) {
   const document = {
     openapi: '3.1.2',
     info: {
@@ -334,7 +336,157 @@ function validDocument() {
       },
     ],
   };
+  if (withIncidents) {
+    document.paths['/monitors/{monitorId}/incidents'] = { get: incidentsOperation() };
+    Object.assign(document.components.schemas, incidentSchemas());
+  }
   return document;
+}
+
+function incidentsOperation() {
+  const responses = {
+    '200': {
+      description: 'Incident page.',
+      content: {
+        'application/json': {
+          schema: { $ref: '#/components/schemas/MonitorIncidentPage' },
+        },
+      },
+    },
+    '400': problemResponse(),
+    '404': problemResponse(),
+    '500': problemResponse(),
+    '405': {
+      description: 'Method.',
+      headers: { Allow: { schema: { type: 'string', const: 'GET' } } },
+    },
+  };
+  for (const response of Object.values(responses)) {
+    response.headers = {
+      ...response.headers,
+      'Cache-Control': { schema: { type: 'string', const: 'no-store' } },
+    };
+  }
+  return {
+    operationId: 'getMonitorIncidents',
+    'x-max-body-bytes': 245760,
+    parameters: [
+      {
+        name: 'monitorId',
+        in: 'path',
+        required: true,
+        schema: { type: 'string', format: 'uuid' },
+      },
+      {
+        name: 'limit',
+        in: 'query',
+        required: false,
+        schema: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
+      },
+      {
+        name: 'cursor',
+        in: 'query',
+        required: false,
+        schema: {
+          type: 'string',
+          minLength: 88,
+          maxLength: 88,
+          pattern: '^[A-Za-z0-9_-]{88}$',
+        },
+      },
+    ],
+    responses,
+  };
+}
+
+function incidentSchemas() {
+  return {
+    MonitorIncident: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['incidentId', 'openedAt', 'openingReason'],
+      properties: {
+        incidentId: { type: 'string', format: 'uuid' },
+        openedAt: { type: 'string', format: 'date-time' },
+        resolvedAt: { type: 'string', format: 'date-time' },
+        openingReason: { type: 'string', enum: ['unexpected_http_status', 'probe_failure'] },
+        openedByCheckId: { type: 'string', format: 'uuid' },
+        resolvedByCheckId: { type: 'string', format: 'uuid' },
+      },
+    },
+    MonitorIncidentPage: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['items', 'nextCursor'],
+      properties: {
+        items: {
+          type: 'array',
+          maxItems: 50,
+          items: { $ref: '#/components/schemas/MonitorIncident' },
+        },
+        nextCursor: {
+          type: ['string', 'null'],
+          minLength: 88,
+          maxLength: 88,
+          pattern: '^[A-Za-z0-9_-]{88}$',
+        },
+      },
+      allOf: [
+        {
+          if: { properties: { items: { maxItems: 0 } } },
+          then: { properties: { nextCursor: { const: null } } },
+        },
+      ],
+    },
+  };
+}
+
+function incidentFixtures() {
+  const resolvedIncidentId = '018f22d3-1d6a-7cc0-a37b-46fc3faff002';
+  const resolvedOpenedAt = '2026-11-01T11:00:00.123456Z';
+  return {
+    'incidents-open.json': {
+      items: [
+        {
+          incidentId: '018f22d3-1d6a-7cc0-a37b-46fc3faff001',
+          openedAt: '2026-11-01T12:00:00.123456Z',
+          openingReason: 'unexpected_http_status',
+          openedByCheckId: '7d9b2eb0-52bb-4dd7-8934-c5ce30d5c675',
+        },
+      ],
+      nextCursor: null,
+    },
+    'incidents-resolved.json': {
+      items: [
+        {
+          incidentId: resolvedIncidentId,
+          openedAt: resolvedOpenedAt,
+          resolvedAt: '2026-11-01T11:05:00.123456Z',
+          openingReason: 'probe_failure',
+          openedByCheckId: '7d9b2eb0-52bb-4dd7-8934-c5ce30d5c676',
+          resolvedByCheckId: '7d9b2eb0-52bb-4dd7-8934-c5ce30d5c677',
+        },
+      ],
+      nextCursor: Buffer.from('3|' + resolvedOpenedAt + '|' + resolvedIncidentId).toString('base64url'),
+    },
+    'incidents-null-evidence.json': {
+      items: [
+        {
+          incidentId: '018f22d3-1d6a-7cc0-a37b-46fc3faff003',
+          openedAt: '2026-11-01T10:00:00Z',
+          openingReason: 'probe_failure',
+        },
+      ],
+      nextCursor: null,
+    },
+    'incidents-empty-page.json': { items: [], nextCursor: null },
+    'incidents-invalid.json': {
+      type: 'about:blank',
+      title: 'Bad Request',
+      status: 400,
+      detail: 'The incident query or cursor is invalid.',
+    },
+  };
 }
 
 function historyOperation() {
@@ -678,6 +830,63 @@ expectFixtureReject('inventory target remains exact shape', 'monitor-inventory-p
 expectFixtureReject('inventory continuation names included key', 'monitor-inventory-page.json', f => { f.nextCursor = Buffer.from('1|2026-10-05T00:00:00.123456Z|018f22d3-1d6a-7cc0-a37b-46fc3fafdcb3').toString('base64url'); }, 'inventory continuation key');
 expectFixtureReject('inventory duplicate IDs rejected', 'monitor-inventory-page.json', f => { f.items.push({ ...f.items[0] }); }, 'inventory duplicate ID');
 expectFixtureReject('inventory cursor representation rejected', 'monitor-inventory-page.json', f => { f.nextCursor += '='; }, 'inventory cursor');
+
+expectReject('incidentsOperationIsClosed', d => { d.components.schemas.MonitorIncidentPage.additionalProperties = true; }, 'MonitorIncidentPage.additionalProperties');
+expectReject('incidents item shape is closed', d => { d.components.schemas.MonitorIncident.additionalProperties = true; }, 'MonitorIncident.additionalProperties');
+expectReject('incidentPageShapeIsClosed', d => { d.components.schemas.MonitorIncidentPage.required = ['items']; }, 'MonitorIncidentPage.required');
+expectReject('incidents responses are exact', d => { d.paths['/monitors/{monitorId}/incidents'].get.responses['204'] = {}; }, 'incidents responses');
+expectReject('incidents query bounds are exact', d => { d.paths['/monitors/{monitorId}/incidents'].get.parameters[1].schema.maximum = 51; }, 'incidents limit');
+expectReject('incidents default limit is exact', d => { d.paths['/monitors/{monitorId}/incidents'].get.parameters[1].schema.default = 50; }, 'incidents limit');
+expectReject('incidents cursor schema is exact', d => { d.paths['/monitors/{monitorId}/incidents'].get.parameters[2].schema.maxLength = 89; }, 'incidents cursor');
+expectReject('incidents body budget is exact', d => { d.paths['/monitors/{monitorId}/incidents'].get['x-max-body-bytes'] = 262144; }, 'incidents body budget');
+expectReject('incidents method set is exact', d => { d.paths['/monitors/{monitorId}/incidents'].head = d.paths['/monitors/{monitorId}/incidents'].get; }, '/monitors/{monitorId}/incidents operations');
+expectReject('incidentsPreservesExistingOperations', d => { delete d.paths['/monitors/{monitorId}/incidents'].get; }, '/monitors/{monitorId}/incidents operations');
+expectReject('incidents no-store is required', d => { delete d.paths['/monitors/{monitorId}/incidents'].get.responses['500'].headers; }, 'incidents 500 Cache-Control');
+expectReject('incidents Allow is exact', d => { d.paths['/monitors/{monitorId}/incidents'].get.responses['405'].headers.Allow.schema.const = 'GET, POST'; }, 'incidents 405 Allow');
+expectReject('incidents empty continuation schema', d => { delete d.components.schemas.MonitorIncidentPage.allOf; }, 'incidents empty continuation rule');
+expectReject('incidents item cap is exact', d => { d.components.schemas.MonitorIncidentPage.properties.items.maxItems = 51; }, 'incidents items cap');
+expectReject('incidents item schema target fails', d => { d.components.schemas.MonitorIncidentPage.properties.items.items = { $ref: '#/components/schemas/Monitor' }; }, 'incidents item');
+expectReject('incidents operationId is exact', d => { d.paths['/monitors/{monitorId}/incidents'].get.operationId = 'listIncidents'; }, 'incidents operationId must be getMonitorIncidents');
+expectReject('incidents monitorId format fails', d => { delete d.paths['/monitors/{monitorId}/incidents'].get.parameters[0].schema.format; }, 'incidents monitorId.format');
+expectReject('incidentReasonEnumIsClosed', d => { d.components.schemas.MonitorIncident.properties.openingReason.enum.push('recovering'); }, 'MonitorIncident.openingReason');
+expectReject('incidents reason enum requires both reasons', d => { d.components.schemas.MonitorIncident.properties.openingReason.enum = ['unexpected_http_status']; }, 'MonitorIncident.openingReason');
+expectFixtureReject('incidents fixture reason must be closed', 'incidents-open.json', f => { f.items[0].openingReason = 'recovering'; }, 'incidents openingReason');
+expectFixtureReject('incidentCursorIsVersion3', 'incidents-resolved.json', f => { f.nextCursor = Buffer.from('2|2026-11-01T11:00:00.123456Z|018f22d3-1d6a-7cc0-a37b-46fc3faff002').toString('base64url'); }, 'incidents continuation key');
+expectFixtureReject('incidents continuation names included key', 'incidents-resolved.json', f => { f.nextCursor = Buffer.from('3|2026-11-01T11:00:00.123456Z|018f22d3-1d6a-7cc0-a37b-46fc3faff009').toString('base64url'); }, 'incidents continuation key');
+expectFixtureReject('incidents empty cannot continue', 'incidents-empty-page.json', f => { f.nextCursor = 'A'.repeat(88); }, 'incidents empty continuation');
+expectFixtureReject('incidents cursor representation rejected', 'incidents-resolved.json', f => { f.nextCursor += '='; }, 'incidents cursor');
+expectFixtureReject('optionalEvidenceOmittedWhenNull', 'incidents-null-evidence.json', f => { f.items[0].openedByCheckId = null; }, 'must be omitted when null');
+expectFixtureReject('incidents resolvedAt omitted when null', 'incidents-open.json', f => { f.items[0].resolvedAt = null; }, 'must be omitted when null');
+expectFixtureReject('incidents resolvedBy omitted when null', 'incidents-resolved.json', f => { f.items[0].resolvedByCheckId = null; }, 'must be omitted when null');
+expectFixtureReject('incidents duplicate incident IDs rejected', 'incidents-resolved.json', f => { f.items.push({ ...f.items[0] }); }, 'incidents duplicate incident ID');
+expectFixtureReject('incidents resolvedAt cannot precede openedAt', 'incidents-resolved.json', f => { f.items[0].resolvedAt = '2026-11-01T10:00:00.000000Z'; }, 'incidents resolvedAt must not precede openedAt');
+expectFixtureReject('incidents resolvedBy requires resolvedAt', 'incidents-resolved.json', f => { delete f.items[0].resolvedAt; }, 'incidents resolvedByCheckId requires resolvedAt');
+expectFixtureReject('incidents extra field fails', 'incidents-open.json', f => { f.items[0].extra = 1; }, 'incidents item keys');
+expectFixtureReject('incidents missing required field fails', 'incidents-open.json', f => { delete f.items[0].openingReason; }, 'incidents required keys');
+expectFixtureReject('incidents invalid timestamp fails', 'incidents-open.json', f => { f.items[0].openedAt = 'yesterday'; }, 'incidents openedAt');
+expectFixtureReject('incidents zero incidentId fails', 'incidents-open.json', f => { f.items[0].incidentId = '00000000-0000-0000-0000-000000000000'; }, 'incidents incidentId must be a nonzero UUID');
+expectFixtureReject('incidents invalid evidence UUID fails', 'incidents-open.json', f => { f.items[0].openedByCheckId = 'bad'; }, 'incidents openedByCheckId must be a nonzero UUID');
+expectFixtureReject('incidents invalid fixture status fails', 'incidents-invalid.json', f => { f.status = 500; }, 'incidents invalid fixture status must be 400');
+expectFixtureReject('incidents invalid fixture is closed', 'incidents-invalid.json', f => { f.extra = 1; }, 'incidents invalid fixture');
+expectReject('incidents addition preserves availability guards', d => { d.components.schemas.UnavailableMonitorAvailability.properties.reason.enum.push('incident_open'); }, 'UnavailableMonitorAvailability.reason');
+expectReject('incidents addition preserves history guards', d => { d.paths['/monitors/{monitorId}/history'].get['x-max-body-bytes'] = 262144; }, 'history body budget');
+(function availabilityAndExistingOperationsUnchanged() {
+  const snapshot = (document) => {
+    const paths = {};
+    for (const key of Object.keys(document.paths)) {
+      if (key !== '/monitors/{monitorId}/incidents') paths[key] = document.paths[key];
+    }
+    const schemas = {};
+    for (const key of Object.keys(document.components.schemas)) {
+      if (key !== 'MonitorIncidentPage' && key !== 'MonitorIncident') schemas[key] = document.components.schemas[key];
+    }
+    return { paths, schemas };
+  };
+  const baseline = snapshot(validDocument({ withIncidents: false }));
+  const extended = snapshot(validDocument({ withIncidents: true }));
+  if (isDeepStrictEqual(baseline, extended)) pass('availabilityAndExistingOperationsUnchanged');
+  else fail('availabilityAndExistingOperationsUnchanged', 'incidents addition altered availability or an existing operation/schema');
+})();
 
 expectReject('availability path missing fails', d => { delete d.paths['/monitors/{monitorId}/availability']; }, 'public path set');
 expectReject('availability operation ID fails', d => { d.paths['/monitors/{monitorId}/availability'].get.operationId = 'wrong'; }, 'operationId must be getMonitorAvailability');
