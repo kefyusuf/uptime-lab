@@ -472,4 +472,58 @@ describe('Monitor client', () => {
     }
     expect(fetcher).toHaveBeenCalledTimes(3);
   });
+  it('reads durable incidents with exact cursor bytes and maps failures', async () => {
+    const page = {
+      items: [
+        {
+          incidentId: '018f22d3-1d6a-7cc0-a37b-46fc3faff001',
+          openedAt: '2026-11-01T12:00:00.123456Z',
+          openingReason: 'unexpected_http_status',
+          openedByCheckId: '7d9b2eb0-52bb-4dd7-8934-c5ce30d5c675',
+        },
+      ],
+      nextCursor: null,
+    };
+    const cursor = 'C'.repeat(88);
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json(page))
+      .mockResolvedValueOnce(Response.json(page))
+      .mockResolvedValueOnce(
+        Response.json({ title: 'Not Found' }, { status: 404 }),
+      )
+      .mockResolvedValueOnce(Response.json({ unexpected: true }));
+    const client = createMonitorClient(fetcher);
+    expect(await client.getIncidents(monitor.id, null, signal())).toEqual({
+      kind: 'success',
+      data: page,
+    });
+    expect(fetcher).toHaveBeenNthCalledWith(
+      1,
+      '/api/monitors/' + monitor.id + '/incidents',
+      expect.any(Object),
+    );
+    expect(await client.getIncidents(monitor.id, cursor, signal())).toEqual({
+      kind: 'success',
+      data: page,
+    });
+    expect(fetcher).toHaveBeenNthCalledWith(
+      2,
+      '/api/monitors/' + monitor.id + '/incidents?cursor=' + cursor,
+      expect.any(Object),
+    );
+    expect(await client.getIncidents(monitor.id, null, signal())).toMatchObject(
+      {
+        kind: 'error',
+        error: { kind: 'http', status: 404 },
+      },
+    );
+    expect(await client.getIncidents(monitor.id, null, signal())).toMatchObject(
+      {
+        kind: 'error',
+        error: { kind: 'invalid_response' },
+      },
+    );
+    expect(fetcher).toHaveBeenCalledTimes(4);
+  });
 });
