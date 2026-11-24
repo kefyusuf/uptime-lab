@@ -50,6 +50,19 @@ func mustTargetURL(t *testing.T, raw string) domain.TargetURL {
 	return target
 }
 
+func mustIncidentID(t *testing.T, raw string) domain.IncidentID {
+	t.Helper()
+	id, err := domain.ParseIncidentID(raw)
+	if err != nil {
+		t.Fatalf("ParseIncidentID(%q) error = %v", raw, err)
+	}
+	return id
+}
+
+func testIncidentIDGenerator() (domain.IncidentID, error) {
+	return domain.ParseIncidentID("018f22d3-1d6a-7cc0-a37b-46fc3fafdcc0")
+}
+
 func TestClaimDueCheckUsesServerPolicyAndReturnsWork(t *testing.T) {
 	checkID := mustCheckID(t, "018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2")
 	monitorID := mustMonitorID(t, "018f22d3-1d6a-7cc0-a37b-46fc3fafdcb3")
@@ -173,7 +186,7 @@ func TestSubmitCheckResultValidatesBeforePersistenceAndUsesServerClock(t *testin
 	now := time.Date(2026, time.September, 26, 8, 0, 0, 0, time.UTC)
 	repository := &fakeCheckExecutionRepository{}
 	clockCalls := 0
-	useCase := NewSubmitCheckResult(repository, func() time.Time {
+	useCase := NewSubmitCheckResult(repository, testIncidentIDGenerator, func() time.Time {
 		clockCalls++
 		return now
 	})
@@ -232,7 +245,7 @@ func TestSubmitCheckResultRejectsMalformedIDAndInvalidResultBeforePersistence(t 
 		t.Run(test.name, func(t *testing.T) {
 			repository := &fakeCheckExecutionRepository{}
 			clockCalls := 0
-			useCase := NewSubmitCheckResult(repository, func() time.Time {
+			useCase := NewSubmitCheckResult(repository, testIncidentIDGenerator, func() time.Time {
 				clockCalls++
 				return time.Now()
 			})
@@ -260,7 +273,7 @@ func TestSubmitCheckResultMapsRepositoryOutcomes(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			repository := &fakeCheckExecutionRepository{completeErr: test.err}
-			useCase := NewSubmitCheckResult(repository, func() time.Time {
+			useCase := NewSubmitCheckResult(repository, testIncidentIDGenerator, func() time.Time {
 				return time.Date(2026, time.September, 26, 8, 0, 0, 0, time.UTC)
 			})
 			err := useCase.Execute(
@@ -281,6 +294,81 @@ func TestSubmitCheckResultMapsRepositoryOutcomes(t *testing.T) {
 				t.Fatalf("error = %q, want stable %q", err, test.want)
 			}
 		})
+	}
+}
+
+func TestSubmitCheckResultMintsCandidateIncidentID(t *testing.T) {
+	candidate := mustIncidentID(t, "018f22d3-1d6a-7cc0-a37b-46fc3fafdcc0")
+	now := time.Date(2026, time.September, 26, 8, 0, 0, 0, time.UTC)
+	repository := &fakeCheckExecutionRepository{}
+	idCalls := 0
+	clockCalls := 0
+	useCase := NewSubmitCheckResult(repository, func() (domain.IncidentID, error) {
+		idCalls++
+		return candidate, nil
+	}, func() time.Time {
+		clockCalls++
+		return now
+	})
+
+	err := useCase.Execute(context.Background(), "018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2", SubmitCheckResultInput{
+		Kind:       domain.CheckResultHTTPResponse,
+		DurationMS: 10,
+		HTTPStatus: intPointer(200),
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if idCalls != 1 || clockCalls != 1 || repository.completeCalls != 1 {
+		t.Fatalf("calls incidentID=%d clock=%d complete=%d, want 1 each", idCalls, clockCalls, repository.completeCalls)
+	}
+	if repository.completeInput.IncidentID != candidate {
+		t.Fatalf("CompleteCheckInput.IncidentID = %s, want minted candidate %s", repository.completeInput.IncidentID, candidate)
+	}
+}
+
+func TestSubmitCheckResultIncidentIDGenerationFailurePreventsPersistence(t *testing.T) {
+	repository := &fakeCheckExecutionRepository{}
+	generatorErr := errors.New("incident uuid generation failed")
+	clockCalls := 0
+	useCase := NewSubmitCheckResult(repository, func() (domain.IncidentID, error) {
+		return domain.IncidentID{}, generatorErr
+	}, func() time.Time {
+		clockCalls++
+		return time.Now()
+	})
+
+	err := useCase.Execute(context.Background(), "018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2", SubmitCheckResultInput{
+		Kind:       domain.CheckResultTimeout,
+		DurationMS: 10,
+	})
+	if !errors.Is(err, generatorErr) {
+		t.Fatalf("Execute() error = %v, want generator error", err)
+	}
+	if repository.completeCalls != 0 || clockCalls != 0 {
+		t.Fatalf("generation failure touched dependencies: complete=%d clocks=%d", repository.completeCalls, clockCalls)
+	}
+}
+
+func TestSubmitCheckResultRejectsInvalidGeneratedIncidentIDBeforeClockOrPersistence(t *testing.T) {
+	repository := &fakeCheckExecutionRepository{}
+	clockCalls := 0
+	useCase := NewSubmitCheckResult(repository, func() (domain.IncidentID, error) {
+		return domain.IncidentID{}, nil
+	}, func() time.Time {
+		clockCalls++
+		return time.Now()
+	})
+
+	err := useCase.Execute(context.Background(), "018f22d3-1d6a-7cc0-a37b-46fc3fafdcb2", SubmitCheckResultInput{
+		Kind:       domain.CheckResultTimeout,
+		DurationMS: 10,
+	})
+	if !errors.Is(err, domain.ErrInvalidIncidentID) {
+		t.Fatalf("Execute() error = %v, want ErrInvalidIncidentID", err)
+	}
+	if repository.completeCalls != 0 || clockCalls != 0 {
+		t.Fatalf("invalid generated incident ID touched dependencies: complete=%d clocks=%d", repository.completeCalls, clockCalls)
 	}
 }
 

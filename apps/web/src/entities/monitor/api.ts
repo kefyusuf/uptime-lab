@@ -1,7 +1,7 @@
 import { requestJson } from '../../shared/api/http';
 import { decodeMonitorScheduling } from './scheduling';
 import { decodeInventoryPage, decodeInventoryProblem } from './inventory';
-import { decodeMonitorHistoryPage } from './decode';
+import { decodeIncidentPage, decodeMonitorHistoryPage } from './decode';
 import {
   decodeAvailability,
   decodeLatestResult,
@@ -212,6 +212,46 @@ export function createMonitorClient(fetchImpl: typeof fetch): MonitorClient {
         return {
           kind: 'success',
           data: decodeMonitorHistoryPage(response.value),
+        };
+      } catch (error) {
+        return {
+          kind: 'error',
+          error: {
+            kind:
+              error instanceof ResponseDecodeError ||
+              error instanceof SyntaxError
+                ? 'invalid_response'
+                : 'transport',
+            message: 'Unable to read a valid server response.',
+          },
+        };
+      }
+    },
+    async getIncidents(id, cursor, signal) {
+      try {
+        const path =
+          resource(id) +
+          '/incidents' +
+          (cursor ? '?cursor=' + encodeURIComponent(cursor) : '');
+        const response = await requestJson(fetchImpl, path, {
+          method: 'GET',
+          signal,
+        });
+        if (response.status !== 200)
+          return {
+            kind: 'error',
+            error: {
+              kind: 'http',
+              status: response.status,
+              message:
+                response.status === 404
+                  ? 'Monitor not found.'
+                  : 'The incident read failed.',
+            },
+          };
+        return {
+          kind: 'success',
+          data: decodeIncidentPage(response.value),
         };
       } catch (error) {
         return {

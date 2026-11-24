@@ -32,7 +32,7 @@ func (repository *Repository) ClaimDueCheck(
 		_ = tx.Rollback(context.Background())
 	}()
 
-	if _, err := tx.Exec(
+	rows, err := tx.Query(
 		ctx,
 		`
 			UPDATE monitoring.check_runs
@@ -40,10 +40,19 @@ func (repository *Repository) ClaimDueCheck(
 			    result_kind = 'worker_timeout'
 			WHERE completed_at IS NULL
 			  AND deadline_at <= $1
+			RETURNING monitor_id::text
 		`,
 		input.Now,
-	); err != nil {
+	)
+	if err != nil {
 		return ports.ClaimedCheck{}, fmt.Errorf("reconcile expired check runs: %w", err)
+	}
+	reconciled, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return ports.ClaimedCheck{}, fmt.Errorf("collect reconciled monitors: %w", err)
+	}
+	if err := resetReconciledIncidentState(ctx, tx, reconciled); err != nil {
+		return ports.ClaimedCheck{}, err
 	}
 
 	if err := repository.retainHistoryWindow(ctx, tx); err != nil {
@@ -169,6 +178,7 @@ func (repository *Repository) CompleteCheck(
 	}()
 
 	var (
+		rawMonitorID     string
 		deadlineAt       time.Time
 		completedAt      *time.Time
 		resultKind       *string
@@ -178,13 +188,14 @@ func (repository *Repository) CompleteCheck(
 	err = tx.QueryRow(
 		ctx,
 		`
-			SELECT deadline_at, completed_at, result_kind, http_status, duration_ms
+			SELECT monitor_id::text, deadline_at, completed_at, result_kind, http_status, duration_ms
 			FROM monitoring.check_runs
 			WHERE id = $1::uuid
 			FOR UPDATE
 		`,
 		input.CheckID.String(),
 	).Scan(
+		&rawMonitorID,
 		&deadlineAt,
 		&completedAt,
 		&resultKind,
@@ -199,6 +210,10 @@ func (repository *Repository) CompleteCheck(
 	}
 	if err != nil {
 		return fmt.Errorf("lock check run: %w", err)
+	}
+	monitorID, err := domain.ParseMonitorID(rawMonitorID)
+	if err != nil {
+		return fmt.Errorf("map completion monitor id: %w", err)
 	}
 
 	if completedAt != nil {
@@ -228,6 +243,10 @@ func (repository *Repository) CompleteCheck(
 			input.CheckID.String(),
 		); err != nil {
 			return fmt.Errorf("terminalize late check run: %w", err)
+		}
+
+		if err := repository.foldIncidentOutcome(ctx, tx, monitorID, domain.TerminalInconclusive, "", deadlineAt, input.CheckID, input.IncidentID); err != nil {
+			return err
 		}
 
 		if err := tx.Commit(ctx); err != nil {
@@ -263,6 +282,14 @@ func (repository *Repository) CompleteCheck(
 		return fmt.Errorf("complete check run: %w", err)
 	}
 
+	outcome, reason, err := domain.ClassifyTerminalOutcome(input.Result.Kind(), persistedHTTPStatus)
+	if err != nil {
+		return fmt.Errorf("classify terminal outcome: %w", err)
+	}
+	if err := repository.foldIncidentOutcome(ctx, tx, monitorID, outcome, reason, input.CompletedAt, input.CheckID, input.IncidentID); err != nil {
+		return err
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit check result: %w", err)
 	}
@@ -294,4 +321,142 @@ func isPendingClaimConflict(err error) bool {
 	return errors.As(err, &pgErr) &&
 		pgErr.Code == "23505" &&
 		pgErr.ConstraintName == "check_runs_one_pending_per_monitor_idx"
+}
+
+// foldIncidentOutcome advances the durable per-Monitor incident fold inside the
+// completion transaction, still holding the CheckRun row lock. The incidents row
+// is written before incident_state so the open_incident_id foreign key always
+// references an existing window; the steady-state upsert of an existing row whose
+// monitor_id is unchanged takes no monitors lock.
+func (repository *Repository) foldIncidentOutcome(
+	ctx context.Context,
+	tx pgx.Tx,
+	monitorID domain.MonitorID,
+	outcome domain.TerminalOutcome,
+	reason domain.IncidentReason,
+	at time.Time,
+	checkID domain.CheckID,
+	candidateID domain.IncidentID,
+) error {
+	state, err := readIncidentState(ctx, tx, monitorID)
+	if err != nil {
+		return err
+	}
+	next, action := domain.ApplyIncidentOutcome(state, outcome, reason, at, checkID, candidateID)
+
+	switch action.Kind {
+	case domain.IncidentActionOpen:
+		if _, err := tx.Exec(ctx,
+			`
+				INSERT INTO monitoring.incidents (
+					id, monitor_id, opened_at, opening_reason, opened_by_check_id
+				)
+				VALUES ($1::uuid, $2::uuid, $3, $4, $5::uuid)
+			`,
+			action.IncidentID.String(),
+			monitorID.String(),
+			action.At,
+			string(action.Reason),
+			action.CheckID.String(),
+		); err != nil {
+			return fmt.Errorf("open durable incident: %w", err)
+		}
+	case domain.IncidentActionResolve:
+		if _, err := tx.Exec(ctx,
+			`
+				UPDATE monitoring.incidents
+				SET resolved_at = $2,
+				    resolved_by_check_id = $3::uuid
+				WHERE id = $1::uuid
+			`,
+			action.IncidentID.String(),
+			action.At,
+			action.CheckID.String(),
+		); err != nil {
+			return fmt.Errorf("resolve durable incident: %w", err)
+		}
+	}
+
+	var openPointer *string
+	if next.OpenIncidentID != nil {
+		raw := next.OpenIncidentID.String()
+		openPointer = &raw
+	}
+	if _, err := tx.Exec(ctx,
+		`
+			INSERT INTO monitoring.incident_state (
+				monitor_id, failure_streak, success_streak, open_incident_id
+			)
+			VALUES ($1::uuid, $2, $3, $4::uuid)
+			ON CONFLICT (monitor_id) DO UPDATE SET
+				failure_streak = EXCLUDED.failure_streak,
+				success_streak = EXCLUDED.success_streak,
+				open_incident_id = EXCLUDED.open_incident_id
+		`,
+		monitorID.String(),
+		next.FailureStreak,
+		next.SuccessStreak,
+		openPointer,
+	); err != nil {
+		return fmt.Errorf("upsert incident state: %w", err)
+	}
+	return nil
+}
+
+func readIncidentState(ctx context.Context, tx pgx.Tx, monitorID domain.MonitorID) (domain.IncidentState, error) {
+	var (
+		failure int
+		success int
+		rawOpen *string
+	)
+	err := tx.QueryRow(ctx,
+		`
+			SELECT failure_streak, success_streak, open_incident_id::text
+			FROM monitoring.incident_state
+			WHERE monitor_id = $1::uuid
+		`,
+		monitorID.String(),
+	).Scan(&failure, &success, &rawOpen)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.IncidentState{}, nil
+	}
+	if err != nil {
+		return domain.IncidentState{}, fmt.Errorf("read incident state: %w", err)
+	}
+	state := domain.IncidentState{FailureStreak: failure, SuccessStreak: success}
+	if rawOpen != nil {
+		openID, err := domain.ParseIncidentID(*rawOpen)
+		if err != nil {
+			return domain.IncidentState{}, fmt.Errorf("map open incident id: %w", err)
+		}
+		state.OpenIncidentID = &openID
+	}
+	return state, nil
+}
+
+// resetReconciledIncidentState zeroes both streaks for exactly the monitors whose
+// expired pending runs were just terminalized, leaving any open pointer untouched
+// (an inconclusive reconciliation never resolves). It pipelines through one batch.
+func resetReconciledIncidentState(ctx context.Context, tx pgx.Tx, monitors []string) error {
+	if len(monitors) == 0 {
+		return nil
+	}
+	batch := &pgx.Batch{}
+	for _, rawMonitor := range monitors {
+		batch.Queue(
+			`UPDATE monitoring.incident_state SET failure_streak = 0, success_streak = 0 WHERE monitor_id = $1::uuid`,
+			rawMonitor,
+		)
+	}
+	results := tx.SendBatch(ctx, batch)
+	for range monitors {
+		if _, err := results.Exec(); err != nil {
+			_ = results.Close()
+			return fmt.Errorf("reset reconciled incident state: %w", err)
+		}
+	}
+	if err := results.Close(); err != nil {
+		return fmt.Errorf("finish reconciliation reset batch: %w", err)
+	}
+	return nil
 }

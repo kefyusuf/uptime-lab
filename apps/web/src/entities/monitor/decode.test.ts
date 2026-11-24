@@ -3,6 +3,8 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   decodeAvailability,
+  decodeIncident,
+  decodeIncidentPage,
   decodeLatestResult,
   decodeMonitor,
   ResponseDecodeError,
@@ -138,5 +140,66 @@ describe('public response decoding', () => {
       { ...awaiting, evidence: undefined },
     ])
       expect(() => decodeAvailability(mutation)).toThrow(ResponseDecodeError);
+  });
+  const incidentPage = (name: string) =>
+    fixture(name) as {
+      items: Record<string, unknown>[];
+      nextCursor: string | null;
+    };
+  it('decodeAcceptsOpenIncident', () => {
+    const page = incidentPage('incidents-open.json');
+    expect(decodeIncidentPage(page)).toEqual(page);
+    const open = page.items[0];
+    expect(decodeIncident(open)).toEqual(open);
+    expect(decodeIncident(open)).not.toHaveProperty('resolvedAt');
+    expect(decodeIncident(open)).not.toHaveProperty('resolvedByCheckId');
+    expect(decodeIncident(open)).toHaveProperty('openedByCheckId');
+  });
+  it('decodeAcceptsResolvedIncident', () => {
+    const page = incidentPage('incidents-resolved.json');
+    expect(decodeIncidentPage(page)).toEqual(page);
+    const resolved = page.items[0];
+    expect(decodeIncident(resolved)).toEqual(resolved);
+    expect(decodeIncident(resolved)).toHaveProperty('resolvedAt');
+    expect(decodeIncident(resolved)).toHaveProperty('resolvedByCheckId');
+  });
+  it('decodeAcceptsNullEvidenceLinks', () => {
+    const page = incidentPage('incidents-null-evidence.json');
+    expect(decodeIncidentPage(page)).toEqual(page);
+    const bare = page.items[0];
+    expect(decodeIncident(bare)).toEqual(bare);
+    expect(decodeIncident(bare)).not.toHaveProperty('openedByCheckId');
+    expect(decodeIncident(bare)).not.toHaveProperty('resolvedByCheckId');
+    expect(decodeIncidentPage(fixture('incidents-empty-page.json'))).toEqual({
+      items: [],
+      nextCursor: null,
+    });
+  });
+  it('decodeRejectsMismatchedIncidentShape', () => {
+    const open = incidentPage('incidents-open.json').items[0];
+    const resolved = incidentPage('incidents-resolved.json').items[0];
+    for (const mutation of [
+      { ...open, extra: true },
+      { ...open, openingReason: 'future_reason' },
+      { ...open, incidentId: 'not-a-uuid' },
+      { ...open, openedAt: '2026-02-30T12:00:00Z' },
+      { ...open, resolvedAt: null },
+      { ...open, openedByCheckId: null },
+      { ...open, resolvedByCheckId: '7d9b2eb0-52bb-4dd7-8934-c5ce30d5c675' },
+      { ...resolved, resolvedAt: '2026-11-01T10:00:00.123456Z' },
+      { openedAt: open.openedAt, openingReason: open.openingReason },
+    ])
+      expect(() => decodeIncident(mutation)).toThrow(ResponseDecodeError);
+  });
+  it('keeps the incident page closed and ordered', () => {
+    const open = incidentPage('incidents-open.json').items[0];
+    for (const mutation of [
+      { items: [open, open], nextCursor: null },
+      { items: [], nextCursor: 'A'.repeat(88) },
+      { items: [open], nextCursor: 'short' },
+      { items: Array(51).fill(open), nextCursor: null },
+      { items: [open], nextCursor: null, extra: true },
+    ])
+      expect(() => decodeIncidentPage(mutation)).toThrow(ResponseDecodeError);
   });
 });

@@ -49,14 +49,6 @@ type AvailabilityObservation struct {
 	CompletedAt time.Time
 }
 
-type availabilityOutcome int
-
-const (
-	outcomeSuccess availabilityOutcome = iota
-	outcomeFailure
-	outcomeInconclusive
-)
-
 // EvaluateAvailability classifies a newest-first sequence of terminal observations
 // without I/O. An empty sequence means no terminal result.
 func EvaluateAvailability(observations []AvailabilityObservation, evaluatedAt time.Time) (Availability, error) {
@@ -76,24 +68,24 @@ func EvaluateAvailability(observations []AvailabilityObservation, evaluatedAt ti
 	if evaluatedAt.Sub(observations[0].CompletedAt) > 120*time.Second {
 		return Availability{AvailabilityUnknown, AvailabilityStaleResult}, nil
 	}
-	if latestOutcome == outcomeInconclusive {
+	if latestOutcome == TerminalInconclusive {
 		return latest, nil
 	}
 
-	outcomes := make([]availabilityOutcome, 0, len(observations))
+	outcomes := make([]TerminalOutcome, 0, len(observations))
 	for index := range observations {
 		_, outcome, err := classifyAvailabilityObservation(observations[index])
 		if err != nil {
 			return Availability{}, err
 		}
-		if outcome == outcomeInconclusive {
+		if outcome == TerminalInconclusive {
 			break
 		}
 		outcomes = append(outcomes, outcome)
 	}
 
 	leadingFailures := 0
-	for leadingFailures < len(outcomes) && outcomes[leadingFailures] == outcomeFailure {
+	for leadingFailures < len(outcomes) && outcomes[leadingFailures] == TerminalFailure {
 		leadingFailures++
 	}
 	if leadingFailures >= confirmationFailureThreshold {
@@ -104,11 +96,11 @@ func EvaluateAvailability(observations []AvailabilityObservation, evaluatedAt ti
 	}
 
 	leadingSuccesses := 0
-	for leadingSuccesses < len(outcomes) && outcomes[leadingSuccesses] == outcomeSuccess {
+	for leadingSuccesses < len(outcomes) && outcomes[leadingSuccesses] == TerminalSuccess {
 		leadingSuccesses++
 	}
 	priorFailures := 0
-	for index := leadingSuccesses; index < len(outcomes) && outcomes[index] == outcomeFailure; index++ {
+	for index := leadingSuccesses; index < len(outcomes) && outcomes[index] == TerminalFailure; index++ {
 		priorFailures++
 	}
 	if priorFailures >= confirmationFailureThreshold && leadingSuccesses < recoverySuccessThreshold {
@@ -117,40 +109,28 @@ func EvaluateAvailability(observations []AvailabilityObservation, evaluatedAt ti
 	return Availability{AvailabilityAvailable, AvailabilitySuccessfulResponse}, nil
 }
 
-func classifyAvailabilityObservation(observation AvailabilityObservation) (Availability, availabilityOutcome, error) {
+func classifyAvailabilityObservation(observation AvailabilityObservation) (Availability, TerminalOutcome, error) {
 	if !validAvailabilityTime(observation.CompletedAt) {
 		return Availability{}, 0, ErrInvalidAvailability
 	}
-	var assessment Availability
-	var outcome availabilityOutcome
-	switch observation.Kind {
-	case CheckResultHTTPResponse:
-		if observation.HTTPStatus == nil || *observation.HTTPStatus < 100 || *observation.HTTPStatus > 599 {
-			return Availability{}, 0, ErrInvalidAvailability
+	outcome, reason, err := ClassifyTerminalOutcome(observation.Kind, observation.HTTPStatus)
+	if err != nil {
+		return Availability{}, 0, err
+	}
+	switch outcome {
+	case TerminalSuccess:
+		return Availability{AvailabilityAvailable, AvailabilitySuccessfulResponse}, outcome, nil
+	case TerminalFailure:
+		if reason == IncidentUnexpectedHTTPStatus {
+			return Availability{AvailabilityUnavailable, AvailabilityUnexpectedHTTPStatus}, outcome, nil
 		}
-		if *observation.HTTPStatus >= 200 && *observation.HTTPStatus <= 299 {
-			assessment = Availability{AvailabilityAvailable, AvailabilitySuccessfulResponse}
-			outcome = outcomeSuccess
-		} else {
-			assessment = Availability{AvailabilityUnavailable, AvailabilityUnexpectedHTTPStatus}
-			outcome = outcomeFailure
-		}
-	case CheckResultDNSFailure, CheckResultTimeout, CheckResultConnectError, CheckResultTLSError, CheckResultProtocolError:
-		assessment = Availability{AvailabilityUnavailable, AvailabilityProbeFailure}
-		outcome = outcomeFailure
-	case CheckResultPolicyRejected:
-		assessment = Availability{AvailabilityUnknown, AvailabilityPolicyRejected}
-		outcome = outcomeInconclusive
-	case CheckResultInternalError, CheckResultWorkerTimeout:
-		assessment = Availability{AvailabilityUnknown, AvailabilityExecutionFailure}
-		outcome = outcomeInconclusive
+		return Availability{AvailabilityUnavailable, AvailabilityProbeFailure}, outcome, nil
 	default:
-		return Availability{}, 0, ErrInvalidAvailability
+		if observation.Kind == CheckResultPolicyRejected {
+			return Availability{AvailabilityUnknown, AvailabilityPolicyRejected}, outcome, nil
+		}
+		return Availability{AvailabilityUnknown, AvailabilityExecutionFailure}, outcome, nil
 	}
-	if observation.Kind != CheckResultHTTPResponse && observation.HTTPStatus != nil {
-		return Availability{}, 0, ErrInvalidAvailability
-	}
-	return assessment, outcome, nil
 }
 
 func validAvailabilityTime(value time.Time) bool {

@@ -17,6 +17,10 @@ const client = (create: MonitorClient['createMonitor']): MonitorClient => ({
     kind: 'success',
     data: { items: [], nextCursor: null },
   }),
+  getIncidents: vi.fn().mockResolvedValue({
+    kind: 'success',
+    data: { items: [], nextCursor: null },
+  }),
   getScheduling: vi.fn(),
   setScheduling: vi.fn(),
   deleteMonitor: vi.fn().mockResolvedValue({ kind: 'deleted' }),

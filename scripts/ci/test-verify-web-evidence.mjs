@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { verifyEvidence, verifyInventoryEvidence, verifySchedulingEvidence, verifyDeletionEvidence, verifyHistoryEvidence, verifyTargetEditEvidence, verifyConfirmationRecoveryEvidence } from "./verify-web-evidence.mjs";
+import { verifyEvidence, verifyInventoryEvidence, verifySchedulingEvidence, verifyDeletionEvidence, verifyHistoryEvidence, verifyTargetEditEvidence, verifyConfirmationRecoveryEvidence, verifyDurableIncidentEvidence } from "./verify-web-evidence.mjs";
 const id = "aa29443e-c597-4e7b-9202-a4762e0e04c0",
   a = "bb29443e-c597-4e7b-9202-a4762e0e04c0",
   b = "cc29443e-c597-4e7b-9202-a4762e0e04c0";
@@ -202,4 +202,92 @@ test('confirmation/recovery rejects a missing or altered durable Monitor',()=>{
  assert.throws(()=>verifyConfirmationRecoveryEvidence(crCapture,crRows,[]));
  assert.throws(()=>verifyConfirmationRecoveryEvidence(crCapture,crRows,[{id:crMonitor,target_url:'http://web/',paused:true}]));
  assert.throws(()=>verifyConfirmationRecoveryEvidence(crCapture,crRows,[{id:crMonitor,target_url:'https://example.com',paused:false}]));
+});
+const diMonitor='018f22d3-1d6a-7cc0-a37b-46fc3fafd801';
+const diIncident='018f22d3-1d6a-7cc0-a37b-46fc3fafd802';
+const diCheck={
+ fail1:'7d9b2eb0-52bb-4dd7-8934-c5ce30d5f001',
+ fail2:'7d9b2eb0-52bb-4dd7-8934-c5ce30d5f002',
+ opened:'7d9b2eb0-52bb-4dd7-8934-c5ce30d5f003',
+ succ1:'7d9b2eb0-52bb-4dd7-8934-c5ce30d5f004',
+ resolved:'7d9b2eb0-52bb-4dd7-8934-c5ce30d5f005',
+};
+const diOpenedAt='2026-11-01T12:00:10Z';
+const diResolvedAt='2026-11-01T12:00:30Z';
+const diRows=[
+ {id:diCheck.fail1,monitor_id:diMonitor,completed_at:'2026-11-01T11:58:50.000000+00:00',result_kind:'http_response',http_status:500},
+ {id:diCheck.fail2,monitor_id:diMonitor,completed_at:'2026-11-01T11:59:00.000000+00:00',result_kind:'http_response',http_status:500},
+ {id:diCheck.opened,monitor_id:diMonitor,completed_at:'2026-11-01T11:59:10.000000+00:00',result_kind:'http_response',http_status:500},
+ {id:diCheck.succ1,monitor_id:diMonitor,completed_at:'2026-11-01T11:59:20.000000+00:00',result_kind:'http_response',http_status:204},
+ {id:diCheck.resolved,monitor_id:diMonitor,completed_at:'2026-11-01T11:59:30.000000+00:00',result_kind:'http_response',http_status:204},
+];
+const diIncidents=[{id:diIncident,monitor_id:diMonitor,opened_at:'2026-11-01T12:00:10.000000+00:00',resolved_at:'2026-11-01T12:00:30.000000+00:00',opening_reason:'unexpected_http_status',opened_by_check_id:null,resolved_by_check_id:null}];
+const diState=[{monitor_id:diMonitor,failure_streak:0,success_streak:0,open_incident_id:null}];
+const diCapture={...inventoryCapture,durableIncident:{
+ monitorId:diMonitor,
+ openedIncident:{incidentId:diIncident,openedAt:diOpenedAt,openingReason:'unexpected_http_status',openedByCheckId:diCheck.opened},
+ resolvedIncident:{incidentId:diIncident,openedAt:diOpenedAt,resolvedAt:diResolvedAt,openingReason:'unexpected_http_status',openedByCheckId:diCheck.opened,resolvedByCheckId:diCheck.resolved},
+ incidentHistory:{ids:[diIncident],truncationSurvived:true},
+ readsAfterRestart:{incidents:200,availability:200},
+ availabilityAssessment:{status:'available',reason:'successful_response',checkId:diCheck.resolved,completedAt:'2026-11-01T11:59:30Z'},
+ restarts:{api:{beforeStartedAt:'2026-11-01T12:00:00.123456789Z',afterStartedAt:'2026-11-01T12:00:00.123456790Z'}},
+}};
+test('durable incident links the resolved window, cleared evidence and separate availability',()=>assert.doesNotThrow(()=>verifyDurableIncidentEvidence(diCapture,diRows,diIncidents,diState)));
+test('durable incident accepts a probe_failure opening on durable probe evidence',()=>{
+ const probeCapture=structuredClone(diCapture);
+ probeCapture.durableIncident.openedIncident.openingReason='probe_failure';
+ probeCapture.durableIncident.resolvedIncident.openingReason='probe_failure';
+ const probeRows=structuredClone(diRows);
+ const openingRow=probeRows.find(row=>row.id===diCheck.opened);
+ openingRow.result_kind='dns_error';openingRow.http_status=null;
+ const probeIncidents=structuredClone(diIncidents);probeIncidents[0].opening_reason='probe_failure';
+ assert.doesNotThrow(()=>verifyDurableIncidentEvidence(probeCapture,probeRows,probeIncidents,diState));
+});
+for(const mutation of [
+ c=>{delete c.durableIncident},c=>{c.durableIncident.extra=true},
+ c=>{c.durableIncident.monitorId=id},c=>{c.durableIncident.monitorId='invalid'},
+ c=>{c.durableIncident.openedIncident.resolvedAt=diResolvedAt},
+ c=>{c.durableIncident.openedIncident.openingReason='no_result'},
+ c=>{c.durableIncident.openedIncident.openedByCheckId='invalid'},
+ c=>{c.durableIncident.resolvedIncident.incidentId=diCheck.opened},
+ c=>{c.durableIncident.resolvedIncident.openedAt='2026-11-01T12:00:11Z'},
+ c=>{c.durableIncident.resolvedIncident.resolvedAt='2026-11-01T12:00:09Z'},
+ c=>{c.durableIncident.resolvedIncident.resolvedByCheckId=c.durableIncident.resolvedIncident.openedByCheckId},
+ c=>{c.durableIncident.resolvedIncident.openingReason='probe_failure'},
+ c=>{c.durableIncident.incidentHistory.ids=[]},
+ c=>{c.durableIncident.incidentHistory.ids=[diIncident,diCheck.opened]},
+ c=>{c.durableIncident.incidentHistory.truncationSurvived=false},
+ c=>{c.durableIncident.readsAfterRestart.incidents=404},
+ c=>{c.durableIncident.readsAfterRestart.availability=500},
+ c=>{c.durableIncident.availabilityAssessment.status='unavailable'},
+ c=>{c.durableIncident.availabilityAssessment.reason='recovering'},
+ c=>{c.durableIncident.availabilityAssessment.checkId=diCheck.succ1},
+ c=>{delete c.durableIncident.restarts},
+ c=>{c.durableIncident.restarts.api.afterStartedAt=c.durableIncident.restarts.api.beforeStartedAt},
+ c=>{c.durableIncident.restarts.api.afterStartedAt='2026-11-01T12:00:00Z'},
+])test('durable incident rejects mutated acceptance evidence '+mutation.toString(),()=>{const mutated=structuredClone(diCapture);mutation(mutated);assert.throws(()=>verifyDurableIncidentEvidence(mutated,diRows,diIncidents,diState))});
+test('durable incident rejects broken durable evidence linkage',()=>{
+ assert.throws(()=>verifyDurableIncidentEvidence(diCapture,diRows.filter(row=>row.id!==diCheck.resolved),diIncidents,diState));
+ assert.throws(()=>verifyDurableIncidentEvidence(diCapture,diRows.filter(row=>row.id!==diCheck.opened),diIncidents,diState));
+ assert.throws(()=>verifyDurableIncidentEvidence(diCapture,diRows.map(row=>({...row,monitor_id:a})),diIncidents,diState));
+ const wrongSuccess=structuredClone(diRows);wrongSuccess.find(row=>row.id===diCheck.resolved).http_status=500;
+ assert.throws(()=>verifyDurableIncidentEvidence(diCapture,wrongSuccess,diIncidents,diState));
+ const wrongOpening=structuredClone(diRows);wrongOpening.find(row=>row.id===diCheck.opened).http_status=204;
+ assert.throws(()=>verifyDurableIncidentEvidence(diCapture,wrongOpening,diIncidents,diState));
+});
+test('durable incident rejects a missing, doubled or un-truncated incident row',()=>{
+ assert.throws(()=>verifyDurableIncidentEvidence(diCapture,diRows,[],diState));
+ assert.throws(()=>verifyDurableIncidentEvidence(diCapture,diRows,[...diIncidents,{...diIncidents[0],id:diCheck.opened}],diState));
+ assert.throws(()=>verifyDurableIncidentEvidence(diCapture,diRows,[{...diIncidents[0],opened_by_check_id:diCheck.opened}],diState));
+ assert.throws(()=>verifyDurableIncidentEvidence(diCapture,diRows,[{...diIncidents[0],resolved_by_check_id:diCheck.resolved}],diState));
+ assert.throws(()=>verifyDurableIncidentEvidence(diCapture,diRows,[{...diIncidents[0],resolved_at:null}],diState));
+ assert.throws(()=>verifyDurableIncidentEvidence(diCapture,diRows,[{...diIncidents[0],opening_reason:'probe_failure'}],diState));
+ assert.throws(()=>verifyDurableIncidentEvidence(diCapture,diRows,[{...diIncidents[0],monitor_id:a}],diState));
+});
+test('durable incident rejects a missing or unresolved fold state',()=>{
+ assert.throws(()=>verifyDurableIncidentEvidence(diCapture,diRows,diIncidents,[]));
+ assert.throws(()=>verifyDurableIncidentEvidence(diCapture,diRows,diIncidents,[{...diState[0],failure_streak:3}]));
+ assert.throws(()=>verifyDurableIncidentEvidence(diCapture,diRows,diIncidents,[{...diState[0],success_streak:2}]));
+ assert.throws(()=>verifyDurableIncidentEvidence(diCapture,diRows,diIncidents,[{...diState[0],open_incident_id:diIncident}]));
+ assert.throws(()=>verifyDurableIncidentEvidence(diCapture,diRows,diIncidents,[{...diState[0],monitor_id:a}]));
 });

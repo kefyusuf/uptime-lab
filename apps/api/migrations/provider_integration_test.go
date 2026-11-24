@@ -29,6 +29,12 @@ func TestProviderMigratesMonitoringSchemaUpDownUp(t *testing.T) {
 	}
 	assertMonitoringSchemaUp(t, ctx, db, true)
 	assertCheckRunsColumns(t, ctx, db)
+	assertIncidentTablesExist(t, ctx, db, true)
+
+	if _, err := provider.Down(ctx); err != nil {
+		t.Fatalf("incident Down() error = %v", err)
+	}
+	assertIncidentTablesExist(t, ctx, db, false)
 
 	if _, err := provider.Down(ctx); err != nil {
 		t.Fatalf("scheduling Down() error = %v", err)
@@ -54,6 +60,7 @@ func TestProviderMigratesMonitoringSchemaUpDownUp(t *testing.T) {
 	}
 	assertMonitoringSchemaUp(t, ctx, db, true)
 	assertCheckRunsColumns(t, ctx, db)
+	assertIncidentTablesExist(t, ctx, db, true)
 }
 
 func openIntegrationDB(t *testing.T) *sql.DB {

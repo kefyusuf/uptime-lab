@@ -7,6 +7,8 @@ var (
 	ErrInvalidInventoryQuery = errors.New("invalid monitor inventory query")
 	// ErrInvalidHistoryQuery is the stable invalid history input result.
 	ErrInvalidHistoryQuery = errors.New("invalid monitor history query")
+	// ErrInvalidIncidentQuery is the stable invalid incident input result.
+	ErrInvalidIncidentQuery = errors.New("invalid monitor incident query")
 	// ErrAvailabilityEvaluation is the stable invalid assessment or clock failure.
 	ErrAvailabilityEvaluation = errors.New("availability evaluation failed")
 	// ErrMonitorNotFound is the stable application-level not-found result.
