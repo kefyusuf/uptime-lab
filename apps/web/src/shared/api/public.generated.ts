@@ -140,6 +140,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/monitors/{monitorId}/incidents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read bounded durable incident history
+         * @description Bounded durable incident page for one Monitor, ordered by opening instant descending then Incident UUID descending. Default 20 and at most 50 rows. An incident opens after three consecutive classified failures and resolves after two consecutive successes; it never re-opens. A cursor is a strict versioned ordering position, not an authorization or snapshot guarantee. Only optional limit and cursor query keys, each once in either order, are accepted. Reject noncanonical decimal limits, empty queries/values, duplicate or unknown keys, percent escapes, plus signs, semicolons, whitespace and query bodies. Raw queries are at most 128 ASCII bytes. HEAD is unsupported. All matched responses use no-store. Durable incidents are retained independently of the terminal check-run window, so cursors anchored on removed evidence rows continue with strictly older incidents or an empty page.
+         */
+        get: operations["getMonitorIncidents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -284,6 +304,43 @@ export interface components {
             /** Format: date-time */
             evaluatedAt: string;
         };
+        MonitorIncident: {
+            /**
+             * Format: uuid
+             * @description Stable nonzero incident UUID.
+             */
+            incidentId: string;
+            /**
+             * Format: date-time
+             * @description Persisted UTC opening instant.
+             */
+            openedAt: string;
+            /**
+             * Format: date-time
+             * @description Persisted UTC resolution instant; omitted while the incident is open.
+             */
+            resolvedAt?: string;
+            /**
+             * @description Classified failure reason that opened the incident.
+             * @enum {string}
+             */
+            openingReason: "unexpected_http_status" | "probe_failure";
+            /**
+             * Format: uuid
+             * @description Opening check-run UUID; omitted when the evidence row was removed.
+             */
+            openedByCheckId?: string;
+            /**
+             * Format: uuid
+             * @description Resolving check-run UUID; omitted when open or the evidence row was removed.
+             */
+            resolvedByCheckId?: string;
+        };
+        MonitorIncidentPage: {
+            items: components["schemas"]["MonitorIncident"][];
+            /** @description Last included key when more incidents exist, otherwise null. */
+            nextCursor: string | null;
+        } & unknown;
     };
     responses: never;
     parameters: never;
@@ -926,6 +983,74 @@ export interface operations {
                 content?: never;
             };
             /** @description History persistence read failed. */
+            500: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getMonitorIncidents: {
+        parameters: {
+            query?: {
+                /** @description Canonical decimal integer without signs or leading zeroes. */
+                limit?: number;
+                /** @description Unpadded base64url of version3, persisted UTC microsecond opening instant and nonzero canonical Incident UUID. No client time reconstruction. */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Stable monitor UUID. */
+                monitorId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded durable incident page; no incidents is a successful empty page. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonitorIncidentPage"];
+                };
+            };
+            /** @description Invalid incident request or cursor. */
+            400: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Monitor not found. */
+            404: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unsupported method; no response body. */
+            405: {
+                headers: {
+                    Allow?: "GET";
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Incident persistence read failed. */
             500: {
                 headers: {
                     "Cache-Control"?: "no-store";

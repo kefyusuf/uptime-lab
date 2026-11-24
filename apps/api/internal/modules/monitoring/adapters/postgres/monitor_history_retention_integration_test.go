@@ -375,3 +375,85 @@ func TestRetentionRacingCompletionResolvesWithoutDeadlock(t *testing.T) {
 		t.Fatal("parked over-cap row survived retention")
 	}
 }
+
+func TestIncidentConfirmationUnboundedByRetention(t *testing.T) {
+	pool := openIntegrationPool(t)
+	resetMonitors(t, pool)
+	repository := NewRepository(pool)
+
+	now := time.Date(2026, 11, 7, 13, 10, 0, 0, time.UTC)
+	monitorID := mustMonitorID(t, "018f22d3-1d6a-7cc0-a37b-46fc3fafd60d")
+	insertExecutionMonitor(t, pool, monitorID, "https://example.com/incident-unbounded", now.Add(-2*time.Hour))
+	base := now.Add(-time.Hour)
+	insertRetentionRows(t, pool, monitorID, 55, base)
+	// The first two confirming failures live only in the durable streak; their
+	// CheckRun evidence was never retained, so confirmation cannot depend on rows.
+	seedIncidentState(t, pool, monitorID, 2, 0)
+
+	if err := claimForRetention(t, repository, now, base); !errors.Is(err, ports.ErrNoDueCheck) {
+		t.Fatalf("ClaimDueCheck() error = %v, want ErrNoDueCheck", err)
+	}
+	if got := countTerminalRows(t, pool, monitorID); got != 50 {
+		t.Fatalf("terminal rows after retention = %d, want 50", got)
+	}
+	assertIncidentState(t, pool, monitorID, 2, 0, nil)
+
+	openCandidate := incidentFixtureCandidateID(t, 70)
+	openCheckID := incidentFixtureCheckID(t, 70)
+	completePendingOutcome(t, pool, repository, monitorID, openCheckID, openCandidate, now, incidentFailureResult(t))
+	assertIncidentState(t, pool, monitorID, 3, 0, &openCandidate)
+	if got := countOpenIncidents(t, pool, monitorID); got != 1 {
+		t.Fatalf("open incidents = %d, want 1", got)
+	}
+	assertIncidentWindow(t, pool, openCandidate, monitorID, now, nil, "unexpected_http_status", &openCheckID, nil)
+
+	completePendingOutcome(t, pool, repository, monitorID, incidentFixtureCheckID(t, 71), incidentFixtureCandidateID(t, 71), now.Add(time.Minute), incidentSuccessResult(t))
+	assertIncidentState(t, pool, monitorID, 0, 1, &openCandidate)
+
+	resolveCheckID := incidentFixtureCheckID(t, 72)
+	resolveAt := now.Add(2 * time.Minute)
+	completePendingOutcome(t, pool, repository, monitorID, resolveCheckID, incidentFixtureCandidateID(t, 72), resolveAt, incidentSuccessResult(t))
+	assertIncidentState(t, pool, monitorID, 0, 0, nil)
+	if got := countOpenIncidents(t, pool, monitorID); got != 0 {
+		t.Fatalf("open incidents after recovery = %d, want 0", got)
+	}
+	assertIncidentWindow(t, pool, openCandidate, monitorID, now, &resolveAt, "unexpected_http_status", &openCheckID, &resolveCheckID)
+}
+
+func TestEvidenceLinkSetNullOnRetention(t *testing.T) {
+	pool := openIntegrationPool(t)
+	resetMonitors(t, pool)
+	repository := NewRepository(pool)
+
+	now := time.Date(2026, 11, 7, 13, 20, 0, 0, time.UTC)
+	monitorID := mustMonitorID(t, "018f22d3-1d6a-7cc0-a37b-46fc3fafd60c")
+	insertExecutionMonitor(t, pool, monitorID, "https://example.com/incident-evidence", now.Add(-2*time.Hour))
+	base := now.Add(-time.Hour)
+	openCandidate, openCheckID, openedAt := openIncidentViaFailures(t, pool, repository, monitorID, base.Add(-10*time.Minute), 0)
+	assertIncidentState(t, pool, monitorID, 3, 0, &openCandidate)
+	insertRetentionRows(t, pool, monitorID, 55, base)
+
+	if err := claimForRetention(t, repository, now, base); !errors.Is(err, ports.ErrNoDueCheck) {
+		t.Fatalf("ClaimDueCheck() error = %v, want ErrNoDueCheck", err)
+	}
+	if got := countTerminalRows(t, pool, monitorID); got != 50 {
+		t.Fatalf("terminal rows after retention = %d, want 50", got)
+	}
+
+	var evidenceExists bool
+	if err := pool.QueryRow(
+		context.Background(),
+		"SELECT EXISTS (SELECT 1 FROM monitoring.check_runs WHERE id = $1::uuid)",
+		openCheckID.String(),
+	).Scan(&evidenceExists); err != nil {
+		t.Fatalf("query opening evidence row: %v", err)
+	}
+	if evidenceExists {
+		t.Fatal("opening evidence row survived retention; it is the oldest terminal row")
+	}
+	assertIncidentState(t, pool, monitorID, 3, 0, &openCandidate)
+	if got := countOpenIncidents(t, pool, monitorID); got != 1 {
+		t.Fatalf("open incidents after evidence retention = %d, want 1", got)
+	}
+	assertIncidentWindow(t, pool, openCandidate, monitorID, openedAt, nil, "unexpected_http_status", nil, nil)
+}

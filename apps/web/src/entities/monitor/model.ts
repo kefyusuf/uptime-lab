@@ -11,6 +11,18 @@ export interface MonitorHistoryPage {
   items: LatestResult[];
   nextCursor: string | null;
 }
+export interface MonitorIncident {
+  incidentId: string;
+  openedAt: string;
+  resolvedAt?: string;
+  openingReason: 'unexpected_http_status' | 'probe_failure';
+  openedByCheckId?: string;
+  resolvedByCheckId?: string;
+}
+export interface MonitorIncidentPage {
+  items: MonitorIncident[];
+  nextCursor: string | null;
+}
 export interface MonitorScheduling {
   state: 'active' | 'paused';
 }
@@ -99,6 +111,11 @@ export interface MonitorClient {
     cursor: string | null,
     signal: AbortSignal,
   ): Promise<ReadResult<MonitorHistoryPage>>;
+  getIncidents(
+    id: string,
+    cursor: string | null,
+    signal: AbortSignal,
+  ): Promise<ReadResult<MonitorIncidentPage>>;
   listMonitors(
     input: { limit: number; cursor: string | null },
     signal: AbortSignal,

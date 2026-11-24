@@ -192,6 +192,11 @@ function validateLatestResultFixtures(repositoryRoot) {
       'monitor-history-empty.json',
       'monitor-history-page.json',
       'monitor-history-continuation.json',
+      'incidents-open.json',
+      'incidents-resolved.json',
+      'incidents-null-evidence.json',
+      'incidents-empty-page.json',
+      'incidents-invalid.json',
       'monitor-inventory-page.json',
       'monitor-scheduling-active.json', 'monitor-scheduling-paused.json',
       'monitor-inventory-empty.json',
@@ -267,6 +272,8 @@ export function validatePublicContract(document, repositoryRoot = '.') {
       'MonitorTargetEditRequest',
       'MonitorHistoryEntry',
       'MonitorHistoryPage',
+      'MonitorIncident',
+      'MonitorIncidentPage',
       'MonitorInventoryPage',
       'MonitorScheduling',
       'Problem',
@@ -280,7 +287,7 @@ export function validatePublicContract(document, repositoryRoot = '.') {
   const publicPaths = Object.keys(document.paths).filter((key) => key.startsWith('/'));
   assertExactSet(
     publicPaths,
-    ['/monitors', '/monitors/{monitorId}', '/monitors/{monitorId}/latest-result', '/monitors/{monitorId}/availability', '/monitors/{monitorId}/scheduling', '/monitors/{monitorId}/history'],
+    ['/monitors', '/monitors/{monitorId}', '/monitors/{monitorId}/latest-result', '/monitors/{monitorId}/availability', '/monitors/{monitorId}/scheduling', '/monitors/{monitorId}/history', '/monitors/{monitorId}/incidents'],
     'public path set',
   );
 
@@ -505,6 +512,7 @@ export function validatePublicContract(document, repositoryRoot = '.') {
   validateDeletion(document, repositoryRoot);
   validateTargetEdit(document, repositoryRoot);
   validateHistory(document, repositoryRoot);
+  validateIncidents(document, repositoryRoot);
 }
 
 function validateTargetEdit(document, repositoryRoot) {
@@ -625,6 +633,94 @@ function validateHistory(document, repositoryRoot) {
       assert(value.nextCursor === Buffer.from(payload).toString('base64url'), 'history continuation key must equal last included CheckRun');
     }
   }
+}
+
+function validateIncidents(document, repositoryRoot) {
+  const pathItem = document.paths['/monitors/{monitorId}/incidents'];
+  assert(isObject(pathItem), 'incidents path item must be an object');
+  assertExactSet(operationMethods(pathItem), ['get'], '/monitors/{monitorId}/incidents operations');
+  const operation = pathItem.get;
+  assert(isObject(operation) && operation.operationId === 'getMonitorIncidents', 'incidents operationId must be getMonitorIncidents');
+  assertNoOperationSecurityOrServers(operation, 'incidents');
+  assert(operation['x-max-body-bytes'] === 245760, 'incidents body budget must be 245760');
+  assert(Array.isArray(operation.parameters) && operation.parameters.length === 3, 'incidents requires monitorId/limit/cursor parameters');
+  const monitorIdParameter = operation.parameters[0];
+  assert(monitorIdParameter.name === 'monitorId' && monitorIdParameter.in === 'path' && monitorIdParameter.required === true, 'incidents monitorId must be a required path parameter');
+  assertStringFormat(monitorIdParameter.schema, 'uuid', 'incidents monitorId');
+  const [limit, cursor] = [operation.parameters[1], operation.parameters[2]];
+  assert(limit.name === 'limit' && limit.in === 'query' && limit.required === false, 'incidents limit parameter');
+  assertIntegerRange(limit.schema, 1, 50, 'incidents limit');
+  assert(limit.schema.default === 20, 'incidents limit default must be 20');
+  assert(cursor.name === 'cursor' && cursor.in === 'query' && cursor.required === false, 'incidents cursor parameter');
+  assert(isDeepStrictEqual(cursor.schema, { type: 'string', minLength: 88, maxLength: 88, pattern: '^[A-Za-z0-9_-]{88}$' }), 'incidents cursor schema must be exact');
+  assertExactKeys(operation.responses, ['200', '400', '404', '405', '500'], 'incidents responses');
+  assertResponseContent(document, operation.responses['200'], 'application/json', 'MonitorIncidentPage', 'incidents 200');
+  assertProblemResponses(document, operation, ['400', '404', '500'], 'incidents');
+  assert(!own(operation.responses['405'], 'content'), 'incidents 405 has no body');
+  assertStringConst(operation.responses['405'].headers?.Allow?.schema, 'GET', 'incidents 405 Allow');
+  for (const [code, response] of Object.entries(operation.responses)) {
+    assertStringConst(response.headers?.['Cache-Control']?.schema, 'no-store', 'incidents ' + code + ' Cache-Control');
+  }
+  const page = document.components.schemas.MonitorIncidentPage;
+  assertObjectShape(page, ['items', 'nextCursor'], ['items', 'nextCursor'], 'MonitorIncidentPage');
+  assert(page.properties.items.type === 'array' && page.properties.items.maxItems === 50, 'incidents items cap must be 50');
+  assertSchemaTarget(document, page.properties.items.items, 'MonitorIncident', 'incidents item');
+  const { description: cursorDescription, ...cursorShape } = page.properties.nextCursor;
+  assert(isDeepStrictEqual(cursorShape, { type: ['string', 'null'], minLength: 88, maxLength: 88, pattern: '^[A-Za-z0-9_-]{88}$' }), 'incidents cursor nullable schema must be exact');
+  assert(isDeepStrictEqual(page.allOf, [{ if: { properties: { items: { maxItems: 0 } } }, then: { properties: { nextCursor: { const: null } } } }]), 'incidents empty continuation rule must be exact');
+  const incident = document.components.schemas.MonitorIncident;
+  assertObjectShape(incident, ['incidentId', 'openedAt', 'resolvedAt', 'openingReason', 'openedByCheckId', 'resolvedByCheckId'], ['incidentId', 'openedAt', 'openingReason'], 'MonitorIncident');
+  assertStringFormat(incident.properties.incidentId, 'uuid', 'MonitorIncident.incidentId');
+  assertStringFormat(incident.properties.openedAt, 'date-time', 'MonitorIncident.openedAt');
+  assertStringFormat(incident.properties.resolvedAt, 'date-time', 'MonitorIncident.resolvedAt');
+  assertStringEnum(incident.properties.openingReason, ['unexpected_http_status', 'probe_failure'], 'MonitorIncident.openingReason');
+  assertStringFormat(incident.properties.openedByCheckId, 'uuid', 'MonitorIncident.openedByCheckId');
+  assertStringFormat(incident.properties.resolvedByCheckId, 'uuid', 'MonitorIncident.resolvedByCheckId');
+  const nonzeroUuid = (value) => typeof value === 'string'
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value)
+    && value !== '00000000-0000-0000-0000-000000000000';
+  for (const name of ['open', 'resolved', 'null-evidence', 'empty-page']) {
+    const value = readJSONFixture(repositoryRoot, 'incidents-' + name + '.json');
+    assertExactKeys(value, ['items', 'nextCursor'], 'incidents page fixture');
+    assert(Array.isArray(value.items) && value.items.length <= 50, 'incidents item count');
+    assert(value.nextCursor === null || (typeof value.nextCursor === 'string' && /^[A-Za-z0-9_-]{88}$/.test(value.nextCursor)), 'incidents cursor representation');
+    assert(value.items.length > 0 || value.nextCursor === null, 'incidents empty continuation must be null');
+    const seen = new Set();
+    for (const item of value.items) {
+      assert(isObject(item), 'incidents item must be an object');
+      const allowed = ['incidentId', 'openedAt', 'resolvedAt', 'openingReason', 'openedByCheckId', 'resolvedByCheckId'];
+      assert(Object.keys(item).every((key) => allowed.includes(key)), 'incidents item keys must be contracted');
+      assert(['incidentId', 'openedAt', 'openingReason'].every((key) => own(item, key)), 'incidents required keys must be present');
+      assert(nonzeroUuid(item.incidentId), 'incidents incidentId must be a nonzero UUID');
+      assert(!seen.has(item.incidentId), 'incidents duplicate incident ID');
+      seen.add(item.incidentId);
+      assertFixtureString(item.openedAt, 'incidents openedAt');
+      assertUTCTimestamp(item.openedAt, 'incidents openedAt');
+      assert(['unexpected_http_status', 'probe_failure'].includes(item.openingReason), 'incidents openingReason must be a closed reason');
+      for (const key of ['resolvedAt', 'openedByCheckId', 'resolvedByCheckId']) {
+        if (own(item, key)) assert(item[key] !== null, 'incidents ' + key + ' must be omitted when null');
+      }
+      if (own(item, 'resolvedAt')) {
+        assertUTCTimestamp(item.resolvedAt, 'incidents resolvedAt');
+        assert(Date.parse(item.resolvedAt) >= Date.parse(item.openedAt), 'incidents resolvedAt must not precede openedAt');
+      }
+      if (own(item, 'openedByCheckId')) assert(nonzeroUuid(item.openedByCheckId), 'incidents openedByCheckId must be a nonzero UUID');
+      if (own(item, 'resolvedByCheckId')) {
+        assert(nonzeroUuid(item.resolvedByCheckId), 'incidents resolvedByCheckId must be a nonzero UUID');
+        assert(own(item, 'resolvedAt'), 'incidents resolvedByCheckId requires resolvedAt');
+      }
+    }
+    if (value.nextCursor !== null) {
+      const last = value.items.at(-1);
+      const match = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d{1,6}))?Z$/.exec(last.openedAt);
+      assert(match, 'incidents persisted microsecond time');
+      const payload = '3|' + match[1] + '.' + (match[2] || '').padEnd(6, '0') + 'Z|' + last.incidentId;
+      assert(value.nextCursor === Buffer.from(payload).toString('base64url'), 'incidents continuation key must equal last included incident');
+    }
+  }
+  const invalid = readJSONFixture(repositoryRoot, 'incidents-invalid.json');
+  assertExactKeys(invalid, ['type', 'title', 'status', 'detail'], 'incidents invalid fixture');
+  assert(invalid.status === 400, 'incidents invalid fixture status must be 400');
 }
 
 function validateDeletion(document, repositoryRoot) {

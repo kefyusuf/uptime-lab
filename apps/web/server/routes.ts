@@ -41,7 +41,7 @@ export function matchApiRoute(
     return { kind: 'forward', path: rawTarget.slice(4), method };
   }
   const allowed =
-    /^\/api\/monitors\/[A-Za-z0-9-]+\/(?:latest-result|availability|history)$/.test(
+    /^\/api\/monitors\/[A-Za-z0-9-]+\/(?:latest-result|availability|history|incidents)$/.test(
       rawPath,
     )
       ? 'GET'
@@ -68,6 +68,12 @@ function validQueryFor(
     return true;
   if (
     /^\/api\/monitors\/[A-Za-z0-9-]+\/history$/.test(rawPath) &&
+    method === 'GET' &&
+    validateInventoryQuery(query)
+  )
+    return true;
+  if (
+    /^\/api\/monitors\/[A-Za-z0-9-]+\/incidents$/.test(rawPath) &&
     method === 'GET' &&
     validateInventoryQuery(query)
   )

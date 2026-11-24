@@ -292,7 +292,7 @@ func resetMonitors(t *testing.T, pool *pgxpool.Pool) {
 
 	if _, err := pool.Exec(
 		ctx,
-		"TRUNCATE TABLE monitoring.check_runs, monitoring.monitors",
+		"TRUNCATE TABLE monitoring.incident_state, monitoring.incidents, monitoring.check_runs, monitoring.monitors",
 	); err != nil {
 		t.Fatalf("truncate monitoring execution state: %v", err)
 	}

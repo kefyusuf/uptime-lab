@@ -12,6 +12,19 @@ function client(): MonitorClient {
       kind: 'success',
       data: { items: [], nextCursor: null },
     }),
+    getIncidents: vi.fn().mockResolvedValue({
+      kind: 'success',
+      data: {
+        items: [
+          {
+            incidentId: '018f22d3-1d6a-7cc0-a37b-46fc3faff001',
+            openedAt: evaluatedAt,
+            openingReason: 'unexpected_http_status',
+          },
+        ],
+        nextCursor: null,
+      },
+    }),
     getScheduling: vi
       .fn()
       .mockResolvedValue({ kind: 'success', data: { state: 'active' } }),
@@ -317,4 +330,30 @@ it('keeps edit independent of scheduling, deletion and history', async () => {
   expect(api.getScheduling).toHaveBeenCalledTimes(1);
   expect(api.getHistory).toHaveBeenCalledTimes(1);
   expect(api.deleteMonitor).not.toHaveBeenCalled();
+});
+it('detailPageShowsIncidentSection', async () => {
+  const api = client();
+  render(<MonitorDetailPage id={id} client={api} onDeleted={() => {}} />);
+  await screen.findByTestId('monitor-target');
+  expect(
+    await screen.findByRole('region', { name: 'Durable incident history' }),
+  ).toBeInTheDocument();
+  await waitFor(() =>
+    expect(screen.getAllByTestId('incident-entry')).toHaveLength(1),
+  );
+  expect(api.getIncidents).toHaveBeenCalledTimes(1);
+  expect(api.getIncidents).toHaveBeenCalledWith(
+    id,
+    null,
+    expect.any(AbortSignal),
+  );
+});
+it('availabilityCardUnchanged', async () => {
+  const api = client();
+  render(<MonitorDetailPage id={id} client={api} onDeleted={() => {}} />);
+  expect(await screen.findByTestId('availability-status')).toHaveTextContent(
+    'Available',
+  );
+  expect(screen.getByTestId('availability-check-id')).toHaveTextContent(id);
+  expect(api.getAvailability).toHaveBeenCalledOnce();
 });

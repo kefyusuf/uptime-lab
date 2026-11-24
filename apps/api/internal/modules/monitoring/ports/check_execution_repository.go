@@ -38,6 +38,7 @@ type CompleteCheckInput struct {
 	CheckID     domain.CheckID
 	CompletedAt time.Time
 	Result      domain.CheckResult
+	IncidentID  domain.IncidentID
 }
 
 // CheckExecutionRepository defines only the persistence capabilities required by execution coordination.

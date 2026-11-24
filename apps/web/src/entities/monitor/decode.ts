@@ -4,6 +4,8 @@ import type {
   LatestResult,
   Monitor,
   MonitorHistoryPage,
+  MonitorIncident,
+  MonitorIncidentPage,
 } from './model';
 
 export class ResponseDecodeError extends Error {
@@ -171,6 +173,61 @@ export function decodeMonitorHistoryPage(value: unknown): MonitorHistoryPage {
   for (const item of items) {
     if (seen.has(item.checkId)) return fail();
     seen.add(item.checkId);
+  }
+  if (
+    page.nextCursor !== null &&
+    (typeof page.nextCursor !== 'string' ||
+      !/^[A-Za-z0-9_-]{88}$/.test(page.nextCursor))
+  )
+    return fail();
+  if (items.length === 0 && page.nextCursor !== null) return fail();
+  return { items, nextCursor: page.nextCursor };
+}
+
+export function decodeIncident(value: unknown): MonitorIncident {
+  const object = record(value, [
+    'incidentId',
+    'openedAt',
+    'resolvedAt',
+    'openingReason',
+    'openedByCheckId',
+    'resolvedByCheckId',
+  ]);
+  const incidentId = uuid(object.incidentId);
+  const openedAt = timestamp(object.openedAt);
+  if (
+    object.openingReason !== 'unexpected_http_status' &&
+    object.openingReason !== 'probe_failure'
+  )
+    return fail();
+  const incident: MonitorIncident = {
+    incidentId,
+    openedAt,
+    openingReason: object.openingReason,
+  };
+  if (Object.hasOwn(object, 'openedByCheckId'))
+    incident.openedByCheckId = uuid(object.openedByCheckId);
+  if (Object.hasOwn(object, 'resolvedAt')) {
+    const resolvedAt = timestamp(object.resolvedAt);
+    if (new Date(resolvedAt).getTime() < new Date(openedAt).getTime())
+      return fail();
+    incident.resolvedAt = resolvedAt;
+  }
+  if (Object.hasOwn(object, 'resolvedByCheckId')) {
+    if (!Object.hasOwn(object, 'resolvedAt')) return fail();
+    incident.resolvedByCheckId = uuid(object.resolvedByCheckId);
+  }
+  return incident;
+}
+
+export function decodeIncidentPage(value: unknown): MonitorIncidentPage {
+  const page = record(value, ['items', 'nextCursor']);
+  if (!Array.isArray(page.items) || page.items.length > 50) return fail();
+  const items = page.items.map((item) => decodeIncident(item));
+  const seen = new Set<string>();
+  for (const item of items) {
+    if (seen.has(item.incidentId)) return fail();
+    seen.add(item.incidentId);
   }
   if (
     page.nextCursor !== null &&
