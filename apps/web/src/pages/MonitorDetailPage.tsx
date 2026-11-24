@@ -9,6 +9,7 @@ import { useMonitorReads } from '../features/refresh-monitor';
 import { MonitorSchedulingControl } from '../features/set-monitor-scheduling';
 import { DeleteMonitorControl } from '../features/delete-monitor';
 import { MonitorHistorySection } from '../features/monitor-history';
+import { MonitorIncidentsSection } from '../features/monitor-incidents';
 import { EditMonitorTargetControl } from '../features/edit-monitor-target';
 export function MonitorDetailPage({
   id,
@@ -90,6 +91,7 @@ export function MonitorDetailPage({
           />
           <MonitorSchedulingControl id={id} client={client} />
           <MonitorHistorySection id={id} client={client} />
+          <MonitorIncidentsSection id={id} client={client} />
           <DeleteMonitorControl id={id} client={client} onDeleted={onDeleted} />
         </Fragment>
       )}

@@ -148,6 +148,47 @@ export function verifyTargetEditEvidence(capture, rows, monitors) {
   const monitor=monitors.filter(row=>row.id===value.monitorId);
   if(monitor.length!==1||monitor[0].target_url!==value.newTarget)throw Error('Durable edited target mismatch');
 }
+export function verifyDurableIncidentEvidence(capture, rows, incidents, state) {
+  const uuid=value=>typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value)&&value!=='00000000-0000-0000-0000-000000000000';
+  const closed=(value,keys)=>value!==null&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key));
+  const reason=value=>value==='unexpected_http_status'||value==='probe_failure';
+  const value=capture?.durableIncident;
+  if(!closed(value,['monitorId','openedIncident','resolvedIncident','incidentHistory','readsAfterRestart','availabilityAssessment','restarts']) || !uuid(value.monitorId) || value.monitorId===capture.id)throw Error('Invalid durable incident evidence');
+  const opened=value.openedIncident;
+  if(!closed(opened,['incidentId','openedAt','openingReason','openedByCheckId'])||!uuid(opened.incidentId)||!reason(opened.openingReason)||!uuid(opened.openedByCheckId))throw Error('Invalid opened incident evidence');
+  instant(opened.openedAt);
+  const resolved=value.resolvedIncident;
+  if(!closed(resolved,['incidentId','openedAt','resolvedAt','openingReason','openedByCheckId','resolvedByCheckId'])||resolved.incidentId!==opened.incidentId||resolved.openedAt!==opened.openedAt||resolved.openingReason!==opened.openingReason||resolved.openedByCheckId!==opened.openedByCheckId||!uuid(resolved.resolvedByCheckId)||resolved.resolvedByCheckId===resolved.openedByCheckId)throw Error('Invalid resolved incident evidence');
+  instant(resolved.resolvedAt);
+  if(instant(resolved.resolvedAt)<instant(opened.openedAt))throw Error('Incident resolved before it opened');
+  const history=value.incidentHistory;
+  if(!closed(history,['ids','truncationSurvived'])||!Array.isArray(history.ids)||history.ids.length!==1||history.ids[0]!==opened.incidentId||history.truncationSurvived!==true)throw Error('Incident history must persist the single resolved window through truncation');
+  const reads=value.readsAfterRestart;
+  if(!closed(reads,['incidents','availability'])||reads.incidents!==200||reads.availability!==200)throw Error('Restarted incident and availability reads must be 200');
+  const assessment=value.availabilityAssessment;
+  if(!closed(assessment,['status','reason','checkId','completedAt'])||assessment.status!=='available'||assessment.reason!=='successful_response'||!uuid(assessment.checkId)||assessment.checkId!==resolved.resolvedByCheckId)throw Error('Availability must remain the separate evidence-derived assessment');
+  instant(assessment.completedAt);
+  if(!closed(value.restarts,['api']))throw Error('Missing durable incident restart checkpoints');
+  const restart=value.restarts.api;
+  if(!closed(restart,['beforeStartedAt','afterStartedAt']))throw Error('Invalid durable incident restart checkpoint');
+  for(const time of Object.values(restart))if(typeof time!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,9})?Z$/.test(time)||new Date(time).toISOString().slice(0,19)!==time.slice(0,19))throw Error('Invalid restart UTC time');
+  if(instant(restart.afterStartedAt)<=instant(restart.beforeStartedAt))throw Error('Restart timestamp did not advance');
+  if(!Array.isArray(rows))throw Error('Missing durable incident evidence rows');
+  const evidence=rows.filter(row=>row.id===assessment.checkId&&row.monitor_id===value.monitorId);
+  if(evidence.length!==1||evidence[0].result_kind!=='http_response'||evidence[0].http_status!==204||instant(evidence[0].completed_at)!==instant(assessment.completedAt))throw Error('Availability assessment is not linked to durable success evidence');
+  const opening=rows.filter(row=>row.id===opened.openedByCheckId&&row.monitor_id===value.monitorId);
+  if(opening.length!==1)throw Error('Incident opening is not linked to durable failure evidence');
+  if(opened.openingReason==='unexpected_http_status'){
+    const status=opening[0].http_status;
+    if(opening[0].result_kind!=='http_response'||status===null||!(status<200||status>=300))throw Error('unexpected_http_status opening must rest on a non-2xx durable failure');
+  }else if(!['dns_error','timeout','connect_error','tls_error','protocol_error'].includes(opening[0].result_kind))throw Error('probe_failure opening must rest on a durable probe failure');
+  if(!Array.isArray(incidents)||incidents.length!==1)throw Error('Durable incident history must be exactly one resolved row');
+  const incident=incidents[0];
+  if(incident.id!==opened.incidentId||incident.monitor_id!==value.monitorId||incident.opening_reason!==opened.openingReason||instant(incident.opened_at)!==instant(opened.openedAt)||instant(incident.resolved_at)!==instant(resolved.resolvedAt)||incident.opened_by_check_id!==null||incident.resolved_by_check_id!==null)throw Error('Durable incident window must persist with evidence links cleared by truncation');
+  if(!Array.isArray(state)||state.length!==1)throw Error('Durable incident state must be exactly one row');
+  const fold=state[0];
+  if(fold.monitor_id!==value.monitorId||fold.failure_streak!==0||fold.success_streak!==0||fold.open_incident_id!==null)throw Error('Resolved incident state must zero both streaks and clear the open pointer');
+}
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
@@ -162,7 +203,8 @@ if (
   verifyHistoryEvidence(JSON.parse(readFileSync(process.argv[2],"utf8")),JSON.parse(readFileSync(process.argv[7],"utf8")));
   verifyTargetEditEvidence(JSON.parse(readFileSync(process.argv[2],"utf8")),JSON.parse(readFileSync(process.argv[8],"utf8")),JSON.parse(readFileSync(process.argv[9],"utf8")));
   verifyConfirmationRecoveryEvidence(JSON.parse(readFileSync(process.argv[2],"utf8")),JSON.parse(readFileSync(process.argv[10],"utf8")),JSON.parse(readFileSync(process.argv[11],"utf8")));
+  verifyDurableIncidentEvidence(JSON.parse(readFileSync(process.argv[2],"utf8")),JSON.parse(readFileSync(process.argv[12],"utf8")),JSON.parse(readFileSync(process.argv[13],"utf8")),JSON.parse(readFileSync(process.argv[14],"utf8")));
   console.log(
-    "Independent browser snapshots, inventory IDs, scheduling, deletion, history, target-edit and confirmation/recovery evidence match durable rows.",
+    "Independent browser snapshots, inventory IDs, scheduling, deletion, history, target-edit, confirmation/recovery and durable-incident evidence match durable rows.",
   );
 }

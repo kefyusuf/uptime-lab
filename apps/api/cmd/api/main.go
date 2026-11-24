@@ -103,10 +103,10 @@ func composeMonitoring(pool *pgxpool.Pool) (http.Handler, *migrations.Compatibil
 	}
 
 	repository := monitoringpostgres.NewRepository(pool)
-	publicModule := monitoring.NewModuleWithTargetEdit(repository, repository, repository, newMonitorID, productionClock, repository, repository, repository, repository)
-	executionModule := monitoring.NewExecutionModule(repository, newCheckID, productionClock)
+	publicModule := monitoring.NewModuleWithIncidents(repository, repository, repository, newMonitorID, productionClock, repository, repository, repository, repository, repository)
+	executionModule := monitoring.NewExecutionModule(repository, newCheckID, newIncidentID, productionClock)
 
-	publicHandler := monitoringhttp.NewHandlerWithTargetEdit(
+	publicHandler := monitoringhttp.NewHandlerWithIncidents(
 		publicModule.RegisterMonitor,
 		publicModule.GetMonitor,
 		publicModule.GetLatestCheckResult,
@@ -117,6 +117,7 @@ func composeMonitoring(pool *pgxpool.Pool) (http.Handler, *migrations.Compatibil
 		publicModule.DeleteMonitor,
 		publicModule.GetMonitorHistory,
 		publicModule.EditMonitorTarget,
+		publicModule.GetMonitorIncidents,
 	)
 	internalHandler := checkerhttp.NewHandler(
 		executionModule.ClaimDueCheck,
@@ -133,6 +134,10 @@ func newMonitorID() (domain.MonitorID, error) {
 
 func newCheckID() (domain.CheckID, error) {
 	return domain.NewCheckID(uuid.NewV7())
+}
+
+func newIncidentID() (domain.IncidentID, error) {
+	return domain.NewIncidentID(uuid.NewV7())
 }
 
 func newProductRouter(publicHandler, internalHandler http.Handler) http.Handler {

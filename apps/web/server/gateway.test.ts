@@ -766,4 +766,53 @@ describe('actual HTTP gateway', () => {
     await disconnected;
     expect(captured).toHaveLength(1);
   });
+  it('incidentsRouteForwarded', async () => {
+    const cursor = Buffer.from(
+      '3|2026-11-01T12:00:00.123456Z|018f22d3-1d6a-7cc0-a37b-46fc3faff001',
+    ).toString('base64url');
+    for (const path of [
+      '/api/monitors/id/incidents',
+      '/api/monitors/id/incidents?limit=7',
+      '/api/monitors/id/incidents?cursor=' + cursor,
+      '/api/monitors/id/incidents?limit=7&cursor=' + cursor,
+    ]) {
+      const result = await call(path);
+      expect(result.status).toBe(200);
+      expect(result.body).toBe(body);
+      expect(result.headers['cache-control']).toBe('no-store');
+      expect(captured.at(-1)?.path).toBe(path.slice(4));
+    }
+  });
+  it.each([
+    '/api/monitors/id/incidents?',
+    '/api/monitors/id/incidents?limit=0',
+    '/api/monitors/id/incidents?limit=51',
+    '/api/monitors/id/incidents?limit=7&limit=7',
+    '/api/monitors/id/incidents?unknown=1',
+    '/api/monitors/id/incidents?limit=%32%30',
+  ])('incidentsQueryValidated before upstream %s', async (path) => {
+    expect((await call(path)).status).toBe(400);
+    expect(captured).toHaveLength(0);
+  });
+  it.each(['HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'])(
+    'incidentsMethodNotAllowed: %s',
+    async (method) => {
+      const result = await call('/api/monitors/id/incidents', method);
+      expect(result).toMatchObject({
+        status: 405,
+        headers: { allow: 'GET', 'cache-control': 'no-store' },
+      });
+      if (method === 'HEAD') expect(result.body).toBe('');
+      expect(captured).toHaveLength(0);
+    },
+  );
+  it.each([
+    ['/api/monitors/id/incidents/', 400],
+    ['/api/monitors/id/incidents/extra', 404],
+    ['/api/monitors/%69d/incidents', 400],
+    ['/api/monitors/id//incidents', 400],
+  ])('incidentsAliasRejected: %s', async (path, status) => {
+    expect((await call(path)).status).toBe(status);
+    expect(captured).toHaveLength(0);
+  });
 });

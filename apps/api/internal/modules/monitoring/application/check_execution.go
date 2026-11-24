@@ -19,6 +19,9 @@ const (
 // CheckIDGenerator provides durable check identities to the application layer.
 type CheckIDGenerator func() (domain.CheckID, error)
 
+// IncidentIDGenerator provides candidate durable incident identities to the application layer.
+type IncidentIDGenerator func() (domain.IncidentID, error)
+
 // CheckWork is the exact execution description exposed to the Checker adapter.
 type CheckWork struct {
 	CheckID      domain.CheckID
@@ -90,15 +93,17 @@ type SubmitCheckResultInput struct {
 
 // SubmitCheckResult coordinates one idempotent result completion.
 type SubmitCheckResult struct {
-	repository ports.CheckExecutionRepository
-	clock      Clock
+	repository          ports.CheckExecutionRepository
+	incidentIDGenerator IncidentIDGenerator
+	clock               Clock
 }
 
 // NewSubmitCheckResult constructs the result-submission use case.
-func NewSubmitCheckResult(repository ports.CheckExecutionRepository, clock Clock) SubmitCheckResult {
+func NewSubmitCheckResult(repository ports.CheckExecutionRepository, incidentIDGenerator IncidentIDGenerator, clock Clock) SubmitCheckResult {
 	return SubmitCheckResult{
-		repository: repository,
-		clock:      clock,
+		repository:          repository,
+		incidentIDGenerator: incidentIDGenerator,
+		clock:               clock,
 	}
 }
 
@@ -118,11 +123,20 @@ func (useCase SubmitCheckResult) Execute(
 		return err
 	}
 
+	incidentID, err := useCase.incidentIDGenerator()
+	if err != nil {
+		return err
+	}
+	if _, err := domain.NewIncidentID(incidentID.UUID()); err != nil {
+		return err
+	}
+
 	completedAt := useCase.clock()
 	err = useCase.repository.CompleteCheck(ctx, ports.CompleteCheckInput{
 		CheckID:     checkID,
 		CompletedAt: completedAt,
 		Result:      result,
+		IncidentID:  incidentID,
 	})
 	if err == nil {
 		return nil

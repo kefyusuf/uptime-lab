@@ -2,7 +2,7 @@
 
 **Architecture state:** Committed
 
-**Implementation state:** Public Monitor create/read/list, latest result, current availability with assessment-only confirmation/recovery, pause/resume scheduling, confirmed delete, bounded check-run history, target-URL edit, the internal Go/Rust loop and local browser journey are implemented. Remote exposure, unbounded full CheckRun history and materialized availability history remain deferred.
+**Implementation state:** Public Monitor create/read/list, latest result, current availability with assessment-only confirmation/recovery, pause/resume scheduling, confirmed delete, bounded check-run history, target-URL edit, durable incident history (write-path fold plus bounded read), the internal Go/Rust loop and local browser journey are implemented. Remote exposure, unbounded full CheckRun history, materialized availability history and incident notification remain deferred.
 
 Current availability is exposed by `GET /monitors/{monitorId}/availability` as a read-only assessment of the bounded recent terminal sequence (newest-first, at most five rows). It returns `status`, `reason`, UTC `evaluatedAt`, and terminal `evidence` (`checkId`, `completedAt`). A known Monitor without a terminal result returns `200 unknown/no_result` with evidence omitted; the raw latest-result route retains its empty `204`. Every matched availability response, including errors and `405`, uses `Cache-Control: no-store`; `HEAD` returns `405` with `Allow: GET`. No new persistence, reconciliation, history, or public deployment is introduced.
 
@@ -58,6 +58,8 @@ sequenceDiagram
 ```
 
 Go owns due-work and durable identity. Rust probes a claimed CheckID once and submits only a normalized result. Rust never accesses PostgreSQL directly.
+
+Each terminal completion also advances the durable per-Monitor incident fold inside the same completion transaction (N=3 failures open one window, M=2 successes resolve it, inconclusive resets both streaks). The fold is write-path state; the availability read below never consults it.
 
 The canonical Docker smoke proves the private `http://web/` target is rejected by production destination policy as `policy_rejected`, persisted as a terminal CheckRun, and read back through the public latest-result route.
 
@@ -131,6 +133,12 @@ to five rows. The complete mapping is documented in
 [Go availability policy](../backend/go-control-plane.md#availability-policy).
 Pending runs remain invisible and are never reconciled by this GET. Two separate
 raw-result and availability requests can legitimately read different CheckIDs.
+
+## Durable Incident History Read
+
+The browser sends one bounded `GET /api/monitors/{id}/incidents` through the exact same-origin gateway. Go validates the raw query and canonical version-3 cursor before storage; PostgreSQL pages the durable windows in `(opened_at DESC, id DESC)` order with a `limit+1` lookahead (no locks or writes); the application maps the closed incident shape and omits null evidence links. Go returns the complete-prefix page plus an optional continuation cursor as `200` with `Cache-Control: no-store`, and the browser renders the Incident history section (open badge or resolved duration and opening reason).
+
+Unlike availability, this read returns durable write-path state: one row per incident window opened by the fold and retained independently of the newest-50 terminal check-run window. The version-`3|` cursor, query grammar, 245760-byte budget and complete-prefix continuation mirror the inventory/history conventions; only GET is supported (`405 Allow: GET`), every matched response is `no-store`, an unknown Monitor is `404` and no incidents is a successful empty `200`. Optional `openedByCheckId`/`resolvedByCheckId` evidence links are omitted when retention truncation has cleared them (`ON DELETE SET NULL`); the window itself persists. The browser renders the window's open badge or resolved duration and opening reason but does not derive availability from it — the AvailabilityCard remains the separate evidence-derived assessment, so the two reads can diverge.
 
 ## Failure Boundary
 

@@ -277,3 +277,76 @@ it('keeps internal and unknown routes closed to delete', () => {
     allow: 'GET',
   });
 });
+
+const incidentsCursor = Buffer.from(
+  '3|2026-11-01T12:00:00.123456Z|018f22d3-1d6a-7cc0-a37b-46fc3faff001',
+).toString('base64url');
+it('incidentsRouteForwarded', () => {
+  expect(matchApiRoute('/api/monitors/id/incidents', 'GET')).toEqual({
+    kind: 'forward',
+    method: 'GET',
+    path: '/monitors/id/incidents',
+  });
+  expect(matchApiRoute('/api/monitors/id/incidents?limit=7', 'GET')).toEqual({
+    kind: 'forward',
+    method: 'GET',
+    path: '/monitors/id/incidents?limit=7',
+  });
+  expect(
+    matchApiRoute(
+      '/api/monitors/id/incidents?cursor=' + incidentsCursor,
+      'GET',
+    ),
+  ).toEqual({
+    kind: 'forward',
+    method: 'GET',
+    path: '/monitors/id/incidents?cursor=' + incidentsCursor,
+  });
+  expect(
+    matchApiRoute(
+      '/api/monitors/id/incidents?limit=7&cursor=' + incidentsCursor,
+      'GET',
+    ),
+  ).toEqual({
+    kind: 'forward',
+    method: 'GET',
+    path: '/monitors/id/incidents?limit=7&cursor=' + incidentsCursor,
+  });
+});
+it('incidentsQueryValidated', () => {
+  const cursor = 'A'.repeat(88);
+  for (const bad of [
+    '/api/monitors/id/incidents?',
+    '/api/monitors/id/incidents?limit=0',
+    '/api/monitors/id/incidents?limit=51',
+    '/api/monitors/id/incidents?limit=abc',
+    '/api/monitors/id/incidents?limit=020',
+    '/api/monitors/id/incidents?unknown=1',
+    '/api/monitors/id/incidents?limit=7&limit=7',
+    '/api/monitors/id/incidents?cursor=' + cursor + '&cursor=' + cursor,
+    '/api/monitors/id/incidents?cursor=' + 'B'.repeat(129),
+    '/api/monitors/id/incidents?limit=%32%30',
+  ]) {
+    expect(matchApiRoute(bad, 'GET')).toEqual({ kind: 'reject', status: 400 });
+  }
+});
+it.each(['HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE', 'TRACE'])(
+  'incidentsMethodNotAllowed: %s',
+  (method) => {
+    expect(matchApiRoute('/api/monitors/id/incidents', method)).toEqual({
+      kind: 'reject',
+      status: 405,
+      allow: 'GET',
+    });
+  },
+);
+it.each([
+  ['/api/monitors/id/incidents/', 400],
+  ['/api/monitors/id/incidents/extra', 404],
+  ['/api/monitors/id//incidents', 400],
+  ['/api/monitors/%69d/incidents', 400],
+  ['/api\\monitors\\id\\incidents', 400],
+  ['/api/monitors/../incidents', 400],
+])('incidentsAliasRejected: %s', (path, status) => {
+  expect(matchApiRoute(path, 'GET')).toEqual({ kind: 'reject', status });
+});

@@ -45,10 +45,7 @@ func TestInventoryIndexMigration(t *testing.T) {
 	if plan == "" {
 		t.Fatal("missing query plan")
 	}
-	if _, err := provider.Down(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := provider.Down(ctx); err != nil {
+	if _, err := provider.DownTo(ctx, 2); err != nil {
 		t.Fatal(err)
 	}
 	var exists bool

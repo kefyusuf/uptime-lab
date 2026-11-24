@@ -6,6 +6,8 @@ export type {
   Monitor,
   MonitorInventoryPage,
   MonitorHistoryPage,
+  MonitorIncident,
+  MonitorIncidentPage,
   ClientError,
   ReadResult,
   CreateOutcome,
